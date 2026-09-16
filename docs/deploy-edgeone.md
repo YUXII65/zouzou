@@ -4,7 +4,7 @@
 
 ## 准备工作
 
-1. 已有 GitHub 仓库：`YUXII65/next-step`。
+1. 已有 GitHub 仓库：`YUXII65/zouzou`。
 2. 已有 Neon 免费数据库，并复制出 `DATABASE_URL` 和 `DIRECT_URL`。
 3. 已有 DeepSeek API Key。
 4. 需要一个自定义域名。域名本身通常一年几十元以内，不是按月租服务器。
@@ -25,7 +25,7 @@ EdgeOne Pages 的项目域名默认带访问保护：
    控制台入口：<https://console.cloud.tencent.com/edgeone/makers>。
 
 2. 开通免费版。
-3. 绑定 GitHub，授权访问 `YUXII65/next-step`。
+3. 绑定 GitHub，授权访问 `YUXII65/zouzou`。
 4. 导入仓库，分支选择 `codex/edgeone-deploy`。
 5. 加速区域选择“全球可用区（不含中国大陆）”。
 6. 构建配置保持仓库默认即可，仓库里的 `edgeone.json` 会自动使用：
@@ -85,6 +85,6 @@ AI_QUOTA_VISITOR_DAILY_TOKENS=200000
 ## 维护
 
 - 以后更新公开版，把修改推送到 `codex/edgeone-deploy`，EdgeOne 会自动部署。
-- `main` 继续保留 SQLite 本地个人版，不用于公开托管。
+- `main` 与 `codex/edgeone-deploy` 保持同一版，仓库首页直接展示 v2.5。
 - DeepSeek API Key 和数据库密码只放在 EdgeOne 环境变量里，不提交到 GitHub。
 - `AUTH_SECRET` 不要改得太频繁，否则已登录用户会需要重新登录。

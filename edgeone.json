@@ -1,5 +1,5 @@
 {
-  "name": "next-step",
+  "name": "zouzou",
   "buildCommand": "npm run build:edgeone",
   "installCommand": "npm install",
   "outputDirectory": ".next",

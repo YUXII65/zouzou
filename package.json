@@ -1,12 +1,11 @@
 {
-  "name": "next-step",
+  "name": "zouzou",
   "version": "2.5.0",
   "private": true,
   "description": "走走：把零散想法收成下一步的 AI 个人项目推进系统",
   "scripts": {
     "dev": "node node_modules/next/dist/bin/next dev",
     "build": "node node_modules/next/dist/bin/next build",
-    "build:vercel": "prisma generate && prisma migrate deploy && node node_modules/next/dist/bin/next build",
     "build:edgeone": "prisma generate && prisma migrate deploy && node node_modules/next/dist/bin/next build",
     "start": "node node_modules/next/dist/bin/next start",
     "lint": "node node_modules/eslint/bin/eslint.js .",
