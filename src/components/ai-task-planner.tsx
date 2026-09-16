@@ -75,7 +75,7 @@ export function AiTaskPlanner({
 }) {
   return (
     <div className="space-y-4">
-      <QuickCapture />
+      <QuickCapture pendingIds={pending.map((item) => item.id)} />
 
       {pending.length ? (
         <div className="space-y-3">

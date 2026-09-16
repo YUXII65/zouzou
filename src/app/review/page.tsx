@@ -13,17 +13,15 @@ import { StatusBadge } from "@/components/status-badge";
 import { ReviewDraftFeedback } from "@/components/review-draft-feedback";
 import { ReviewDateField } from "@/components/review-date-field";
 import { SubmitButton } from "@/components/submit-button";
-import { generateReviewDraftAction, saveReview } from "@/app/actions";
+import { ReviewSaveForm } from "@/components/review-save-form";
+import { generateReviewDraftAction } from "@/app/actions";
 import { prisma } from "@/lib/prisma";
 import { requireUser } from "@/lib/auth";
 import { getFirstRunState } from "@/lib/first-run";
 import { cx } from "@/lib/utils";
-import { formatDate, toDateInputValue } from "@/lib/date";
+import { endOfDay, formatDate, toDateInputValue } from "@/lib/date";
 
 export const dynamic = "force-dynamic";
-
-const inputClass =
-  "zouzou-input w-full resize-y rounded-xl px-4 py-3 text-[15px] leading-7 tracking-[0.01em] text-ink";
 
 function startOfWeek(date: Date) {
   const copy = new Date(date);
@@ -67,6 +65,20 @@ export default async function ReviewPage({
     reviews.find(
       (review) => toDateInputValue(review.reviewDate) === dateParam,
     ) ?? null;
+  const reviewHasNewCompletions = selectedReview
+    ? (await prisma.task.count({
+        where: {
+          userId: user.id,
+          status: "done",
+          completedAt: {
+            gt: selectedReview.updatedAt,
+            lte: endOfDay(selectedReview.reviewDate),
+          },
+        },
+      })) > 0
+    : false;
+  const reviewSavedAlready =
+    selectedReview?.status === "final" && !reviewHasNewCompletions;
 
   const weekStart = startOfWeek(new Date());
   const weekReviews = reviews.filter((review) => review.reviewDate >= weekStart);
@@ -201,37 +213,12 @@ export default async function ReviewPage({
               <>
                 <ReviewDraftFeedback reviewId={selectedReview.id} />
 
-                <form action={saveReview} className="space-y-5 p-5">
-                  <input type="hidden" name="id" value={selectedReview.id} />
-                  <label className="block">
-                    <span className="mb-2 block text-xs font-medium text-ink-secondary">
-                      当日总结
-                    </span>
-                    <textarea
-                      name="summary"
-                      required
-                      rows={7}
-                      defaultValue={selectedReview.summary}
-                      className={`${inputClass} min-h-44`}
-                    />
-                  </label>
-                  <label className="block">
-                    <span className="mb-2 block text-xs font-medium text-ink-secondary">
-                      下一步任务（1-3 条）
-                    </span>
-                    <textarea
-                      name="nextActions"
-                      rows={5}
-                      defaultValue={selectedReview.nextActions ?? ""}
-                      className={`${inputClass} min-h-32`}
-                    />
-                  </label>
-                  <div className="flex justify-end">
-                    <SubmitButton className="zouzou-primary-button inline-flex h-9 items-center justify-center rounded-lg bg-accent px-4 text-sm font-medium text-white transition-colors hover:bg-accent-strong disabled:cursor-not-allowed disabled:opacity-60">
-                      保存复盘
-                    </SubmitButton>
-                  </div>
-                </form>
+                <ReviewSaveForm
+                  reviewId={selectedReview.id}
+                  summary={selectedReview.summary}
+                  nextActions={selectedReview.nextActions ?? ""}
+                  savedAlready={reviewSavedAlready}
+                />
               </>
             ) : (
               <form action={generateReviewDraftAction} className="space-y-4 p-4">

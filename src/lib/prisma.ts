@@ -52,8 +52,28 @@ async function retryConnection<T>(
   throw lastError;
 }
 
+function runtimeDatabaseUrl() {
+  const value = process.env.DATABASE_URL;
+  if (!value) return undefined;
+
+  try {
+    const url = new URL(value);
+    if (
+      url.hostname.endsWith(".neon.tech") &&
+      !url.hostname.includes("-pooler.")
+    ) {
+      url.hostname = url.hostname.replace(/^(ep-[^.]+)\./, "$1-pooler.");
+    }
+    return url.toString();
+  } catch {
+    return value;
+  }
+}
+
 function createPrismaClient() {
+  const databaseUrl = runtimeDatabaseUrl();
   return new PrismaClient({
+    ...(databaseUrl ? { datasources: { db: { url: databaseUrl } } } : {}),
     log: process.env.NODE_ENV === "development" ? ["error", "warn"] : ["error"],
   }).$extends({
     query: {

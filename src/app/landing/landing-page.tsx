@@ -11,7 +11,6 @@ import {
   Target,
 } from "lucide-react";
 import { BrandMark } from "@/components/brand-mark";
-import { SiteSignature } from "@/components/site-signature";
 import { LandingDemo } from "./landing-demo";
 
 const outcomes = [
@@ -205,9 +204,6 @@ export function LandingPage({ authed = false }: { authed?: boolean }) {
           </div>
         </section>
 
-        <footer className="border-t border-border/70 pt-6 text-center">
-          <SiteSignature />
-        </footer>
       </div>
     </div>
   );

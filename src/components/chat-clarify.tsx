@@ -1,8 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
-import { Check, CornerDownLeft, RefreshCw, Send, Sparkles } from "lucide-react";
+import { Check, CornerDownLeft, Send, Sparkles } from "lucide-react";
 import type { InboxClarificationDimension } from "@/lib/ai";
 
 type Props = {
@@ -79,7 +78,6 @@ export function ChatClarify({
   const [directInput, setDirectInput] = useState(false);
   const [slowBusy, setSlowBusy] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
-  const router = useRouter();
 
   const answeredCount = answers.length;
   const lastTurn = turns[turns.length - 1];
@@ -324,17 +322,6 @@ export function ChatClarify({
                 submitLabel
               )}
             </button>
-            {busy && slowBusy ? (
-              <button
-                type="button"
-                onClick={() => router.refresh()}
-                aria-label="刷新查看结果"
-                title="刷新查看结果"
-                className="inline-flex size-11 items-center justify-center rounded-lg border border-border bg-surface text-ink-muted transition-colors hover:border-accent hover:text-accent"
-              >
-                <RefreshCw className="size-4" />
-              </button>
-            ) : null}
           </div>
         ) : null}
       </div>

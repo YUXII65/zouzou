@@ -5,7 +5,11 @@ import { useRouter } from "next/navigation";
 import { Sparkles } from "lucide-react";
 import { generateInboxPlan } from "@/app/actions";
 import { ChatClarify } from "@/components/chat-clarify";
-import type { InboxClarificationDimension } from "@/lib/ai";
+import { InboxPlanEditor } from "@/components/inbox-plan-editor";
+import type {
+  InboxClarificationDimension,
+  InboxPlan,
+} from "@/lib/ai";
 
 export function InboxClarification({
   itemId,
@@ -19,6 +23,7 @@ export function InboxClarification({
   supplementPlaceholder: string;
 }) {
   const [apiKey, setApiKey] = useState("");
+  const [localPlan, setLocalPlan] = useState<InboxPlan | null>(null);
   const [pending, startTransition] = useTransition();
   const router = useRouter();
 
@@ -39,18 +44,24 @@ export function InboxClarification({
     formData.set("supplement", payload.supplement);
     formData.set("apiKey", apiKey);
     startTransition(async () => {
-      await generateInboxPlan(formData);
+      const plan = await generateInboxPlan(formData);
+      if (plan) setLocalPlan(plan);
       router.refresh();
     });
+  }
+
+  if (localPlan) {
+    return (
+      <div className="space-y-3">
+        <p className="text-sm leading-6 text-ink">{content}</p>
+        <InboxPlanEditor itemId={itemId} plan={localPlan} />
+      </div>
+    );
   }
 
   return (
     <div className="space-y-3">
       <p className="text-sm leading-6 text-ink">{content}</p>
-      <div className="flex items-center gap-2 rounded-lg bg-surface px-3 py-2 text-xs font-medium text-ink-secondary">
-        <Sparkles className="size-3.5 text-accent" />
-        推进伙伴想先多了解一点
-      </div>
       {dimensions.length ? (
         <ChatClarify
           dimensions={dimensions}

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import {
   ArrowRight,
@@ -16,6 +16,7 @@ import {
   clarifyOnboarding,
   completeFirstRun,
   planOnboarding,
+  recordSignupEvent,
   skipOnboarding,
 } from "@/app/actions";
 import { BrandMark } from "@/components/brand-mark";
@@ -38,7 +39,13 @@ const steps = [
 const inputClass =
   "zouzou-input w-full rounded-lg px-3.5 py-3 text-[15px] leading-7 text-ink";
 
-export function FirstRunGuide({ guest }: { guest?: boolean }) {
+export function FirstRunGuide({
+  guest,
+  signupEvent = null,
+}: {
+  guest?: boolean;
+  signupEvent?: "register" | "guest_start" | null;
+}) {
   const [step, setStep] = useState(0);
   const [idea, setIdea] = useState("");
   const [clarification, setClarification] = useState<InboxClarification | null>(
@@ -53,6 +60,20 @@ export function FirstRunGuide({ guest }: { guest?: boolean }) {
   const [generating, setGenerating] = useState(false);
   const [aiFallback, setAiFallback] = useState(false);
   const [samples, setSamples] = useState(sampleIdeasForDate);
+  const signupTracked = useRef(false);
+
+  useEffect(() => {
+    if (!signupEvent || signupTracked.current) return;
+    signupTracked.current = true;
+    const storageKey = `next_step_signup_${signupEvent}`;
+    try {
+      if (localStorage.getItem(storageKey)) return;
+      localStorage.setItem(storageKey, "1");
+    } catch {
+      // Ignore storage errors; the event can still be sent once this session.
+    }
+    void recordSignupEvent(signupEvent).catch(() => {});
+  }, [signupEvent]);
 
   useEffect(() => {
     try {

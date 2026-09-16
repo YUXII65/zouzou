@@ -1,7 +1,6 @@
 import { prisma } from "@/lib/prisma";
+import { FIRST_RUN_PREFERENCE } from "@/lib/preferences";
 
-const TOUR_KEY = "first_run_tour";
-const TOUR_SOURCE = "system";
 const FRESH_ACCOUNT_DAYS = 14;
 
 export type FirstRunState = {
@@ -23,7 +22,11 @@ export async function getFirstRunState(
   const [preference, projectCount, taskCount] = await Promise.all([
     prisma.userPreference.findUnique({
       where: {
-        userId_key_source: { userId, key: TOUR_KEY, source: TOUR_SOURCE },
+        userId_key_source: {
+          userId,
+          key: FIRST_RUN_PREFERENCE.key,
+          source: FIRST_RUN_PREFERENCE.source,
+        },
       },
       select: { value: true },
     }),
@@ -49,13 +52,17 @@ export async function getFirstRunState(
 export async function setFirstRunTourStep(userId: string, step: string) {
   await prisma.userPreference.upsert({
     where: {
-      userId_key_source: { userId, key: TOUR_KEY, source: TOUR_SOURCE },
+      userId_key_source: {
+        userId,
+        key: FIRST_RUN_PREFERENCE.key,
+        source: FIRST_RUN_PREFERENCE.source,
+      },
     },
     update: { value: step },
     create: {
       userId,
-      key: TOUR_KEY,
-      source: TOUR_SOURCE,
+      key: FIRST_RUN_PREFERENCE.key,
+      source: FIRST_RUN_PREFERENCE.source,
       value: step,
     },
   });

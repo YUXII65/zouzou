@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { RefreshCw, Sparkles } from "lucide-react";
+import { useEffect, useState, type FormEvent } from "react";
+import { useRouter } from "next/navigation";
+import { Loader2, RefreshCw, Sparkles } from "lucide-react";
 import { addInboxItemAndClarify } from "@/app/actions";
-import { SubmitButton } from "@/components/submit-button";
+import { InboxClarification } from "@/components/inbox-clarification";
 import {
   markFirstAiQuestionAsked,
   notifyTourStep,
@@ -13,13 +14,36 @@ import {
   pickRandomSampleIdeas,
   sampleIdeasForDate,
 } from "@/lib/sample-ideas";
+import type { InboxClarification as InboxClarificationData } from "@/lib/ai";
 
-export function QuickCapture({ compact = false }: { compact?: boolean }) {
+type CaptureResult = {
+  itemId: string;
+  content: string;
+  clarification: InboxClarificationData;
+};
+
+export function QuickCapture({
+  compact = false,
+  pendingIds = [],
+}: {
+  compact?: boolean;
+  pendingIds?: string[];
+}) {
   const [content, setContent] = useState("");
   const [samples, setSamples] = useState(sampleIdeasForDate);
   const [apiKey, setApiKey] = useState("");
   const [model, setModel] = useState("deepseek-v4-flash");
   const [baseUrl, setBaseUrl] = useState("https://api.deepseek.com");
+  const [submitting, setSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState("");
+  const [localResult, setLocalResult] = useState<CaptureResult | null>(null);
+  const router = useRouter();
+
+  useEffect(() => {
+    if (localResult && pendingIds.includes(localResult.itemId)) {
+      setLocalResult(null);
+    }
+  }, [localResult, pendingIds]);
 
   useEffect(() => {
     function readStorage() {
@@ -47,16 +71,35 @@ export function QuickCapture({ compact = false }: { compact?: boolean }) {
     trackEvent("home_sample_refresh");
   }
 
+  async function submitCapture(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (submitting) return;
+
+    const formData = new FormData(event.currentTarget);
+    setSubmitting(true);
+    setSubmitError("");
+    markFirstAiQuestionAsked();
+    notifyTourStep("2");
+    trackEvent("home_ai_input_submit");
+
+    try {
+      const result = await addInboxItemAndClarify(formData);
+      if (result) setLocalResult(result);
+      setContent("");
+      router.refresh();
+    } catch {
+      setSubmitError("没送出去，再试一次");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
   return (
+    <>
     <form
-      action={addInboxItemAndClarify}
       data-tour="quick-capture"
       className="relative overflow-hidden rounded-xl border border-accent/15 bg-gradient-to-br from-accent-soft/80 via-surface to-ai-soft/60 p-4 sm:p-5"
-      onSubmit={() => {
-        markFirstAiQuestionAsked();
-        notifyTourStep("2");
-        trackEvent("home_ai_input_submit");
-      }}
+      onSubmit={submitCapture}
     >
       <div
         aria-hidden
@@ -101,14 +144,33 @@ export function QuickCapture({ compact = false }: { compact?: boolean }) {
           <RefreshCw className="size-3.5" />
           换一批
         </button>
-        <SubmitButton
-          pendingText="正在梳理..."
-          className="zouzou-primary-button inline-flex h-11 w-full items-center justify-center gap-2 rounded-lg bg-accent px-6 text-sm font-medium text-white shadow-lg shadow-accent/20 transition-colors hover:bg-accent-strong sm:w-auto"
+        <button
+          type="submit"
+          disabled={submitting}
+          className="zouzou-primary-button inline-flex h-11 w-full items-center justify-center gap-2 rounded-lg bg-accent px-6 text-sm font-medium text-white shadow-lg shadow-accent/20 transition-colors hover:bg-accent-strong disabled:cursor-not-allowed disabled:opacity-70 sm:w-auto"
         >
-          <Sparkles className="size-4" />
-          下一步
-        </SubmitButton>
+          {submitting ? (
+            <Loader2 className="size-4 animate-spin" />
+          ) : (
+            <Sparkles className="size-4" />
+          )}
+          {submitting ? "已收到，正在梳理..." : "下一步"}
+        </button>
       </div>
+      {submitError ? (
+        <p className="relative mt-3 text-xs text-danger">{submitError}</p>
+      ) : null}
     </form>
+    {localResult ? (
+      <div className="mt-4">
+        <InboxClarification
+          itemId={localResult.itemId}
+          content={localResult.content}
+          dimensions={localResult.clarification.dimensions}
+          supplementPlaceholder={localResult.clarification.supplementPlaceholder}
+        />
+      </div>
+    ) : null}
+    </>
   );
 }

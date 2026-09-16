@@ -2,6 +2,7 @@
 
 import { randomBytes, randomUUID } from "node:crypto";
 import { revalidatePath } from "next/cache";
+import { after } from "next/server";
 import { redirect } from "next/navigation";
 import type {
   Priority,
@@ -219,6 +220,15 @@ function parseInboxPlan(item: { aiPlanJson: string | null }): InboxPlan | null {
   }
 }
 
+function isUniqueConstraintError(error: unknown) {
+  return Boolean(
+    error &&
+      typeof error === "object" &&
+      "code" in error &&
+      (error as { code?: unknown }).code === "P2002",
+  );
+}
+
 function safeNext(value: string | null) {
   if (value && value.startsWith("/") && !value.startsWith("//")) {
     return value;
@@ -248,32 +258,32 @@ export async function registerUser(formData: FormData) {
     redirect(`/login?error=register&next=${encodeURIComponent(next)}`);
   }
 
-  const existing = await prisma.user.findUnique({
-    where: { username },
-    select: { id: true, passwordHash: true },
-  });
-  if (existing) {
-    if (verifyPassword(password, existing.passwordHash)) {
+  let user: { id: string } | null = null;
+  try {
+    user = await prisma.user.create({
+      data: {
+        username,
+        passwordHash: hashPassword(password),
+        },
+      select: { id: true },
+    });
+  } catch (error) {
+    if (!isUniqueConstraintError(error)) throw error;
+
+    const existing = await prisma.user.findUnique({
+      where: { username },
+      select: { id: true, passwordHash: true },
+    });
+    if (existing && verifyPassword(password, existing.passwordHash)) {
       await createUserSession(existing.id);
-      await recordUsageEvent({ userId: existing.id, event: "login" });
+      after(() => recordUsageEvent({ userId: existing.id, event: "login" }));
       redirect(next);
     }
     redirect(`/login?error=register&next=${encodeURIComponent(next)}`);
   }
 
-  const user = await prisma.user.create({
-    data: {
-      username,
-      passwordHash: hashPassword(password),
-    },
-    select: { id: true },
-  });
   await createUserSession(user.id);
-  await recordUsageEvent({ userId: user.id, event: "register" });
-  await setOnboardingCompleted(user.id, false);
-  await persistFirstRunTourStep(user.id, "1");
-
-  redirect("/welcome");
+  redirect("/welcome?signup=register");
 }
 
 export async function startGuestExperience() {
@@ -291,10 +301,7 @@ export async function startGuestExperience() {
   });
 
   await createUserSession(user.id);
-  await setOnboardingCompleted(user.id, false);
-  await persistFirstRunTourStep(user.id, "1");
-  await recordUsageEvent({ userId: user.id, event: "guest_start" });
-  redirect("/welcome?guest=1");
+  redirect("/welcome?guest=1&signup=guest");
 }
 
 export async function claimGuestAccount(formData: FormData) {
@@ -578,32 +585,41 @@ export async function loginUser(formData: FormData) {
     redirect(`/login?error=login&next=${encodeURIComponent(next)}`);
   }
 
-  const user = await prisma.user.findUnique({
-    where: { username },
-    select: { id: true, passwordHash: true },
-  });
-  if (!user) {
-    const created = await prisma.user.create({
+  let created: { id: string } | null = null;
+  try {
+    created = await prisma.user.create({
       data: {
         username,
         passwordHash: hashPassword(password),
       },
       select: { id: true },
     });
-    await createUserSession(created.id);
-    await setOnboardingCompleted(created.id, false);
-    await persistFirstRunTourStep(created.id, "1");
-    await recordUsageEvent({ userId: created.id, event: "register" });
-    redirect("/welcome");
+  } catch (error) {
+    if (!isUniqueConstraintError(error)) throw error;
+
+    const existing = await prisma.user.findUnique({
+      where: { username },
+      select: { id: true, passwordHash: true },
+    });
+    if (!existing || !verifyPassword(password, existing.passwordHash)) {
+      redirect(`/login?error=login&next=${encodeURIComponent(next)}`);
+    }
+
+    await createUserSession(existing.id);
+    after(() => recordUsageEvent({ userId: existing.id, event: "login" }));
+    redirect(next);
   }
 
-  if (!verifyPassword(password, user.passwordHash)) {
-    redirect(`/login?error=login&next=${encodeURIComponent(next)}`);
-  }
+  await createUserSession(created.id);
+  redirect("/welcome?signup=register");
+}
 
-  await createUserSession(user.id);
-  await recordUsageEvent({ userId: user.id, event: "login" });
-  redirect(next);
+export async function recordSignupEvent(kind: string) {
+  const user = await requireUser();
+  await recordUsageEvent({
+    userId: user.id,
+    event: kind === "guest_start" ? "guest_start" : "register",
+  });
 }
 
 export async function logoutUser() {
@@ -689,8 +705,7 @@ export async function addInboxItemAndClarify(formData: FormData) {
     },
   });
 
-  revalidatePath("/");
-  revalidatePath("/workspace");
+  return { itemId: item.id, content, clarification };
 }
 
 export async function getTaskEditSuggestion(input: {
@@ -1163,8 +1178,7 @@ export async function generateInboxPlan(formData: FormData) {
     },
   });
 
-  revalidatePath("/");
-  revalidatePath("/workspace");
+  return plan;
 }
 
 export async function confirmInboxPlan(formData: FormData) {
@@ -1315,8 +1329,6 @@ export async function confirmInboxPlan(formData: FormData) {
     detail: "inbox_plan",
   });
 
-  revalidatePath("/");
-  revalidatePath("/workspace");
 }
 
 export async function generateTodaySuggestion(
@@ -1757,10 +1769,7 @@ export async function saveReview(formData: FormData) {
   await syncReviewRelations(review, nextActions, user.id);
   await recordUsageEvent({ userId: user.id, event: "review_saved" });
 
-  revalidatePath("/");
-  revalidatePath("/review");
-  revalidatePath("/workspace");
-  redirect(`/review?date=${toDateInputValue(review.reviewDate)}`);
+  return { date: toDateInputValue(review.reviewDate) };
 }
 
 export async function createProject(formData: FormData) {
@@ -2011,8 +2020,19 @@ export async function setTaskStatus(formData: FormData) {
 
   if (!id) return;
 
-  const existing = await prisma.task.findUnique({
-    where: { id, userId: user.id },
+  const transitionFilter =
+    status === "done"
+      ? { status: { not: "done" as const } }
+      : status === "cancelled"
+        ? { status: { not: "cancelled" as const } }
+        : {};
+  const updated = await prisma.task.updateManyAndReturn({
+    where: { id, userId: user.id, ...transitionFilter },
+    data: {
+      status,
+      completedAt: status === "done" ? new Date() : null,
+      completedBy: status === "done" ? "user" : null,
+    },
     select: {
       title: true,
       status: true,
@@ -2020,84 +2040,60 @@ export async function setTaskStatus(formData: FormData) {
       scheduledDate: true,
       dueDate: true,
       projectId: true,
-      completedAt: true,
-      reviewNextAction: { select: { id: true } },
     },
   });
 
-  if (!existing) return;
+  if (!updated.length) return;
 
-  await prisma.task.update({
-    where: { id, userId: user.id },
-    data: {
-      status,
-      completedAt:
-        status === "done"
-          ? new Date()
-          : existing.status === "done"
-            ? null
-            : existing.completedAt,
-      completedBy:
-        status === "done"
-          ? existing.status === "done"
-            ? undefined
-            : "user"
-          : null,
-    },
+  const updatedTask = updated[0];
+  const reviewNextStatus =
+    status === "done"
+      ? "done"
+      : status === "cancelled"
+        ? "cancelled"
+        : "pending";
+
+  // 状态按钮必须尽快返回。统计、偏好学习和复盘联动放到响应完成后执行，
+  // 避免 Neon 的网络往返和整页重渲染阻塞用户操作。
+  after(async () => {
+    const backgroundTasks: Promise<unknown>[] = [
+      prisma.reviewNextAction.updateMany({
+        where: { taskId: id, userId: user.id },
+        data: { status: reviewNextStatus },
+      }),
+    ];
+
+    if (status === "done") {
+      backgroundTasks.push(
+        recordAiFeedback({
+          userId: user.id,
+          source: "task",
+          action: "task_completed",
+          taskId: id,
+          projectId: updatedTask.projectId,
+          afterJson: taskSnapshot(updatedTask),
+        }),
+        recordUsageEvent({
+          userId: user.id,
+          event: "task_completed",
+          detail: id,
+        }),
+      );
+    } else if (status === "cancelled") {
+      backgroundTasks.push(
+        recordAiFeedback({
+          userId: user.id,
+          source: "task",
+          action: "task_cancelled",
+          taskId: id,
+          projectId: updatedTask.projectId,
+          afterJson: taskSnapshot(updatedTask),
+        }),
+      );
+    }
+
+    await Promise.all(backgroundTasks).catch(() => {});
   });
-
-  const beforeJson = taskSnapshot(existing);
-  const afterJson = taskSnapshot({
-    title: existing.title,
-    status,
-    priority: existing.priority,
-    scheduledDate: existing.scheduledDate,
-    dueDate: existing.dueDate,
-    projectId: existing.projectId,
-  });
-  if (status === "done" && existing.status !== "done") {
-    await recordAiFeedback({
-      userId: user.id,
-      source: "task",
-      action: "task_completed",
-      taskId: id,
-      projectId: existing.projectId,
-      beforeJson,
-      afterJson,
-    });
-    await recordUsageEvent({
-      userId: user.id,
-      event: "task_completed",
-      detail: id,
-    });
-  } else if (status === "cancelled" && existing.status !== "cancelled") {
-    await recordAiFeedback({
-      userId: user.id,
-      source: "task",
-      action: "task_cancelled",
-      taskId: id,
-      projectId: existing.projectId,
-      beforeJson,
-      afterJson,
-    });
-  }
-
-  if (existing.reviewNextAction?.id) {
-    await prisma.reviewNextAction.update({
-      where: { id: existing.reviewNextAction.id, userId: user.id },
-      data: {
-        status:
-          status === "done"
-            ? "done"
-            : status === "cancelled"
-              ? "cancelled"
-              : "pending",
-      },
-    });
-  }
-
-  revalidatePath("/");
-  revalidatePath("/workspace");
 }
 
 export async function markTodayFocus(formData: FormData) {

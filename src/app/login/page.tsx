@@ -1,8 +1,10 @@
 import Link from "next/link";
+import { after } from "next/server";
 import { ArrowLeft } from "lucide-react";
 import { AuthCard } from "@/components/auth-card";
 import { BrandMark } from "@/components/brand-mark";
 import { HalftoneSpiral } from "@/components/halftone-spiral";
+import { prisma } from "@/lib/prisma";
 
 export default async function LoginPage({
   searchParams,
@@ -16,6 +18,15 @@ export default async function LoginPage({
     typeof params.mode === "string" && params.mode === "register"
       ? "register"
       : undefined;
+
+  // 用户输入账号密码期间预热 Neon，避免注册提交时才承担连接冷启动。
+  after(async () => {
+    try {
+      await prisma.$queryRaw`SELECT 1`;
+    } catch {
+      // 预热失败不影响登录页；真实提交仍会走原有重试。
+    }
+  });
 
   return (
     <div className="fixed inset-0 z-40 overflow-y-auto bg-background">

@@ -63,12 +63,6 @@ type AgendaTask = {
 };
 
 function taskSource(task: AgendaTask) {
-  if (task.reviewNextAction) {
-    return `来自复盘 · ${formatDate(task.reviewNextAction.review.reviewDate)}`;
-  }
-  if (task.inboxItem) {
-    return "来自整理";
-  }
   return task.project?.name ?? "未关联项目";
 }
 
@@ -77,45 +71,45 @@ export const dynamic = "force-dynamic";
 export default async function TodayPage() {
   const user = await getCurrentUser();
   if (!user) redirect("/landing");
-  const firstRun = await getFirstRunState(user.id, user.createdAt);
   const now = new Date();
   const dayStart = startOfDay(now);
   const dayEnd = endOfDay(now);
-  const [tasks, pendingInbox, reviewCount] = await Promise.all([
-    prisma.task.findMany({
-      where: { userId: user.id },
-      include: {
-        project: { select: { name: true } },
-        inboxItem: { select: { id: true } },
-        reviewNextAction: {
-          select: {
-            review: { select: { reviewDate: true } },
+  const [firstRun, tasks, pendingInbox, reviewCount, recentReviews] =
+    await Promise.all([
+      getFirstRunState(user.id, user.createdAt),
+      prisma.task.findMany({
+        where: { userId: user.id },
+        include: {
+          project: { select: { name: true } },
+          inboxItem: { select: { id: true } },
+          reviewNextAction: {
+            select: {
+              review: { select: { reviewDate: true } },
+            },
           },
+          stickyNotes: { orderBy: { createdAt: "desc" } },
         },
-        stickyNotes: { orderBy: { createdAt: "desc" } },
-      },
-      orderBy: { createdAt: "desc" },
-    }),
-    prisma.inboxItem.findMany({
-      where: { userId: user.id, status: "inbox" },
-      select: {
-        id: true,
-        content: true,
-        aiPlanJson: true,
-        aiSuggestionJson: true,
-      },
-      orderBy: { createdAt: "desc" },
-      take: 10,
-    }),
-    prisma.review.count({ where: { userId: user.id } }),
-  ]);
-
-  const recentReviews = await prisma.review.findMany({
-    where: { userId: user.id },
-    select: { reviewDate: true },
-    orderBy: { reviewDate: "desc" },
-    take: 60,
-  });
+        orderBy: { createdAt: "desc" },
+      }),
+      prisma.inboxItem.findMany({
+        where: { userId: user.id, status: "inbox" },
+        select: {
+          id: true,
+          content: true,
+          aiPlanJson: true,
+          aiSuggestionJson: true,
+        },
+        orderBy: { createdAt: "desc" },
+        take: 10,
+      }),
+      prisma.review.count({ where: { userId: user.id } }),
+      prisma.review.findMany({
+        where: { userId: user.id },
+        select: { reviewDate: true },
+        orderBy: { reviewDate: "desc" },
+        take: 60,
+      }),
+    ]);
 
   const activityDates = new Set<string>();
   for (const task of tasks) {
@@ -295,12 +289,6 @@ function AgendaTaskRow({
     <div className="flex flex-col gap-3 px-4 py-3 lg:flex-row lg:items-center">
       <div className="min-w-0 flex-1">
         <div className="flex min-w-0 flex-wrap items-center gap-2">
-          {task.reviewNextAction ? (
-            <span className="inline-flex h-5 items-center gap-1 rounded bg-accent-soft px-1.5 text-[11px] font-medium text-accent-strong">
-              <NotebookPen className="size-3" />
-              来自复盘
-            </span>
-          ) : null}
           {isFocused ? (
             <span className="inline-flex h-5 items-center gap-1 rounded bg-accent-soft px-1.5 text-[11px] font-medium text-accent-strong">
               <Focus className="size-3" />

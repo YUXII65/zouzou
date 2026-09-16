@@ -6,7 +6,6 @@ import { UsageTracker } from "@/components/usage-tracker";
 import { isAdminUsername } from "@/lib/admin";
 import { ASSET_GUARD_CSS, ASSET_GUARD_SCRIPT } from "@/lib/asset-guard";
 import { getCurrentUser, isGuestUser } from "@/lib/auth";
-import { prisma } from "@/lib/prisma";
 import { GuestBanner } from "@/components/guest-banner";
 
 export const metadata: Metadata = {
@@ -32,9 +31,7 @@ export default async function RootLayout({
   const user = await getCurrentUser();
   const isAdmin = user ? isAdminUsername(user.username) : false;
   const isGuest = user ? isGuestUser(user) : false;
-  const completedTaskCount = user
-    ? await prisma.task.count({ where: { userId: user.id, status: "done" } })
-    : 0;
+  const completedTaskCount = user?._count.tasks ?? 0;
   const profileUser = user
     ? {
         username: user.username,

@@ -1,6 +1,7 @@
 "use client";
 
-import { useOptimistic } from "react";
+import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import {
   CheckCircle2,
   Loader2,
@@ -8,7 +9,6 @@ import {
   RotateCcw,
 } from "lucide-react";
 import { StatusBadge } from "@/components/status-badge";
-import { SubmitButton } from "@/components/submit-button";
 import { AiTaskSticky } from "@/components/ai-task-sticky";
 import { TaskSettingsMenu } from "@/components/task-settings-menu";
 import { TaskTitleButton } from "@/components/task-title-button";
@@ -76,15 +76,34 @@ export function TaskRow({
   /** 新手期：任务行右侧图标展开成"图标 + 文字" */
   showLabels?: boolean;
 }) {
-  const [optimisticStatus, setOptimisticStatus] = useOptimistic(task.status);
+  const router = useRouter();
+  const [optimisticStatus, setOptimisticStatus] = useState(task.status);
+  const [updating, setUpdating] = useState(false);
+  useEffect(() => {
+    setOptimisticStatus(task.status);
+  }, [task.status]);
   const canChangeStatus =
     optimisticStatus !== "done" && optimisticStatus !== "cancelled";
 
-  async function changeStatus(formData: FormData) {
-    const next = nextStatus(optimisticStatus);
+  async function changeStatus() {
+    if (updating) return;
+    const previous = optimisticStatus;
+    const next = nextStatus(previous);
+    const formData = new FormData();
+    formData.set("id", task.id);
     formData.set("status", next);
     setOptimisticStatus(next);
-    await setTaskStatus(formData);
+    setUpdating(true);
+    if (next === "in_progress") notifyTourStep("3");
+    if (next === "done") markFirstTaskDone();
+    try {
+      await setTaskStatus(formData);
+      router.refresh();
+    } catch {
+      setOptimisticStatus(previous);
+    } finally {
+      setUpdating(false);
+    }
   }
 
   return (
@@ -116,30 +135,20 @@ export function TaskRow({
 
       <div className="flex items-center gap-2">
         {canChangeStatus ? (
-          <form
-            action={changeStatus}
+          <button
+            type="button"
             data-tour="task-next"
-            onSubmit={() => {
-              const next = nextStatus(optimisticStatus);
-              // 引导第 1 步：用户真的点了"下一步"，才进入第 2 步
-              if (next === "in_progress") notifyTourStep("3");
-              if (next === "done") markFirstTaskDone();
-            }}
+            onClick={changeStatus}
+            disabled={updating}
+            className={statusButtonClass(optimisticStatus)}
           >
-            <input type="hidden" name="id" value={task.id} />
-            <input
-              type="hidden"
-              name="status"
-              value={nextStatus(optimisticStatus)}
-            />
-            <SubmitButton
-              pendingText={null}
-              className={statusButtonClass(optimisticStatus)}
-            >
-              {statusIcon(optimisticStatus)}
-              {actionLabel(optimisticStatus)}
-            </SubmitButton>
-          </form>
+            {updating ? (
+              <Loader2 className="size-3.5 animate-spin" />
+            ) : (
+              statusIcon(optimisticStatus)
+            )}
+            {updating ? "同步中..." : actionLabel(optimisticStatus)}
+          </button>
         ) : null}
 
         <div className="flex items-center gap-2">

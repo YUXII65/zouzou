@@ -1,8 +1,9 @@
 "use client";
 
-import { CheckCircle2, Sparkles } from "lucide-react";
+import { useState, type FormEvent } from "react";
+import { useRouter } from "next/navigation";
+import { CheckCircle2, Loader2, Sparkles } from "lucide-react";
 import { confirmInboxPlan } from "@/app/actions";
-import { SubmitButton } from "@/components/submit-button";
 import type { InboxPlan } from "@/lib/ai";
 
 const inputClass =
@@ -15,11 +16,29 @@ export function InboxPlanEditor({
   itemId: string;
   plan: InboxPlan;
 }) {
+  const [submitting, setSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState("");
+  const router = useRouter();
   const showProjectFields =
     plan.action !== "single_task" || Boolean(plan.projectName);
 
+  async function submitPlan(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (submitting) return;
+    setSubmitting(true);
+    setSubmitError("");
+    try {
+      await confirmInboxPlan(new FormData(event.currentTarget));
+      router.refresh();
+    } catch {
+      setSubmitError("没生成成功，再试一次");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
   return (
-    <form action={confirmInboxPlan} className="mt-3 space-y-3">
+    <form onSubmit={submitPlan} className="mt-3 space-y-3">
       <input type="hidden" name="id" value={itemId} />
 
       {showProjectFields ? (
@@ -154,14 +173,22 @@ export function InboxPlanEditor({
         </div>
       </div>
 
-      <div className="flex justify-end">
-        <SubmitButton
-          pendingText="生成中..."
+      <div className="flex flex-col items-end gap-2">
+        {submitError ? (
+          <p className="text-xs text-danger">{submitError}</p>
+        ) : null}
+        <button
+          type="submit"
+          disabled={submitting}
           className="zouzou-primary-button inline-flex h-9 items-center gap-2 rounded-lg bg-accent px-3.5 text-sm font-medium text-white transition-colors hover:bg-accent-strong disabled:cursor-not-allowed disabled:opacity-60"
         >
-          <CheckCircle2 className="size-4" />
-          生成任务
-        </SubmitButton>
+          {submitting ? (
+            <Loader2 className="size-4 animate-spin" />
+          ) : (
+            <CheckCircle2 className="size-4" />
+          )}
+          {submitting ? "正在生成..." : "生成任务"}
+        </button>
       </div>
     </form>
   );

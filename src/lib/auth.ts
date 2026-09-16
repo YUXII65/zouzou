@@ -1,7 +1,9 @@
 import { randomBytes, scryptSync, timingSafeEqual } from "node:crypto";
+import { cache } from "react";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
+import { ONBOARDING_PREFERENCE } from "@/lib/preferences";
 import {
   issueSessionToken,
   readSessionToken,
@@ -31,7 +33,7 @@ export function isGuestUser(user: { username: string }) {
   return user.username.startsWith("guest_");
 }
 
-export async function getCurrentUser() {
+export const getCurrentUser = cache(async function getCurrentUser() {
   const cookieStore = await cookies();
   const token = cookieStore.get(SESSION_COOKIE)?.value;
   if (!token) return null;
@@ -47,9 +49,22 @@ export async function getCurrentUser() {
       displayName: true,
       avatarUrl: true,
       createdAt: true,
+      _count: {
+        select: {
+          tasks: { where: { status: "done" } },
+        },
+      },
+      userPreferences: {
+        where: {
+          key: ONBOARDING_PREFERENCE.key,
+          source: ONBOARDING_PREFERENCE.source,
+        },
+        select: { value: true },
+        take: 1,
+      },
     },
   });
-}
+});
 
 export async function requireUser() {
   const user = await getCurrentUser();

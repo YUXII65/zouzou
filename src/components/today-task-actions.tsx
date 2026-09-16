@@ -1,7 +1,8 @@
 "use client";
 
-import { useOptimistic } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
   CalendarOff,
   CalendarPlus,
@@ -20,6 +21,7 @@ import {
   setTaskStatus,
 } from "@/app/actions";
 import { SubmitButton } from "@/components/submit-button";
+import { StatusBadge } from "@/components/status-badge";
 import { ConfirmActionButton } from "@/components/confirm-action-button";
 import { AiTaskSticky } from "@/components/ai-task-sticky";
 import { markFirstTaskDone } from "@/lib/first-run-hints";
@@ -80,44 +82,54 @@ export function TodayTaskActions({
   projectName?: string | null;
   initialStickyNotes?: TaskStickyNoteData[];
 }) {
+  const router = useRouter();
   const { ref, open, setOpen } = useClickOutside<HTMLDivElement>();
-  const [optimisticStatus, setOptimisticStatus] = useOptimistic(status);
+  const [optimisticStatus, setOptimisticStatus] = useState(status);
+  const [updating, setUpdating] = useState(false);
+  useEffect(() => {
+    setOptimisticStatus(status);
+  }, [status]);
   const canChangeStatus =
     optimisticStatus !== "done" && optimisticStatus !== "cancelled";
 
-  async function changeStatus(formData: FormData) {
-    const next = nextStatus(optimisticStatus);
+  async function changeStatus() {
+    if (updating) return;
+    const previous = optimisticStatus;
+    const next = nextStatus(previous);
+    const formData = new FormData();
+    formData.set("id", taskId);
     formData.set("status", next);
     setOptimisticStatus(next);
-    await setTaskStatus(formData);
+    setUpdating(true);
+    trackEvent("home_task_status", { status: next });
+    if (next === "done") markFirstTaskDone();
+    try {
+      await setTaskStatus(formData);
+      router.refresh();
+    } catch {
+      setOptimisticStatus(previous);
+    } finally {
+      setUpdating(false);
+    }
   }
 
   return (
     <div className="flex items-center gap-2">
+      <StatusBadge status={optimisticStatus} />
       {canChangeStatus ? (
-        <form
-          action={changeStatus}
-          onSubmit={() => {
-            trackEvent("home_task_status", {
-              status: nextStatus(optimisticStatus),
-            });
-            if (nextStatus(optimisticStatus) === "done") markFirstTaskDone();
-          }}
+        <button
+          type="button"
+          onClick={changeStatus}
+          disabled={updating}
+          className={statusButtonClass(optimisticStatus)}
         >
-          <input type="hidden" name="id" value={taskId} />
-          <input
-            type="hidden"
-            name="status"
-            value={nextStatus(optimisticStatus)}
-          />
-          <SubmitButton
-            pendingText={null}
-            className={statusButtonClass(optimisticStatus)}
-          >
-            {statusIcon(optimisticStatus)}
-            {actionLabel(optimisticStatus)}
-          </SubmitButton>
-        </form>
+          {updating ? (
+            <Loader2 className="size-3.5 animate-spin" />
+          ) : (
+            statusIcon(optimisticStatus)
+          )}
+          {updating ? "同步中..." : actionLabel(optimisticStatus)}
+        </button>
       ) : null}
 
       <AiTaskSticky

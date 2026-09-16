@@ -80,7 +80,9 @@ export function AuthCard({
           {error === "login" ? (
             <p className="mt-3 text-sm text-danger">用户名或密码不对。</p>
           ) : null}
-          <SubmitButton className={submitClass}>确认</SubmitButton>
+          <SubmitButton pendingText="正在登录..." className={submitClass}>
+            确认
+          </SubmitButton>
         </form>
       ) : (
         <form
@@ -114,7 +116,9 @@ export function AuthCard({
               用户名或密码不正确，或该账号已存在。
             </p>
           ) : null}
-          <SubmitButton className={submitClass}>确认</SubmitButton>
+          <SubmitButton pendingText="正在注册..." className={submitClass}>
+            确认
+          </SubmitButton>
         </form>
       )}
 

@@ -1,22 +1,23 @@
 import { prisma } from "@/lib/prisma";
-
-const ONBOARDING_KEY = "onboarding_completed";
-const ONBOARDING_SOURCE = "system";
+import { ONBOARDING_PREFERENCE } from "@/lib/preferences";
 
 export async function isOnboardingCompleted(userId: string) {
   const preference = await prisma.userPreference.findUnique({
     where: {
       userId_key_source: {
         userId,
-        key: ONBOARDING_KEY,
-        source: ONBOARDING_SOURCE,
+        key: ONBOARDING_PREFERENCE.key,
+        source: ONBOARDING_PREFERENCE.source,
       },
     },
     select: { value: true },
   });
 
-  if (!preference) return true;
-  return preference.value === "true";
+  return isOnboardingCompletedValue(preference?.value);
+}
+
+export function isOnboardingCompletedValue(value: string | null | undefined) {
+  return value === "true";
 }
 
 export async function setOnboardingCompleted(
@@ -27,15 +28,15 @@ export async function setOnboardingCompleted(
     where: {
       userId_key_source: {
         userId,
-        key: ONBOARDING_KEY,
-        source: ONBOARDING_SOURCE,
+        key: ONBOARDING_PREFERENCE.key,
+        source: ONBOARDING_PREFERENCE.source,
       },
     },
     update: { value: completed ? "true" : "false" },
     create: {
       userId,
-      key: ONBOARDING_KEY,
-      source: ONBOARDING_SOURCE,
+      key: ONBOARDING_PREFERENCE.key,
+      source: ONBOARDING_PREFERENCE.source,
       value: completed ? "true" : "false",
     },
   });
