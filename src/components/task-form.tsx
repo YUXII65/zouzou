@@ -8,6 +8,7 @@ const inputClass =
 type TaskFormTask = {
   id: string;
   title: string;
+  shortTitle: string | null;
   notes: string | null;
   projectId: string | null;
   status: string;
@@ -61,6 +62,22 @@ export function TaskForm({
             required
             defaultValue={task?.title}
             placeholder="一个清晰、可执行的动作"
+            className={inputClass}
+          />
+        </div>
+
+        <div className="sm:col-span-2">
+          <label
+            htmlFor={`task-short-title-${id}`}
+            className="mb-1.5 block text-xs font-medium text-ink-secondary"
+          >
+            精简标题
+          </label>
+          <input
+            id={`task-short-title-${id}`}
+            name="shortTitle"
+            defaultValue={task?.shortTitle ?? ""}
+            placeholder="例如：验证国内替代方案"
             className={inputClass}
           />
         </div>

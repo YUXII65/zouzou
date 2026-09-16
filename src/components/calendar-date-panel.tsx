@@ -34,7 +34,7 @@ export function CalendarDatePanel({
   return (
     <section className="zouzou-panel mb-5 px-4 py-4">
       <div className="flex flex-wrap items-center gap-x-5 gap-y-3">
-        <div className="flex items-center gap-4">
+        <div className="flex items-end gap-4">
           <div className="flex items-baseline gap-3">
             <span className="text-4xl font-semibold leading-none tabular-nums text-ink">
               {String(now.getDate()).padStart(2, "0")}
@@ -44,7 +44,7 @@ export function CalendarDatePanel({
             </span>
           </div>
 
-          <div className="text-base font-semibold tabular-nums text-ink">
+          <div className="text-2xl font-semibold leading-none tabular-nums text-ink">
             <CurrentTime initial={initialTime} />
           </div>
         </div>

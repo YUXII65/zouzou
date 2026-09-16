@@ -23,6 +23,7 @@ import { SubmitButton } from "@/components/submit-button";
 import { ConfirmActionButton } from "@/components/confirm-action-button";
 import { AiTaskSticky } from "@/components/ai-task-sticky";
 import { markFirstTaskDone } from "@/lib/first-run-hints";
+import type { TaskStickyNoteData } from "@/lib/task-sticky";
 import { trackEvent } from "@/lib/track";
 import { useClickOutside } from "@/lib/use-click-outside";
 
@@ -69,6 +70,7 @@ export function TodayTaskActions({
   title,
   notes,
   projectName,
+  initialStickyNotes = [],
 }: {
   taskId: string;
   status: string;
@@ -76,6 +78,7 @@ export function TodayTaskActions({
   title: string;
   notes?: string | null;
   projectName?: string | null;
+  initialStickyNotes?: TaskStickyNoteData[];
 }) {
   const { ref, open, setOpen } = useClickOutside<HTMLDivElement>();
   const [optimisticStatus, setOptimisticStatus] = useOptimistic(status);
@@ -123,6 +126,7 @@ export function TodayTaskActions({
         notes={notes}
         projectName={projectName}
         status={status}
+        initialNotes={initialStickyNotes}
       />
 
       <div className="relative" ref={ref}>

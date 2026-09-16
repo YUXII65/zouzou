@@ -15,7 +15,7 @@ export function GuestStartButton({ className }: { className?: string }) {
         onClick={() => setConfirming(true)}
         className={className}
       >
-        先游客体验
+        游客体验
       </button>
 
       {confirming ? (

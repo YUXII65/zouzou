@@ -23,7 +23,7 @@ import { formatDate, toDateInputValue } from "@/lib/date";
 export const dynamic = "force-dynamic";
 
 const inputClass =
-  "zouzou-input w-full rounded-lg px-3 py-2 text-sm text-ink";
+  "zouzou-input w-full resize-y rounded-xl px-4 py-3 text-[15px] leading-7 tracking-[0.01em] text-ink";
 
 function startOfWeek(date: Date) {
   const copy = new Date(date);
@@ -90,12 +90,14 @@ export default async function ReviewPage({
   );
 
   const today = toDateInputValue(new Date());
+  const todayReview = reviews.find(
+    (review) => toDateInputValue(review.reviewDate) === today,
+  );
 
   return (
     <>
       <PageHeader
         title="抽屉"
-        description="每日复盘，并给出明天的执行建议。"
       />
 
       <PageHint
@@ -128,12 +130,22 @@ export default async function ReviewPage({
               )}
             >
               <span>今天</span>
-              <span className="text-xs text-ink-muted">未写</span>
+              <span className="text-xs text-ink-muted">
+                {todayReview
+                  ? todayReview.status === "final"
+                    ? "已保存"
+                    : "草稿"
+                  : "未写"}
+              </span>
             </Link>
 
             {reviews.length ? (
               <div className="mt-1 space-y-1">
-                {reviews.map((review) => {
+                {reviews
+                  .filter(
+                    (review) => toDateInputValue(review.reviewDate) !== today,
+                  )
+                  .map((review) => {
                   const active =
                     toDateInputValue(review.reviewDate) === dateParam;
                   const completed = review.tasks.filter(
@@ -163,7 +175,7 @@ export default async function ReviewPage({
                       </span>
                     </Link>
                   );
-                })}
+                  })}
               </div>
             ) : (
               <p className="px-3 py-6 text-center text-sm text-ink-muted">
@@ -189,29 +201,29 @@ export default async function ReviewPage({
               <>
                 <ReviewDraftFeedback reviewId={selectedReview.id} />
 
-                <form action={saveReview} className="space-y-3 p-4">
+                <form action={saveReview} className="space-y-5 p-5">
                   <input type="hidden" name="id" value={selectedReview.id} />
                   <label className="block">
-                    <span className="mb-1.5 block text-xs font-medium text-ink-secondary">
+                    <span className="mb-2 block text-xs font-medium text-ink-secondary">
                       当日总结
                     </span>
                     <textarea
                       name="summary"
                       required
-                      rows={6}
+                      rows={7}
                       defaultValue={selectedReview.summary}
-                      className={inputClass}
+                      className={`${inputClass} min-h-44`}
                     />
                   </label>
                   <label className="block">
-                    <span className="mb-1.5 block text-xs font-medium text-ink-secondary">
-                      下一步建议（每行一条）
+                    <span className="mb-2 block text-xs font-medium text-ink-secondary">
+                      下一步任务（1-3 条）
                     </span>
                     <textarea
                       name="nextActions"
-                      rows={4}
+                      rows={5}
                       defaultValue={selectedReview.nextActions ?? ""}
-                      className={inputClass}
+                      className={`${inputClass} min-h-32`}
                     />
                   </label>
                   <div className="flex justify-end">

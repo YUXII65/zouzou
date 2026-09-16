@@ -136,7 +136,7 @@ export function AiPreferences() {
               }
               className={inputClass}
             >
-              <option value="smallest">最小动作</option>
+              <option value="smallest">具体动作</option>
               <option value="research">先研究再动手</option>
               <option value="complete">完整方案</option>
             </select>

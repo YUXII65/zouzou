@@ -38,28 +38,31 @@ export function AiProjectEditAssistant({
   async function generate() {
     if (!idea.trim()) return;
     setLoading(true);
-    const input = {
-      projectId,
-      name:
-        (document.getElementById(`project-name-${fieldPrefix}`) as HTMLInputElement)
-          ?.value ?? "",
-      objective:
-        (document.getElementById(`project-objective-${fieldPrefix}`) as HTMLTextAreaElement)
-          ?.value ?? "",
-      currentMilestone:
-        (document.getElementById(`project-milestone-${fieldPrefix}`) as HTMLInputElement)
-          ?.value ?? null,
-      status:
-        (document.getElementById(`project-status-${fieldPrefix}`) as HTMLSelectElement)
-          ?.value ?? "active",
-      notes:
-        (document.getElementById(`project-notes-${fieldPrefix}`) as HTMLInputElement)
-          ?.value ?? null,
-      idea,
-    };
-    const next = await getProjectEditSuggestion(input);
-    setSuggestion(next);
-    setLoading(false);
+    try {
+      const input = {
+        projectId,
+        name:
+          (document.getElementById(`project-name-${fieldPrefix}`) as HTMLInputElement)
+            ?.value ?? "",
+        objective:
+          (document.getElementById(`project-objective-${fieldPrefix}`) as HTMLTextAreaElement)
+            ?.value ?? "",
+        currentMilestone:
+          (document.getElementById(`project-milestone-${fieldPrefix}`) as HTMLInputElement)
+            ?.value ?? null,
+        status:
+          (document.getElementById(`project-status-${fieldPrefix}`) as HTMLSelectElement)
+            ?.value ?? "active",
+        notes:
+          (document.getElementById(`project-notes-${fieldPrefix}`) as HTMLInputElement)
+            ?.value ?? null,
+        idea,
+      };
+      const next = await getProjectEditSuggestion(input);
+      setSuggestion(next);
+    } finally {
+      setLoading(false);
+    }
   }
 
   function apply() {

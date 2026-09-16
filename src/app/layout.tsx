@@ -1,10 +1,12 @@
 import type { Metadata } from "next";
 import "./globals.css";
 import { AppChrome } from "@/components/app-chrome";
+import { SiteFooter } from "@/components/site-footer";
 import { UsageTracker } from "@/components/usage-tracker";
 import { isAdminUsername } from "@/lib/admin";
 import { ASSET_GUARD_CSS, ASSET_GUARD_SCRIPT } from "@/lib/asset-guard";
 import { getCurrentUser, isGuestUser } from "@/lib/auth";
+import { prisma } from "@/lib/prisma";
 import { GuestBanner } from "@/components/guest-banner";
 
 export const metadata: Metadata = {
@@ -30,6 +32,9 @@ export default async function RootLayout({
   const user = await getCurrentUser();
   const isAdmin = user ? isAdminUsername(user.username) : false;
   const isGuest = user ? isGuestUser(user) : false;
+  const completedTaskCount = user
+    ? await prisma.task.count({ where: { userId: user.id, status: "done" } })
+    : 0;
   const profileUser = user
     ? {
         username: user.username,
@@ -56,6 +61,7 @@ export default async function RootLayout({
           <main className="mx-auto w-full max-w-5xl px-4 py-5 pb-28 sm:px-6 lg:px-8 lg:py-8 lg:pb-12">
             {children}
           </main>
+          <SiteFooter showFeedback={completedTaskCount >= 3} />
         </div>
       </body>
     </html>

@@ -11,13 +11,13 @@ import {
   Target,
 } from "lucide-react";
 import { BrandMark } from "@/components/brand-mark";
-import { GuestStartButton } from "@/components/guest-start-button";
+import { SiteSignature } from "@/components/site-signature";
 import { LandingDemo } from "./landing-demo";
 
 const outcomes = [
   {
     icon: Sparkles,
-    title: "不用自己整理",
+    title: "不用内耗复杂的思绪",
     body: "倒出想法，AI 自动归类到项目，生成可执行任务。",
   },
   {
@@ -69,7 +69,11 @@ export function LandingPage({ authed = false }: { authed?: boolean }) {
       className="fixed inset-0 z-40 overflow-y-auto"
     >
       <div className="mx-auto min-h-dvh w-full max-w-6xl px-4 py-8 sm:px-6 lg:px-8">
-        <header className="mb-12 flex items-center justify-between gap-4">
+        <header
+          className={`mb-12 flex items-center gap-4 ${
+            authed ? "justify-between" : ""
+          }`}
+        >
           <div className="flex items-center gap-2">
             <BrandMark className="size-8" />
             <span className="text-sm font-semibold text-ink">走走</span>
@@ -81,22 +85,7 @@ export function LandingPage({ authed = false }: { authed?: boolean }) {
             >
               返回走走
             </Link>
-          ) : (
-            <div className="flex items-center gap-3">
-              <Link
-                href="/login"
-                className="text-sm font-medium text-ink-secondary transition-colors hover:text-accent"
-              >
-                登录
-              </Link>
-              <Link
-                href="/login?mode=register"
-                className="zouzou-primary-button inline-flex h-9 items-center justify-center rounded-lg bg-accent px-3 text-sm font-medium text-white transition-colors hover:bg-accent-strong"
-              >
-                注册
-              </Link>
-            </div>
-          )}
+          ) : null}
         </header>
 
         <section className="mb-12">
@@ -104,38 +93,22 @@ export function LandingPage({ authed = false }: { authed?: boolean }) {
             让想法，走成下一步
           </p>
           <h1 className="max-w-4xl text-3xl font-semibold leading-tight text-ink sm:text-4xl">
-            把脑子里的一堆想法，
+            把脑子里的一堆<span className="text-accent">想法</span>，
             <br />
             变成今天能做的 1-3 件事。
           </h1>
           <p className="mt-5 max-w-2xl text-base leading-7 text-ink-secondary">
-            不用自学 AI 工作流，也不用自己拆任务，AI 帮你把想法变成下一步。
+            不用自学 AI 工作流，也不用自己拆任务，走走陪你一起让想法落地。
           </p>
           <div className="mt-6 flex flex-wrap items-center gap-3">
             <Link
-              href="/login?mode=register"
+              href="/login"
               className="zouzou-primary-button inline-flex h-11 items-center gap-2 rounded-lg bg-accent px-5 text-sm font-medium text-white transition-colors hover:bg-accent-strong"
             >
-              注册开始
+              注册/登录
               <ArrowRight className="size-4" />
             </Link>
-            <Link
-              href="/onboarding"
-              className="zouzou-secondary-button inline-flex h-11 items-center gap-2 rounded-lg border border-border bg-surface px-5 text-sm font-medium text-ink-secondary transition-colors hover:border-accent hover:text-accent"
-            >
-              看 30 秒演示
-            </Link>
-            <GuestStartButton className="text-sm font-medium text-ink-muted transition-colors hover:text-accent" />
           </div>
-          <p className="mt-3 text-sm text-ink-secondary">
-            游客体验只保存在本机，注册后内容才能长期保存。
-            <Link
-              href="/login"
-              className="ml-2 font-medium text-accent transition-colors hover:text-accent-strong"
-            >
-              已有账号？登录
-            </Link>
-          </p>
         </section>
 
         <section className="mb-12 grid gap-4 sm:grid-cols-3">
@@ -161,8 +134,7 @@ export function LandingPage({ authed = false }: { authed?: boolean }) {
         </section>
 
         <section className="zouzou-panel mb-12 rounded-xl p-5 sm:p-8">
-          <p className="text-xs font-medium text-accent">它是怎么运转的</p>
-          <h2 className="mt-2 text-2xl font-semibold text-ink">
+          <h2 className="text-2xl font-semibold text-ink">
             看看它怎么把你的一堆想法，走成今天的下一步。
           </h2>
           <LandingDemo />
@@ -170,7 +142,7 @@ export function LandingPage({ authed = false }: { authed?: boolean }) {
 
         <section className="mb-12 grid gap-6 lg:grid-cols-[minmax(0,1fr)_340px]">
           <div className="zouzou-panel rounded-xl p-5 sm:p-6">
-            <h2 className="text-lg font-semibold text-ink">我们和它们有什么不同</h2>
+            <h2 className="text-lg font-semibold text-ink">为什么选择我们</h2>
             <div className="mt-4 space-y-3">
               {comparisons.map((item) => (
                 <div
@@ -224,20 +196,18 @@ export function LandingPage({ authed = false }: { authed?: boolean }) {
           </p>
           <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
             <Link
-              href="/login?mode=register"
+              href="/login"
               className="zouzou-primary-button inline-flex h-11 items-center gap-2 rounded-lg bg-accent px-5 text-sm font-medium text-white transition-colors hover:bg-accent-strong"
             >
-              注册开始
+              注册/登录
               <ArrowRight className="size-4" />
-            </Link>
-            <Link
-              href="/onboarding"
-              className="zouzou-secondary-button inline-flex h-11 items-center gap-2 rounded-lg border border-border bg-surface px-5 text-sm font-medium text-ink-secondary transition-colors hover:border-accent hover:text-accent"
-            >
-              看 30 秒演示
             </Link>
           </div>
         </section>
+
+        <footer className="border-t border-border/70 pt-6 text-center">
+          <SiteSignature />
+        </footer>
       </div>
     </div>
   );

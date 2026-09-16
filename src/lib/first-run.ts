@@ -38,10 +38,11 @@ export async function getFirstRunState(
     : false;
   // 只针对"第一个项目 + 少量任务"的空间，老用户和 demo 数据不会被弹
   const smallWorkspace = projectCount <= 1 && taskCount <= 3;
+  const tourInProgress = ["2", "3", "4"].includes(tourStep);
 
   return {
     tourStep,
-    isFirstRun: !tourDone && freshAccount && smallWorkspace,
+    isFirstRun: !tourDone && freshAccount && (smallWorkspace || tourInProgress),
   };
 }
 

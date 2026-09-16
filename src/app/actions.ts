@@ -30,11 +30,17 @@ import {
 } from "@/lib/onboarding";
 import { setFirstRunTourStep as persistFirstRunTourStep } from "@/lib/first-run";
 import {
+  serializeTaskStickyNote,
+  type TaskStickyNoteData,
+} from "@/lib/task-sticky";
+import { buildTaskContract } from "@/lib/task-contract";
+import {
   clarifyInbox,
   generateFirstRunPlan,
   generateReviewDraft,
   generateTaskCoachAdvice,
   generateTaskEditSuggestion,
+  generateTaskShortTitle,
   generateProjectEditSuggestion,
   planInbox,
   suggestTodayFocus,
@@ -43,6 +49,7 @@ import {
   type InboxPlan,
   type TaskEditSuggestion,
   type TaskCoachAdvice,
+  type TaskShortTitleSuggestion,
   type ProjectEditSuggestion,
   type TodaySuggestion,
 } from "@/lib/ai";
@@ -113,6 +120,55 @@ function taskStatus(value: string): TaskStatus {
   return taskStatuses.includes(value as TaskStatus)
     ? (value as TaskStatus)
     : "todo";
+}
+
+const TASK_EXECUTION_MODES = [
+  "quick",
+  "tool",
+  "produce",
+  "explore",
+  "project",
+] as const;
+const TASK_TOOL_POLICIES = ["none", "read", "confirm-write"] as const;
+
+/**
+ * 把「任务要怎么做」这层合同统一落到数据库字段上。
+ * 优先使用 AI / 表单给出的值，缺失时按标题与备注重新推断，保证旧入口也有契约。
+ */
+function taskContractData(input: {
+  title: string;
+  notes?: string | null;
+  executionMode?: FormDataEntryValue | null;
+  doneWhen?: FormDataEntryValue | null;
+  maxTurns?: FormDataEntryValue | number | null;
+  toolPolicy?: FormDataEntryValue | null;
+}) {
+  const inferred = buildTaskContract(
+    `${input.title} ${input.notes ?? ""}`.trim(),
+    input.title,
+  );
+  const rawMode = typeof input.executionMode === "string" ? input.executionMode : "";
+  const rawPolicy = typeof input.toolPolicy === "string" ? input.toolPolicy : "";
+  const rawDoneWhen = typeof input.doneWhen === "string" ? input.doneWhen.trim() : "";
+  const rawMaxTurns = Number(
+    typeof input.maxTurns === "string" || typeof input.maxTurns === "number"
+      ? input.maxTurns
+      : Number.NaN,
+  );
+
+  return {
+    executionMode: (TASK_EXECUTION_MODES as readonly string[]).includes(rawMode)
+      ? rawMode
+      : inferred.executionMode,
+    doneWhen: rawDoneWhen || inferred.doneWhen,
+    maxTurns:
+      Number.isFinite(rawMaxTurns) && rawMaxTurns > 0
+        ? Math.min(Math.floor(rawMaxTurns), 5)
+        : inferred.maxTurns,
+    toolPolicy: (TASK_TOOL_POLICIES as readonly string[]).includes(rawPolicy)
+      ? rawPolicy
+      : inferred.toolPolicy,
+  };
 }
 
 function priority(value: string): Priority {
@@ -194,9 +250,14 @@ export async function registerUser(formData: FormData) {
 
   const existing = await prisma.user.findUnique({
     where: { username },
-    select: { id: true },
+    select: { id: true, passwordHash: true },
   });
   if (existing) {
+    if (verifyPassword(password, existing.passwordHash)) {
+      await createUserSession(existing.id);
+      await recordUsageEvent({ userId: existing.id, event: "login" });
+      redirect(next);
+    }
     redirect(`/login?error=register&next=${encodeURIComponent(next)}`);
   }
 
@@ -278,8 +339,18 @@ export async function completeFirstRun(formData: FormData) {
   const objective = text(formData, "objective");
   const milestone = text(formData, "milestone");
   const taskTitle = text(formData, "taskTitle");
+  const taskShortTitle = text(formData, "taskShortTitle");
 
   if (!projectName || !objective || !taskTitle) return;
+
+  const taskContract = taskContractData({
+    title: taskTitle,
+    notes: objective,
+    executionMode: formData.get("taskExecutionMode"),
+    doneWhen: formData.get("taskDoneWhen"),
+    maxTurns: formData.get("taskMaxTurns"),
+    toolPolicy: formData.get("taskToolPolicy"),
+  });
   if (await isOnboardingCompleted(user.id)) {
     redirect("/");
   }
@@ -310,11 +381,13 @@ export async function completeFirstRun(formData: FormData) {
     data: {
       userId: user.id,
       title: taskTitle,
+      shortTitle: taskShortTitle,
       projectId: project.id,
       status: "todo",
       priority: "medium",
       scheduledDate: startOfDay(),
       planOrder: 0,
+      ...taskContract,
     },
   });
 
@@ -420,7 +493,12 @@ export async function planOnboarding(idea: string): Promise<FirstRunPlanResult> 
       projectName: "第一个项目",
       objective: "把第一个想法变成可推进的个人项目",
       milestone: "开始推进",
-      taskTitle: "写下今天能做的最小动作",
+      taskTitle: "写下今天可以推进的一个具体动作",
+      taskShortTitle: "写下具体动作",
+      taskExecutionMode: "quick",
+      taskDoneWhen: "写下今天能马上开始的一个具体动作",
+      taskMaxTurns: 1,
+      taskToolPolicy: "none",
       usedFallback: true,
     };
   }
@@ -462,16 +540,64 @@ export async function recordPageView(page: string) {
   await recordUsageEvent({ userId: user.id, event: "page_view", page });
 }
 
+export async function submitProductFeedback(formData: FormData) {
+  const user = await requireUser();
+  const message = String(formData.get("message") ?? "").trim().slice(0, 1200);
+  const page = String(formData.get("page") ?? "").trim().slice(0, 200);
+
+  if (!message) {
+    return { ok: false as const, error: "写一句再送出" };
+  }
+
+  try {
+    await prisma.usageEvent.create({
+      data: {
+        userId: user.id,
+        event: "product_feedback",
+        page: page || null,
+        detail: message,
+        metadata: JSON.stringify({ version: "v2.5" }),
+      },
+    });
+    return { ok: true as const };
+  } catch {
+    return { ok: false as const, error: "没送出去，再试一次" };
+  }
+}
+
 export async function loginUser(formData: FormData) {
   const username = String(formData.get("username") ?? "").trim();
   const password = String(formData.get("password") ?? "");
   const next = safeNext(String(formData.get("next") ?? "/"));
 
+  if (
+    username.length < 2 ||
+    username.length > 20 ||
+    password.length < 6
+  ) {
+    redirect(`/login?error=login&next=${encodeURIComponent(next)}`);
+  }
+
   const user = await prisma.user.findUnique({
     where: { username },
     select: { id: true, passwordHash: true },
   });
-  if (!user || !verifyPassword(password, user.passwordHash)) {
+  if (!user) {
+    const created = await prisma.user.create({
+      data: {
+        username,
+        passwordHash: hashPassword(password),
+      },
+      select: { id: true },
+    });
+    await createUserSession(created.id);
+    await setOnboardingCompleted(created.id, false);
+    await persistFirstRunTourStep(created.id, "1");
+    await recordUsageEvent({ userId: created.id, event: "register" });
+    redirect("/welcome");
+  }
+
+  if (!verifyPassword(password, user.passwordHash)) {
     redirect(`/login?error=login&next=${encodeURIComponent(next)}`);
   }
 
@@ -570,6 +696,7 @@ export async function addInboxItemAndClarify(formData: FormData) {
 export async function getTaskEditSuggestion(input: {
   taskId?: string;
   title: string;
+  shortTitle?: string | null;
   notes?: string | null;
   priority?: string;
   scheduledDate?: string | null;
@@ -592,6 +719,48 @@ export async function getTaskEditSuggestion(input: {
       aiContext.evidence,
     ),
   );
+}
+
+export async function ensureTaskShortTitle(input: {
+  taskId: string;
+  title: string;
+  notes?: string | null;
+  projectName?: string | null;
+  status?: string;
+}): Promise<TaskShortTitleSuggestion> {
+  const user = await requireUser();
+  const task = await prisma.task.findFirst({
+    where: { id: input.taskId, userId: user.id },
+    select: {
+      id: true,
+      title: true,
+      shortTitle: true,
+      notes: true,
+      status: true,
+      project: { select: { name: true } },
+    },
+  });
+
+  if (!task) return { shortTitle: input.title };
+  if (task.shortTitle?.trim()) return { shortTitle: task.shortTitle };
+
+  const suggestion = await withAiQuota("task_short_title", () =>
+    generateTaskShortTitle({
+      title: task.title,
+      notes: task.notes,
+      projectName: task.project?.name ?? input.projectName,
+      status: task.status,
+    }),
+  );
+
+  await prisma.task.update({
+    where: { id: task.id, userId: user.id },
+    data: { shortTitle: suggestion.shortTitle },
+  });
+  revalidatePath("/");
+  revalidatePath("/workspace");
+
+  return suggestion;
 }
 
 export async function getProjectEditSuggestion(input: {
@@ -641,6 +810,73 @@ export async function getTaskCoachAdvice(input: {
       aiContext.evidence,
     ),
   );
+}
+
+export async function createTaskStickyNote(input: {
+  taskId: string;
+  title: string;
+  notes?: string | null;
+  projectName?: string | null;
+  status?: string;
+  message: string;
+}): Promise<TaskStickyNoteData> {
+  const user = await requireUser();
+  const task = await prisma.task.findFirst({
+    where: { id: input.taskId, userId: user.id },
+    select: { id: true },
+  });
+
+  if (!task) throw new Error("任务不存在或无权访问");
+
+  const aiContext = await buildAiContext({
+    kind: "task_coach",
+    taskId: input.taskId,
+    userId: user.id,
+  });
+  const advice = await withAiQuota("task_coach", () =>
+    generateTaskCoachAdvice(
+      input,
+      aiContext.summary,
+      aiContext.evidence,
+    ),
+  );
+  const note = await prisma.taskStickyNote.create({
+    data: {
+      userId: user.id,
+      taskId: input.taskId,
+      sourceMessage: input.message,
+      title: advice.title,
+      encouragement: advice.encouragement,
+      stepsJson: JSON.stringify(advice.steps),
+      nextStep: advice.nextStep,
+    },
+  });
+  const overflowNotes = await prisma.taskStickyNote.findMany({
+    where: { userId: user.id, taskId: input.taskId, id: { not: note.id } },
+    orderBy: { createdAt: "desc" },
+    skip: 9,
+    select: { id: true },
+  });
+  if (overflowNotes.length) {
+    await prisma.taskStickyNote.deleteMany({
+      where: { id: { in: overflowNotes.map((item) => item.id) } },
+    });
+  }
+
+  revalidatePath("/");
+  revalidatePath("/workspace");
+  return serializeTaskStickyNote(note);
+}
+
+export async function deleteTaskStickyNote(noteId: string) {
+  const user = await requireUser();
+  const deleted = await prisma.taskStickyNote.deleteMany({
+    where: { id: noteId, userId: user.id },
+  });
+
+  revalidatePath("/");
+  revalidatePath("/workspace");
+  return { ok: deleted.count > 0 };
 }
 
 export async function addInboxItemAndPlan(formData: FormData) {
@@ -744,6 +980,10 @@ export async function convertInboxItemToTask(formData: FormData) {
         dueDate,
         planOrder: 0,
         inboxItemId: id,
+        ...taskContractData({
+          title,
+          notes: title === item.content ? null : item.content,
+        }),
       },
     }),
   ]);
@@ -948,7 +1188,16 @@ export async function confirmInboxPlan(formData: FormData) {
     text(formData, "projectMilestone") ?? plan.projectMilestone;
   const tasks = plan.tasks.map((plannedTask, index) => ({
     title: text(formData, `tasks[${index}].title`) ?? plannedTask.title,
+    shortTitle:
+      text(formData, `tasks[${index}].shortTitle`) ?? plannedTask.shortTitle,
     notes: text(formData, `tasks[${index}].notes`) ?? plannedTask.notes,
+    executionMode:
+      text(formData, `tasks[${index}].executionMode`) ??
+      plannedTask.executionMode,
+    doneWhen:
+      text(formData, `tasks[${index}].doneWhen`) ?? plannedTask.doneWhen,
+    maxTurns: plannedTask.maxTurns,
+    toolPolicy: plannedTask.toolPolicy,
     priority: priority(
       String(
         formData.get(`tasks[${index}].priority`) ?? plannedTask.priority,
@@ -964,6 +1213,7 @@ export async function confirmInboxPlan(formData: FormData) {
   const confirmedTasksJson = JSON.stringify(
     tasks.map((task) => ({
       title: task.title,
+      shortTitle: task.shortTitle,
       notes: task.notes,
       priority: task.priority,
       scheduledDate: task.scheduledDate
@@ -1004,6 +1254,7 @@ export async function confirmInboxPlan(formData: FormData) {
         data: {
           userId: user.id,
           title: plannedTask.title,
+          shortTitle: plannedTask.shortTitle,
           notes: plannedTask.notes,
           projectId,
           priority: plannedTask.priority,
@@ -1011,6 +1262,14 @@ export async function confirmInboxPlan(formData: FormData) {
           dueDate: plannedTask.dueDate,
           planOrder: index,
           inboxItemId: item.id,
+          ...taskContractData({
+            title: plannedTask.title,
+            notes: plannedTask.notes,
+            executionMode: plannedTask.executionMode,
+            doneWhen: plannedTask.doneWhen,
+            maxTurns: plannedTask.maxTurns,
+            toolPolicy: plannedTask.toolPolicy,
+          }),
         },
       });
     }
@@ -1303,11 +1562,12 @@ export async function generateReviewDraftAction(formData: FormData) {
 
   revalidatePath("/");
   revalidatePath("/review");
+  redirect(`/review?date=${toDateInputValue(reviewDate)}`);
 }
 
 async function syncReviewRelations(
   review: { id: string; reviewDate: Date },
-  nextActionTitles: string[],
+  nextActions: Array<{ title: string; shortTitle: string }>,
   userId: string,
 ) {
   const dayStart = startOfDay(review.reviewDate);
@@ -1395,7 +1655,8 @@ async function syncReviewRelations(
   });
 
   await prisma.$transaction(async (tx) => {
-    for (const [index, title] of nextActionTitles.entries()) {
+    for (const [index, action] of nextActions.entries()) {
+      const { title, shortTitle } = action;
       const existing = existingActions[index];
       const projectId = projectIdForNextAction(title);
       if (existing) {
@@ -1406,7 +1667,12 @@ async function syncReviewRelations(
         if (existing.taskId) {
           await tx.task.update({
             where: { id: existing.taskId, userId },
-            data: { title, projectId },
+            data: {
+              title,
+              shortTitle,
+              projectId,
+              ...taskContractData({ title }),
+            },
           });
         }
       } else {
@@ -1416,9 +1682,11 @@ async function syncReviewRelations(
           data: {
             userId,
             title,
+            shortTitle,
             projectId,
             priority: "medium",
             scheduledDate,
+            ...taskContractData({ title }),
           },
         });
         await tx.reviewNextAction.create({
@@ -1433,7 +1701,7 @@ async function syncReviewRelations(
       }
     }
 
-    for (let index = nextActionTitles.length; index < existingActions.length; index++) {
+    for (let index = nextActions.length; index < existingActions.length; index++) {
       const extra = existingActions[index];
       await tx.reviewNextAction.update({
         where: { id: extra.id, userId },
@@ -1447,29 +1715,52 @@ export async function saveReview(formData: FormData) {
   const user = await requireUser();
   const id = text(formData, "id");
   const summary = text(formData, "summary");
+  const rawNextActions = text(formData, "nextActions") ?? "";
 
   if (!id || !summary) return;
+
+  const nextActionLines = rawNextActions
+    .split(/\r?\n/)
+    .map((line) =>
+      line
+        .replace(/^[-*]\s*/, "")
+        .replace(/^\d+[.、)]\s*/, "")
+        .trim(),
+    )
+    .filter(Boolean);
+  const nextActions: Array<{ title: string; shortTitle: string }> = [];
+  for (
+    let index = 0;
+    index < nextActionLines.length && nextActions.length < 3;
+    index += 2
+  ) {
+    const shortTitle = nextActionLines[index].trim().slice(0, 80);
+    const detail = (nextActionLines[index + 1] ?? shortTitle).trim().slice(0, 200);
+    if (shortTitle) nextActions.push({ title: detail, shortTitle });
+  }
 
   const review = await prisma.review.update({
     where: { id, userId: user.id },
     data: {
       summary,
-      nextActions: text(formData, "nextActions"),
+      nextActions: nextActions
+        .map((action) =>
+          action.shortTitle !== action.title
+            ? `${action.shortTitle}\n${action.title}`
+            : action.shortTitle,
+        )
+        .join("\n"),
       status: "final",
     },
   });
 
-  const nextActionTitles = (review.nextActions ?? "")
-    .split(/\r?\n/)
-    .map((line) => line.replace(/^[-*]\s*/, "").trim())
-    .filter(Boolean);
-
-  await syncReviewRelations(review, nextActionTitles, user.id);
+  await syncReviewRelations(review, nextActions, user.id);
   await recordUsageEvent({ userId: user.id, event: "review_saved" });
 
   revalidatePath("/");
   revalidatePath("/review");
   revalidatePath("/workspace");
+  redirect(`/review?date=${toDateInputValue(review.reviewDate)}`);
 }
 
 export async function createProject(formData: FormData) {
@@ -1534,16 +1825,19 @@ export async function deleteProject(formData: FormData) {
 export async function createTask(formData: FormData) {
   const user = await requireUser();
   const title = text(formData, "title");
+  const shortTitle = text(formData, "shortTitle");
 
   if (!title) return;
 
   const status = taskStatus(String(formData.get("status") ?? "todo"));
+  const notes = text(formData, "notes");
 
   await prisma.task.create({
     data: {
       userId: user.id,
       title,
-      notes: text(formData, "notes"),
+      shortTitle,
+      notes,
       projectId: await ownedProjectId(text(formData, "projectId"), user.id),
       status,
       priority: priority(String(formData.get("priority") ?? "medium")),
@@ -1551,6 +1845,14 @@ export async function createTask(formData: FormData) {
       dueDate: dateInput(formData, "dueDate"),
       focusDate: dateInput(formData, "focusDate"),
       completedAt: status === "done" ? new Date() : null,
+      ...taskContractData({
+        title,
+        notes,
+        executionMode: formData.get("executionMode"),
+        doneWhen: formData.get("doneWhen"),
+        maxTurns: formData.get("maxTurns"),
+        toolPolicy: formData.get("toolPolicy"),
+      }),
     },
   });
 
@@ -1565,6 +1867,7 @@ export async function updateTask(formData: FormData) {
   const user = await requireUser();
   const id = text(formData, "id");
   const title = text(formData, "title");
+  const shortTitle = text(formData, "shortTitle");
 
   if (!id || !title) return;
 
@@ -1601,6 +1904,7 @@ export async function updateTask(formData: FormData) {
     where: { id, userId: user.id },
     data: {
       title,
+      shortTitle,
       notes: text(formData, "notes"),
       projectId,
       status,
@@ -1609,6 +1913,22 @@ export async function updateTask(formData: FormData) {
       dueDate,
       focusDate,
       completedAt,
+      ...(title === existing.title
+        ? {}
+        : taskContractData({
+            title,
+            notes: text(formData, "notes"),
+            executionMode: formData.get("executionMode"),
+            doneWhen: formData.get("doneWhen"),
+            maxTurns: formData.get("maxTurns"),
+            toolPolicy: formData.get("toolPolicy"),
+          })),
+      completedBy:
+        status === "done"
+          ? existing.status === "done"
+            ? undefined
+            : "user"
+          : null,
     },
   });
 
@@ -1717,6 +2037,12 @@ export async function setTaskStatus(formData: FormData) {
           : existing.status === "done"
             ? null
             : existing.completedAt,
+      completedBy:
+        status === "done"
+          ? existing.status === "done"
+            ? undefined
+            : "user"
+          : null,
     },
   });
 

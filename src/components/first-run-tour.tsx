@@ -16,14 +16,18 @@ import {
 const dismissButtonClass =
   "inline-flex h-7 items-center rounded-md border border-border bg-surface px-2.5 text-xs font-medium text-ink-secondary transition-colors hover:border-accent hover:text-accent";
 
+/**
+ * 新人引导只负责「记想法 → 推进任务 → 用便利贴」三步。
+ *
+ * 首个任务完成后的复盘提示由 FirstTaskReviewHint 单独处理，
+ * 这样用户在任何入口完成第一项任务都会看到，不用依赖引导走到哪一步。
+ */
 export function FirstRunTour({
   initialStep,
-  guest,
   context,
   hasTasks = false,
 }: {
   initialStep: string;
-  guest: boolean;
   context: "home" | "workspace";
   hasTasks?: boolean;
 }) {
@@ -87,8 +91,15 @@ export function FirstRunTour({
         onDismiss={finish}
         footer={
           <div className="flex items-center justify-between gap-3 text-xs text-ink-muted">
-            <span>1 / 4</span>
-            <button type="button" onClick={finish} className={dismissButtonClass}>
+            <span>1 / 3</span>
+            <button
+              type="button"
+              onClick={() => {
+                setStep("2");
+                persist("2");
+              }}
+              className={dismissButtonClass}
+            >
               知道了
             </button>
           </div>
@@ -107,7 +118,7 @@ export function FirstRunTour({
         onDismiss={finish}
         footer={
           <div className="flex items-center justify-between gap-3 text-xs text-ink-muted">
-            <span>1 / 4</span>
+            <span>1 / 3</span>
             <button type="button" onClick={finish} className={dismissButtonClass}>
               知道了
             </button>
@@ -127,7 +138,7 @@ export function FirstRunTour({
         onDismiss={finish}
         footer={
           <div className="flex items-center justify-between gap-3 text-xs text-ink-muted">
-            <span>2 / 4</span>
+            <span>2 / 3</span>
             <button type="button" onClick={finish} className={dismissButtonClass}>
               知道了
             </button>
@@ -144,17 +155,27 @@ export function FirstRunTour({
       <AnchoredHint
         target={TOUR_TARGETS.nextButton}
         title="把任务推起来"
-        onDismiss={finish}
+        onDismiss={() => {
+          setStep("3");
+          persist("3");
+        }}
         footer={
           <div className="flex items-center justify-between gap-3 text-xs text-ink-muted">
-            <span>2 / 4</span>
-            <button type="button" onClick={finish} className={dismissButtonClass}>
+            <span>2 / 3</span>
+            <button
+              type="button"
+              onClick={() => {
+                setStep("3");
+                persist("3");
+              }}
+              className={dismissButtonClass}
+            >
               知道了
             </button>
           </div>
         }
       >
-        点击推进任务，今天先做这一小步。
+        点击【下一步】推进任务，一次只用走一小步
       </AnchoredHint>
     );
   }
@@ -162,68 +183,20 @@ export function FirstRunTour({
   if (effectiveStep === "3") {
     return (
       <AnchoredHint
-        target={TOUR_TARGETS.taskTools}
-        title="卡住时，打开便利贴"
+        target={TOUR_TARGETS.stickyButton}
+        title="使用便利贴"
         onDismiss={finish}
         footer={
           <div className="flex items-center justify-between gap-3 text-xs text-ink-muted">
-            <span>3 / 4</span>
+            <span>3 / 3</span>
             <button type="button" onClick={finish} className={dismissButtonClass}>
               知道了
             </button>
           </div>
         }
       >
-        把补充想法写进便利贴，AI 会帮你拆成能直接开始的小步；设置里可以改标题、日期和优先级。
-      </AnchoredHint>
-    );
-  }
-
-  if (effectiveStep === "4" && guest) {
-    return (
-      <AnchoredHint
-        target={TOUR_TARGETS.guestBanner}
-        title="注册，把内容长期留住"
-        onDismiss={finish}
-        footer={
-          <div className="flex flex-wrap items-center gap-2">
-            <Link
-              href="/guest/register"
-              onClick={finish}
-              className="zouzou-primary-button inline-flex h-7 items-center rounded-md bg-accent px-2.5 text-xs font-medium text-white transition-colors hover:bg-accent-strong"
-            >
-              注册保存
-            </Link>
-            <button type="button" onClick={finish} className={dismissButtonClass}>
-              继续体验
-            </button>
-            <span className="ml-auto text-xs text-ink-muted">4 / 4</span>
-          </div>
-        }
-      >
-        游客内容只保存在这台浏览器，清理浏览器或换设备就会丢失。注册只用几秒，项目、任务和复盘都会保留。
-      </AnchoredHint>
-    );
-  }
-
-  if (effectiveStep === "4") {
-    return (
-      <AnchoredHint
-        target={TOUR_TARGETS.bottomNav}
-        title="以后都在这里切换"
-        onDismiss={finish}
-        footer={
-          <div className="flex items-center justify-between gap-3 text-xs text-ink-muted">
-            <span>4 / 4</span>
-            <button type="button" onClick={finish} className={dismissButtonClass}>
-              知道了
-            </button>
-          </div>
-        }
-      >
-        <span className="block">日历：今天先做哪 1-3 件</span>
-        <span className="mt-1 block">书桌：看项目和任务全貌</span>
-        <span className="mt-1 block">抽屉：晚上用一句话复盘</span>
+        <span className="block">点一下【便利贴】，AI 会为你写一张详细执行步骤。</span>
+        <span className="mt-1 block">你也可以补充自己的想法或卡点。</span>
       </AnchoredHint>
     );
   }

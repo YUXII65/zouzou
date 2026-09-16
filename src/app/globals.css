@@ -92,6 +92,17 @@ body {
   text-rendering: optimizeLegibility;
 }
 
+h1,
+h2,
+h3 {
+  text-wrap: balance;
+}
+
+p,
+li {
+  text-wrap: pretty;
+}
+
 .dark body {
   background:
     linear-gradient(160deg, #10151d 0%, #151d28 100%);
@@ -246,6 +257,15 @@ details > summary::-webkit-details-marker {
   }
 }
 
+@keyframes zouzou-spiral-drift {
+  from {
+    transform: rotate(0deg);
+  }
+
+  to {
+    transform: rotate(360deg);
+  }
+}
 @keyframes zouzou-fade-in {
   from {
     opacity: 0;

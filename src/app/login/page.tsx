@@ -2,6 +2,7 @@ import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 import { AuthCard } from "@/components/auth-card";
 import { BrandMark } from "@/components/brand-mark";
+import { HalftoneSpiral } from "@/components/halftone-spiral";
 
 export default async function LoginPage({
   searchParams,
@@ -17,31 +18,31 @@ export default async function LoginPage({
       : undefined;
 
   return (
-    <div className="fixed inset-0 z-40 flex items-center justify-center overflow-y-auto px-4">
-      <div className="w-full max-w-md space-y-6">
-        <div className="text-center">
-          <div className="mb-4 flex justify-center">
-            <BrandMark className="size-12" />
+    <div className="fixed inset-0 z-40 overflow-y-auto bg-background">
+      <HalftoneSpiral />
+
+      <div className="relative z-10 flex min-h-full items-center justify-center px-4 py-10">
+        <div className="w-full max-w-md space-y-6">
+          <div className="text-center">
+            <div className="mb-4 flex justify-center">
+              <BrandMark className="size-12" />
+            </div>
+            <h1 className="text-xl font-semibold text-ink">走走</h1>
+            <p className="mt-2 text-sm leading-6 text-ink-secondary">
+              让想法，走成下一步
+            </p>
           </div>
-          <h1 className="text-xl font-semibold text-ink">走走</h1>
-          <p className="mt-2 text-sm leading-6 text-ink-secondary">
-            让想法，走成下一步。用账号登录，数据分开保存。
-          </p>
+
+          <AuthCard next={next} error={error} initialMode={initialMode} />
+
+          <Link
+            href="/landing"
+            className="zouzou-secondary-button inline-flex h-10 w-full items-center justify-center gap-2 rounded-lg border border-border bg-surface px-4 text-sm font-medium text-accent transition-colors hover:bg-surface-hover"
+          >
+            <ArrowLeft className="size-4" />
+            先看看走走是什么
+          </Link>
         </div>
-
-        <AuthCard
-          next={next}
-          error={error}
-          initialMode={initialMode}
-        />
-
-        <Link
-          href="/landing"
-          className="zouzou-secondary-button inline-flex h-10 w-full items-center justify-center gap-2 rounded-lg border border-border bg-surface px-4 text-sm font-medium text-accent transition-colors hover:bg-surface-hover"
-        >
-          <ArrowLeft className="size-4" />
-          先看看走走是什么
-        </Link>
       </div>
     </div>
   );

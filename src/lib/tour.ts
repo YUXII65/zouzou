@@ -6,8 +6,9 @@ export const TOUR_TARGETS = {
   quickCapture: '[data-tour="quick-capture"]',
   homeNav: '[data-tour="home-nav"]',
   nextButton: '[data-tour="task-next"]',
-  taskTools: '[data-tour="task-tools"]',
+  stickyButton: '[data-tour="task-sticky"]',
   bottomNav: '[data-tour="bottom-nav"], [data-tour="side-nav"]',
+  reviewNav: '[data-tour="review-nav"]',
   guestBanner: '[data-tour="guest-banner"]',
 } as const;
 

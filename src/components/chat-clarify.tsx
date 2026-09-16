@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Check, CornerDownLeft, MessageSquareText, Send, Sparkles } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { Check, CornerDownLeft, RefreshCw, Send, Sparkles } from "lucide-react";
 import type { InboxClarificationDimension } from "@/lib/ai";
 
 type Props = {
@@ -21,10 +22,41 @@ type Turn = {
 
 const TYPING_MS = 600;
 
+function closingFor(answers: string[]) {
+  const signal = answers.join(" ");
+
+  if (/父母|爸妈|家人|体检|健康|医院|医生/.test(signal)) {
+    return "家人的顾虑、能配合的时间和你能承担的部分都摆出来了，现在可以往下定具体安排。";
+  }
+  if (/室友|同事|朋友|伴侣|沟通|关系|边界/.test(signal)) {
+    return "你既在解决事情，也在顾及关系怎么继续，这个分寸够用了，往下可以定具体说法。";
+  }
+  if (/考研|换城市|转行|选择|取舍|要不要/.test(signal)) {
+    return "期待、顾虑和现实条件都摆出来了，剩下的是补哪条信息，我按这个往下整理。";
+  }
+  if (/卡|难|累|焦虑|压力|害怕|不确定|迷茫|拖延/.test(signal)) {
+    return "困难和你现在还能往前走的程度都说清楚了，不用硬撑，我按这个力度往下收。";
+  }
+  if (/验证|用户|需求|反馈|市场|别人|聊天|沟通|访谈/.test(signal)) {
+    return "哪些是自己的判断、哪些需要拿出去验证，已经分开了，接下来按这个顺序走。";
+  }
+  if (/上线|发布|作品|原型|小样|展示|完成|产出/.test(signal)) {
+    return "做到什么程度算这一步够了，已经明确，我把它收成一段可以开始的工作。";
+  }
+  if (/稳定|习惯|持续|节奏|坚持/.test(signal)) {
+    return "你在意的是能不能一直做下去，也照顾了现实节奏，我按能持续的方式安排。";
+  }
+  if (/研究|学习|了解|调研|资料|参考/.test(signal)) {
+    return "要补的信息和现在还不确定的地方都对上了，接下来只做必要的部分。";
+  }
+
+  return "你愿意投入多少、要避开什么，都已经说到了，我按这个边界往下收。";
+}
+
 export function ChatClarify({
   dimensions,
   busy = false,
-  submitLabel = "给我下一步",
+  submitLabel = "看看怎么走",
   onSubmit,
 }: Props) {
   const [turns, setTurns] = useState<Turn[]>(() =>
@@ -45,7 +77,9 @@ export function ChatClarify({
   const [done, setDone] = useState(dimensions.length === 0);
   const [typed, setTyped] = useState("");
   const [directInput, setDirectInput] = useState(false);
+  const [slowBusy, setSlowBusy] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const router = useRouter();
 
   const answeredCount = answers.length;
   const lastTurn = turns[turns.length - 1];
@@ -57,6 +91,16 @@ export function ChatClarify({
     const node = scrollRef.current;
     if (node) node.scrollTop = node.scrollHeight;
   }, [turns, thinking, done, busy]);
+
+  // 等待超过 8 秒就给出刷新入口，避免用户以为界面卡死。
+  useEffect(() => {
+    if (!busy) {
+      setSlowBusy(false);
+      return;
+    }
+    const timer = window.setTimeout(() => setSlowBusy(true), 8000);
+    return () => window.clearTimeout(timer);
+  }, [busy]);
 
   function toggle(option: string) {
     if (busy || thinking) return;
@@ -72,8 +116,6 @@ export function ChatClarify({
     const nextAnswered = answeredCount + 1;
     const isLast = nextAnswered >= dimensions.length;
     const all = [...answers, answer];
-    const main = all[0]?.join("、") ?? "";
-    const rest = all.slice(1).flat().join("、");
     setTurns((current) => [
       ...current,
       { role: "user", text: answer.join("、") },
@@ -102,11 +144,7 @@ export function ChatClarify({
           ...current,
           {
             role: "ai",
-            text: main
-              ? `好，我会优先按「${main}」来安排。${
-                  rest ? `也记住了：${rest}。` : ""
-                }这就帮你拆成今天能做的下一步。`
-              : "好，这就帮你拆成下一步。",
+            text: closingFor(all.flat()),
           },
         ]);
       }
@@ -118,6 +156,16 @@ export function ChatClarify({
     commit([typed.trim()]);
   }
 
+  function toggleDirectInput() {
+    if (busy || thinking) return;
+    if (directInput) {
+      setTyped("");
+      setDirectInput(false);
+      return;
+    }
+    setDirectInput(true);
+  }
+
   function submitAll() {
     if (busy) return;
     onSubmit({ answers, supplement: "" });
@@ -125,13 +173,6 @@ export function ChatClarify({
 
   return (
     <div className="zouzou-panel overflow-hidden rounded-xl">
-      <div className="flex items-center gap-2 border-b border-border px-4 py-2.5">
-        <span className="flex size-7 items-center justify-center rounded-md bg-accent-soft text-accent-strong">
-          <MessageSquareText className="size-3.5" />
-        </span>
-        <p className="text-xs font-medium text-ink-secondary">走走 · 推进伙伴</p>
-      </div>
-
       <div
         ref={scrollRef}
         className="max-h-[420px] space-y-3 overflow-y-auto px-4 py-4"
@@ -142,7 +183,7 @@ export function ChatClarify({
               key={index}
               className="ml-auto flex max-w-[82%] justify-end"
             >
-              <div className="rounded-xl rounded-tr-sm bg-accent px-3 py-2 text-sm font-medium leading-6 text-white">
+              <div className="rounded-xl rounded-tr-sm border border-border bg-surface-muted px-3 py-2 text-sm font-medium leading-6 text-ink">
                 {turn.text}
               </div>
             </div>
@@ -182,9 +223,14 @@ export function ChatClarify({
                         })}
                         <button
                           type="button"
-                          onClick={() => setDirectInput(true)}
+                          onClick={toggleDirectInput}
                           disabled={busy || thinking}
-                          className="inline-flex items-center gap-1.5 rounded-lg border border-dashed border-border bg-transparent px-3 py-2 text-sm text-ink-muted transition-colors hover:border-accent hover:text-accent disabled:cursor-not-allowed disabled:opacity-50"
+                          aria-expanded={directInput}
+                          className={
+                            directInput
+                              ? "inline-flex items-center gap-1.5 rounded-lg border border-accent bg-accent-soft px-3 py-2 text-sm font-medium text-accent-strong transition-colors disabled:cursor-not-allowed disabled:opacity-50"
+                              : "inline-flex items-center gap-1.5 rounded-lg border border-dashed border-border bg-transparent px-3 py-2 text-sm text-ink-muted transition-colors hover:border-accent hover:text-accent disabled:cursor-not-allowed disabled:opacity-50"
+                          }
                         >
                           <CornerDownLeft className="size-3.5" />
                           想自己说
@@ -272,12 +318,23 @@ export function ChatClarify({
                     <span className="size-1 animate-[zouzou-soft-pulse_1s_ease-in-out_infinite] rounded-full bg-white [animation-delay:160ms]" />
                     <span className="size-1 animate-[zouzou-soft-pulse_1s_ease-in-out_infinite] rounded-full bg-white [animation-delay:320ms]" />
                   </span>
-                  正在整理
+                  {slowBusy ? "还在整理" : "正在整理"}
                 </span>
               ) : (
                 submitLabel
               )}
             </button>
+            {busy && slowBusy ? (
+              <button
+                type="button"
+                onClick={() => router.refresh()}
+                aria-label="刷新查看结果"
+                title="刷新查看结果"
+                className="inline-flex size-11 items-center justify-center rounded-lg border border-border bg-surface text-ink-muted transition-colors hover:border-accent hover:text-accent"
+              >
+                <RefreshCw className="size-4" />
+              </button>
+            ) : null}
           </div>
         ) : null}
       </div>

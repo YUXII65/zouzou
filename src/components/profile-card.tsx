@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState, useTransition } from "react";
 import type { ChangeEvent } from "react";
-import { Loader2, PencilLine, Upload } from "lucide-react";
+import { Camera, Check, Loader2, X } from "lucide-react";
 import { updateUserProfile } from "@/app/actions";
 import { LogoutButton } from "@/components/logout-button";
 import { useClickOutside } from "@/lib/use-click-outside";
@@ -54,7 +54,6 @@ export function ProfileCard({
   const { ref, open, setOpen } = useClickOutside<HTMLDivElement>();
   const [name, setName] = useState(user.displayName ?? user.username);
   const [avatar, setAvatar] = useState(user.avatarUrl ?? "");
-  const [avatarMenu, setAvatarMenu] = useState(false);
   const [error, setError] = useState("");
   const [saving, startSaving] = useTransition();
   const fileRef = useRef<HTMLInputElement>(null);
@@ -62,16 +61,12 @@ export function ProfileCard({
   const displayName = user.displayName || user.username;
 
   useEffect(() => {
-    if (!open) {
-      setAvatarMenu(false);
-      setError("");
-    }
+    if (!open) setError("");
   }, [open]);
 
   function resetForm() {
     setName(user.displayName ?? user.username);
     setAvatar(user.avatarUrl ?? "");
-    setAvatarMenu(false);
     setError("");
   }
 
@@ -88,7 +83,6 @@ export function ProfileCard({
         return;
       }
       setAvatar(dataUrl);
-      setAvatarMenu(false);
     } catch {
       setError("这张图片读不出来，换一张试试。");
     }
@@ -107,7 +101,6 @@ export function ProfileCard({
           return;
         }
         setOpen(false);
-        setAvatarMenu(false);
       } catch {
         setError("保存失败，请重试。");
       }
@@ -149,78 +142,61 @@ export function ProfileCard({
       {open ? (
         <div
           className={cx(
-            "zouzou-panel absolute z-40 w-64 rounded-xl p-3 shadow-pop animate-[zouzou-fade-in_240ms_ease-out]",
+            "zouzou-panel absolute z-40 w-[19rem] rounded-2xl border-border-strong/60 p-4 shadow-pop animate-[zouzou-fade-in_240ms_ease-out]",
             placement === "rail" ? "bottom-0 left-12" : "right-0 top-11",
           )}
-          onPointerDown={(event) => {
-            if (!avatarMenu) return;
-            const target = event.target as HTMLElement;
-            if (!target.closest("[data-avatar-actions]")) {
-              setAvatarMenu(false);
-            }
-          }}
         >
-          <div className="flex items-start justify-between gap-2">
-            <p className="text-xs font-semibold text-ink">账号资料</p>
+          <div className="flex items-start gap-3">
             <button
               type="button"
-              onClick={() => {
-                setOpen(false);
-                resetForm();
-              }}
-              className="flex size-6 items-center justify-center rounded-md text-ink-muted transition-colors hover:bg-surface-muted hover:text-ink"
-              aria-label="关闭"
-              title="关闭"
+              onClick={() => fileRef.current?.click()}
+              aria-label="修改头像"
+              title="修改头像"
+              className="group relative flex size-12 shrink-0 items-center justify-center overflow-hidden rounded-full bg-accent-soft text-sm font-semibold text-accent-strong"
             >
-              ✕
-            </button>
-          </div>
-
-          {/* 头像：默认只有一个入口，点开后才是「上传图片 / 恢复默认」 */}
-          <div className="mt-3 flex items-center gap-3">
-            <span className="flex size-12 shrink-0 items-center justify-center overflow-hidden rounded-full bg-accent-soft text-sm font-semibold text-accent-strong">
               {avatar ? (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img src={avatar} alt="" className="size-full object-cover" />
               ) : (
                 (name.trim() || user.username).slice(0, 1).toUpperCase()
               )}
-            </span>
-            {avatarMenu ? (
-              <div
-                data-avatar-actions
-                className="flex flex-wrap items-center gap-2"
-              >
+              <span className="absolute inset-0 flex items-center justify-center bg-overlay/30 text-white opacity-0 transition-opacity group-hover:opacity-100">
+                <Camera className="size-4" />
+              </span>
+            </button>
+
+            <div className="min-w-0 flex-1 pt-0.5">
+              <p className="truncate text-sm font-semibold text-ink">
+                {name.trim() || displayName}
+              </p>
+              <p className="mt-0.5 text-[11px] text-ink-muted">
+                {user.isGuest ? "游客账号" : "个人账号"}
+              </p>
+              {avatar ? (
                 <button
                   type="button"
-                  onClick={() => fileRef.current?.click()}
-                  className="zouzou-secondary-button inline-flex h-7 items-center gap-1.5 rounded-md border border-border bg-surface px-2.5 text-xs font-medium text-ink-secondary transition-colors hover:border-accent hover:text-accent"
+                  onClick={() => setAvatar("")}
+                  className="mt-1 text-[11px] text-ink-muted transition-colors hover:text-danger"
                 >
-                  <Upload className="size-3.5" />
-                  上传图片
+                  恢复默认头像
                 </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setAvatar("");
-                    setAvatarMenu(false);
-                  }}
-                  className="inline-flex h-7 items-center rounded-md border border-border bg-surface px-2.5 text-xs font-medium text-ink-secondary transition-colors hover:border-danger hover:text-danger"
-                >
-                  恢复默认
-                </button>
-              </div>
-            ) : (
-              <button
-                type="button"
-                onClick={() => setAvatarMenu(true)}
-                className="zouzou-secondary-button inline-flex h-7 items-center gap-1.5 rounded-md border border-border bg-surface px-2.5 text-xs font-medium text-ink-secondary transition-colors hover:border-accent hover:text-accent"
-              >
-                <PencilLine className="size-3.5" />
-                修改头像
-              </button>
-            )}
+              ) : null}
+            </div>
+
+            <button
+              type="button"
+              onClick={() => {
+                setOpen(false);
+                resetForm();
+              }}
+              className="flex size-6 shrink-0 items-center justify-center rounded-md text-ink-muted transition-colors hover:bg-surface-muted hover:text-ink"
+              aria-label="关闭"
+              title="关闭"
+            >
+              <X className="size-3.5" />
+            </button>
           </div>
+
           <input
             ref={fileRef}
             type="file"
@@ -229,15 +205,15 @@ export function ProfileCard({
             onChange={onPickFile}
           />
 
-          <label className="mt-3 block">
+          <label className="mt-4 block">
             <span className="mb-1.5 block text-xs font-medium text-ink-secondary">
-              {user.isGuest ? "显示昵称" : "昵称（也是登录名）"}
+              昵称
             </span>
             <input
               value={name}
               onChange={(event) => setName(event.target.value)}
               maxLength={24}
-              placeholder={user.username}
+              placeholder="输入昵称"
               className="zouzou-input w-full rounded-lg px-3 py-2 text-sm text-ink"
             />
           </label>
@@ -251,7 +227,7 @@ export function ProfileCard({
                 resetForm();
                 setOpen(false);
               }}
-              className="zouzou-secondary-button inline-flex h-8 items-center rounded-lg border border-border bg-surface px-3 text-xs font-medium text-ink-secondary transition-colors hover:bg-surface-hover"
+              className="inline-flex h-8 items-center rounded-lg px-3 text-xs font-medium text-ink-secondary transition-colors hover:bg-surface-muted hover:text-ink"
             >
               取消
             </button>
@@ -264,7 +240,7 @@ export function ProfileCard({
               {saving ? (
                 <Loader2 className="size-3.5 animate-spin" />
               ) : (
-                <PencilLine className="size-3.5" />
+                <Check className="size-3.5" />
               )}
               保存
             </button>

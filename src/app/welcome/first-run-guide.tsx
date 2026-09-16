@@ -9,6 +9,7 @@ import {
   ListTodo,
   MessageSquareText,
   NotebookPen,
+  RefreshCw,
   Sparkles,
 } from "lucide-react";
 import {
@@ -20,6 +21,10 @@ import {
 import { BrandMark } from "@/components/brand-mark";
 import { ChatClarify } from "@/components/chat-clarify";
 import { takePendingIdea } from "@/lib/pending-idea";
+import {
+  pickRandomSampleIdeas,
+  sampleIdeasForDate,
+} from "@/lib/sample-ideas";
 import { SubmitButton } from "@/components/submit-button";
 import type { InboxClarification } from "@/lib/ai";
 
@@ -31,7 +36,7 @@ const steps = [
 ];
 
 const inputClass =
-  "zouzou-input w-full rounded-lg px-3 py-2.5 text-sm leading-6 text-ink";
+  "zouzou-input w-full rounded-lg px-3.5 py-3 text-[15px] leading-7 text-ink";
 
 export function FirstRunGuide({ guest }: { guest?: boolean }) {
   const [step, setStep] = useState(0);
@@ -43,9 +48,11 @@ export function FirstRunGuide({ guest }: { guest?: boolean }) {
   const [objective, setObjective] = useState("");
   const [milestone, setMilestone] = useState("");
   const [taskTitle, setTaskTitle] = useState("");
+  const [taskShortTitle, setTaskShortTitle] = useState("");
   const [planSourceIdea, setPlanSourceIdea] = useState("");
   const [generating, setGenerating] = useState(false);
   const [aiFallback, setAiFallback] = useState(false);
+  const [samples, setSamples] = useState(sampleIdeasForDate);
 
   useEffect(() => {
     try {
@@ -83,6 +90,7 @@ export function FirstRunGuide({ guest }: { guest?: boolean }) {
       setObjective(nextPlan.objective);
       setMilestone(nextPlan.milestone);
       setTaskTitle(nextPlan.taskTitle);
+      setTaskShortTitle(nextPlan.taskShortTitle);
       setStep(2);
     } catch {
       setAiFallback(true);
@@ -90,7 +98,7 @@ export function FirstRunGuide({ guest }: { guest?: boolean }) {
       setProjectName(ideaValue.slice(0, 12) || "第一个项目");
       setObjective(`把“${ideaValue}”推进成今天能做的一件事。`);
       setMilestone("开始推进");
-      setTaskTitle(`列出「${ideaValue}」今天能做的第一个最小动作`);
+      setTaskTitle(`把「${ideaValue}」里最影响推进的地方写成一句话`);
       setStep(2);
     } finally {
       setGenerating(false);
@@ -118,7 +126,7 @@ export function FirstRunGuide({ guest }: { guest?: boolean }) {
   return (
     <div className="fixed inset-0 z-40 overflow-y-auto">
       <div className="flex min-h-dvh items-center justify-center px-4 py-8">
-        <div className="w-full max-w-xl">
+        <div className="w-full max-w-3xl">
           {guest ? (
             <div className="zouzou-panel mb-4 flex items-center justify-between gap-3 rounded-xl border-accent/25 bg-accent-soft px-4 py-3">
               <div className="min-w-0">
@@ -140,10 +148,10 @@ export function FirstRunGuide({ guest }: { guest?: boolean }) {
 
           <div className="mb-6 flex items-center justify-between gap-3">
             <div className="flex items-center gap-2">
-              <BrandMark className="size-8" />
+              <BrandMark className="size-9" />
               <div>
-                <span className="block text-sm font-semibold text-ink">走走</span>
-                <span className="block text-[11px] text-ink-muted">
+                <span className="block text-base font-semibold text-ink">走走</span>
+                <span className="block text-xs text-ink-muted">
                   让想法，走成下一步
                 </span>
               </div>
@@ -158,7 +166,7 @@ export function FirstRunGuide({ guest }: { guest?: boolean }) {
             </form>
           </div>
 
-          <div className="mb-6 grid grid-cols-4 gap-2">
+          <div className="mb-6 grid grid-cols-4 gap-2.5">
             {steps.map((item, index) => {
               const Icon = item.icon;
               const active = index <= step;
@@ -168,8 +176,8 @@ export function FirstRunGuide({ guest }: { guest?: boolean }) {
                   key={item.label}
                   className={
                     active
-                      ? "flex items-center justify-center gap-1.5 rounded-lg bg-accent-soft px-3 py-2 text-xs font-medium text-accent-strong"
-                      : "flex items-center justify-center gap-1.5 rounded-lg bg-surface-muted px-3 py-2 text-xs font-medium text-ink-muted"
+                      ? "flex items-center justify-center gap-1.5 rounded-lg bg-accent-soft px-3.5 py-2.5 text-sm font-medium text-accent-strong"
+                      : "flex items-center justify-center gap-1.5 rounded-lg bg-surface-muted px-3.5 py-2.5 text-sm font-medium text-ink-muted"
                   }
                 >
                   <Icon className="size-3.5" />
@@ -179,10 +187,10 @@ export function FirstRunGuide({ guest }: { guest?: boolean }) {
             })}
           </div>
 
-          <div className="zouzou-panel rounded-xl p-5 sm:p-7">
+          <div className="zouzou-panel rounded-xl p-6 sm:p-8">
             {step === 0 ? (
               <div>
-                <p className="text-sm font-semibold text-ink">
+                <p className="text-base font-semibold text-ink">
                   写想法
                 </p>
                 <textarea
@@ -193,6 +201,28 @@ export function FirstRunGuide({ guest }: { guest?: boolean }) {
                   placeholder="比如：整理自己的个人网站"
                   className={`${inputClass} mt-3 resize-none`}
                 />
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {samples.map((sample) => (
+                    <button
+                      key={sample}
+                      type="button"
+                      onClick={() => handleIdeaChange(sample)}
+                      className="max-w-full rounded-lg border border-border bg-surface px-3 py-2 text-left text-xs leading-5 text-ink-secondary transition-colors hover:border-accent hover:text-accent"
+                    >
+                      {sample}
+                    </button>
+                  ))}
+                </div>
+                <div className="mt-3">
+                  <button
+                    type="button"
+                    onClick={() => setSamples(pickRandomSampleIdeas())}
+                    className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border bg-surface px-3 text-xs font-medium text-ink-secondary transition-colors hover:border-accent hover:text-accent"
+                  >
+                    <RefreshCw className="size-3.5" />
+                    换一批
+                  </button>
+                </div>
                 <div className="mt-4 flex justify-end">
                   <button
                     type="button"
@@ -207,7 +237,7 @@ export function FirstRunGuide({ guest }: { guest?: boolean }) {
                       </>
                     ) : (
                       <>
-                        先问我几句
+                        下一步
                         <ArrowRight className="size-4" />
                       </>
                     )}
@@ -218,7 +248,7 @@ export function FirstRunGuide({ guest }: { guest?: boolean }) {
 
             {step === 1 && clarification ? (
               <div className="space-y-3">
-                <p className="text-sm font-semibold text-ink">
+                <p className="text-base font-semibold text-ink">
                   谈感受
                 </p>
                 <ChatClarify
@@ -235,7 +265,7 @@ export function FirstRunGuide({ guest }: { guest?: boolean }) {
 
             {step === 2 ? (
               <div>
-                <p className="text-sm font-semibold text-ink">
+                <p className="text-base font-semibold text-ink">
                   建项目
                 </p>
                 {aiFallback ? (
@@ -264,9 +294,9 @@ export function FirstRunGuide({ guest }: { guest?: boolean }) {
                   <textarea
                     value={objective}
                     onChange={(event) => setObjective(event.target.value)}
-                    rows={3}
-                    maxLength={200}
-                    className={`${inputClass} resize-none`}
+                     rows={4}
+                     maxLength={200}
+                     className={`${inputClass} resize-y`}
                   />
                 </label>
                 <label className="mt-4 block">
@@ -300,19 +330,25 @@ export function FirstRunGuide({ guest }: { guest?: boolean }) {
                 <input type="hidden" name="objective" value={objective.trim()} />
                 <input type="hidden" name="milestone" value={milestone.trim()} />
                 <input type="hidden" name="sourceIdea" value={planSourceIdea} />
-                <p className="text-sm font-semibold text-ink">
+                <input
+                  type="hidden"
+                  name="taskShortTitle"
+                  value={taskShortTitle}
+                />
+                <p className="text-base font-semibold text-ink">
                   定今日
                 </p>
                 <label className="mt-3 block">
-                  <span className="mb-1.5 block text-xs font-medium text-ink-secondary">
+                  <span className="mb-2 block text-xs font-medium text-ink-secondary">
                     今日任务
                   </span>
-                  <input
+                  <textarea
                     name="taskTitle"
                     value={taskTitle}
                     onChange={(event) => setTaskTitle(event.target.value)}
+                    rows={3}
                     maxLength={200}
-                    className={inputClass}
+                    className={`${inputClass} resize-none`}
                   />
                 </label>
                 <div className="mt-5 flex justify-end">

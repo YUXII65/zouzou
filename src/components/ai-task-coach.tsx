@@ -35,17 +35,20 @@ export function AiTaskCoach({
   async function ask() {
     if (!message.trim()) return;
     setLoading(true);
-    const next = await getTaskCoachAdvice({
-      taskId,
-      title,
-      notes,
-      projectName,
-      status,
-      message,
-    });
-    setAdvice(next);
-    setLoading(false);
-    trackEvent("task_coach_ask", { taskId });
+    try {
+      const next = await getTaskCoachAdvice({
+        taskId,
+        title,
+        notes,
+        projectName,
+        status,
+        message,
+      });
+      setAdvice(next);
+      trackEvent("task_coach_ask", { taskId });
+    } finally {
+      setLoading(false);
+    }
   }
 
   return (
@@ -103,7 +106,7 @@ export function AiTaskCoach({
                 ))}
               </ol>
               <p className="mt-3 rounded-md bg-surface-muted/80 px-3 py-2 text-sm leading-6 text-ink">
-                先做这个：{advice.nextStep}
+                现在可以做：{advice.nextStep}
               </p>
             </div>
           ) : (

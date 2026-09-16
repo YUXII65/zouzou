@@ -36,31 +36,37 @@ export function AiTaskEditAssistant({
   async function generate() {
     if (!idea.trim()) return;
     setLoading(true);
-    const input = {
-      taskId,
-      title:
-        (document.getElementById(`task-title-${fieldPrefix}`) as HTMLInputElement)
-          ?.value ?? "",
-      notes:
-        (document.getElementById(`task-notes-${fieldPrefix}`) as HTMLInputElement)
-          ?.value ?? null,
-      priority:
-        (document.getElementById(`task-priority-${fieldPrefix}`) as HTMLSelectElement)
-          ?.value ?? "medium",
-      scheduledDate:
-        (document.getElementById(`task-scheduled-${fieldPrefix}`) as HTMLInputElement)
-          ?.value ?? null,
-      dueDate:
-        (document.getElementById(`task-due-${fieldPrefix}`) as HTMLInputElement)
-          ?.value ?? null,
-      focusDate:
-        (document.getElementById(`task-focus-${fieldPrefix}`) as HTMLInputElement)
-          ?.value ?? null,
-      idea,
-    };
-    const next = await getTaskEditSuggestion(input);
-    setSuggestion(next);
-    setLoading(false);
+    try {
+      const input = {
+        taskId,
+        title:
+          (document.getElementById(`task-title-${fieldPrefix}`) as HTMLInputElement)
+            ?.value ?? "",
+        shortTitle:
+          (document.getElementById(`task-short-title-${fieldPrefix}`) as HTMLInputElement)
+            ?.value ?? "",
+        notes:
+          (document.getElementById(`task-notes-${fieldPrefix}`) as HTMLInputElement)
+            ?.value ?? null,
+        priority:
+          (document.getElementById(`task-priority-${fieldPrefix}`) as HTMLSelectElement)
+            ?.value ?? "medium",
+        scheduledDate:
+          (document.getElementById(`task-scheduled-${fieldPrefix}`) as HTMLInputElement)
+            ?.value ?? null,
+        dueDate:
+          (document.getElementById(`task-due-${fieldPrefix}`) as HTMLInputElement)
+            ?.value ?? null,
+        focusDate:
+          (document.getElementById(`task-focus-${fieldPrefix}`) as HTMLInputElement)
+            ?.value ?? null,
+        idea,
+      };
+      const next = await getTaskEditSuggestion(input);
+      setSuggestion(next);
+    } finally {
+      setLoading(false);
+    }
   }
 
   function apply() {
@@ -68,6 +74,9 @@ export function AiTaskEditAssistant({
     const beforeJson = JSON.stringify({
       title:
         (document.getElementById(`task-title-${fieldPrefix}`) as HTMLInputElement)
+          ?.value ?? "",
+      shortTitle:
+        (document.getElementById(`task-short-title-${fieldPrefix}`) as HTMLInputElement)
           ?.value ?? "",
       notes:
         (document.getElementById(`task-notes-${fieldPrefix}`) as HTMLInputElement)
@@ -93,6 +102,7 @@ export function AiTaskEditAssistant({
       detail: suggestion.reason,
     });
     setField(`task-title-${fieldPrefix}`, suggestion.title);
+    setField(`task-short-title-${fieldPrefix}`, suggestion.shortTitle);
     setField(`task-notes-${fieldPrefix}`, suggestion.notes);
     setField(`task-priority-${fieldPrefix}`, suggestion.priority);
     setField(`task-scheduled-${fieldPrefix}`, suggestion.scheduledDate);

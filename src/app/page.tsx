@@ -6,7 +6,6 @@ import {
   Focus,
   ListTodo,
   NotebookPen,
-  Sparkles,
 } from "lucide-react";
 import { CalendarDatePanel } from "@/components/calendar-date-panel";
 import { FirstRunTour } from "@/components/first-run-tour";
@@ -15,10 +14,12 @@ import { Panel, PanelHeader } from "@/components/panel";
 import { EmptyState } from "@/components/empty-state";
 import { StatusBadge } from "@/components/status-badge";
 import { TodayTaskActions } from "@/components/today-task-actions";
+import { TaskTitleButton } from "@/components/task-title-button";
 import { AiTaskPlanner } from "@/components/ai-task-planner";
 import { prisma } from "@/lib/prisma";
-import { getCurrentUser, isGuestUser } from "@/lib/auth";
+import { getCurrentUser } from "@/lib/auth";
 import { getFirstRunState } from "@/lib/first-run";
+import { serializeTaskStickyNote } from "@/lib/task-sticky";
 import {
   endOfDay,
   formatDate,
@@ -37,12 +38,23 @@ const priorityOrder: Record<string, number> = {
 type AgendaTask = {
   id: string;
   title: string;
+  shortTitle: string | null;
   notes: string | null;
   priority: string;
   status: string;
   dueDate: Date | null;
   scheduledDate: Date | null;
   focusDate: Date | null;
+  stickyNotes: Array<{
+    id: string;
+    taskId: string;
+    sourceMessage: string;
+    title: string;
+    encouragement: string;
+    stepsJson: string;
+    nextStep: string;
+    createdAt: Date;
+  }>;
   project: { name: string } | null;
   inboxItem: { id: string } | null;
   reviewNextAction: {
@@ -69,7 +81,7 @@ export default async function TodayPage() {
   const now = new Date();
   const dayStart = startOfDay(now);
   const dayEnd = endOfDay(now);
-  const [tasks, pendingInbox] = await Promise.all([
+  const [tasks, pendingInbox, reviewCount] = await Promise.all([
     prisma.task.findMany({
       where: { userId: user.id },
       include: {
@@ -80,6 +92,7 @@ export default async function TodayPage() {
             review: { select: { reviewDate: true } },
           },
         },
+        stickyNotes: { orderBy: { createdAt: "desc" } },
       },
       orderBy: { createdAt: "desc" },
     }),
@@ -94,6 +107,7 @@ export default async function TodayPage() {
       orderBy: { createdAt: "desc" },
       take: 10,
     }),
+    prisma.review.count({ where: { userId: user.id } }),
   ]);
 
   const recentReviews = await prisma.review.findMany({
@@ -168,18 +182,19 @@ export default async function TodayPage() {
   });
 
   const todayTasks = (todayRelevant.length ? todayRelevant : agenda).slice(0, 3);
+  const firstTaskReviewEligible =
+    tasks.some((task) => task.status === "done") && reviewCount === 0;
 
   return (
     <>
-      <FirstTaskReviewHint />
       {firstRun.isFirstRun ? (
         <FirstRunTour
           initialStep={firstRun.tourStep}
-          guest={isGuestUser(user)}
           context="home"
           hasTasks={tasks.length > 0}
         />
       ) : null}
+      <FirstTaskReviewHint eligible={firstTaskReviewEligible} />
       <CalendarDatePanel
         now={now}
         completedToday={completedToday}
@@ -189,15 +204,6 @@ export default async function TodayPage() {
       />
 
       <Panel>
-        <PanelHeader
-          title="今日推进伙伴"
-          icon={Sparkles}
-          action={
-            <span className="text-xs font-medium text-ink-muted">
-              {pendingInbox.length} 条待整理
-            </span>
-          }
-        />
         <AiTaskPlanner
           pending={pendingInbox}
           quotaManaged={process.env.AI_QUOTA_ENABLED === "true"}
@@ -288,7 +294,7 @@ function AgendaTaskRow({
   return (
     <div className="flex flex-col gap-3 px-4 py-3 lg:flex-row lg:items-center">
       <div className="min-w-0 flex-1">
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex min-w-0 flex-wrap items-center gap-2">
           {task.reviewNextAction ? (
             <span className="inline-flex h-5 items-center gap-1 rounded bg-accent-soft px-1.5 text-[11px] font-medium text-accent-strong">
               <NotebookPen className="size-3" />
@@ -313,7 +319,16 @@ function AgendaTaskRow({
               计划
             </span>
           ) : null}
-          <p className="truncate text-sm font-medium text-ink">{task.title}</p>
+          <div className="min-w-0 flex-1">
+            <TaskTitleButton
+              taskId={task.id}
+              title={task.title}
+              shortTitle={task.shortTitle}
+              notes={task.notes}
+              projectName={task.project?.name ?? null}
+              status={task.status}
+            />
+          </div>
         </div>
         <p className="mt-1 truncate text-xs text-ink-secondary">
           {taskSource(task)}
@@ -331,6 +346,7 @@ function AgendaTaskRow({
           title={task.title}
           notes={task.notes}
           projectName={task.project?.name ?? null}
+          initialStickyNotes={task.stickyNotes.map(serializeTaskStickyNote)}
         />
       </div>
     </div>

@@ -1,8 +1,8 @@
 import { TOUR_EVENT, TOUR_STORAGE_KEY, type TourStep } from "@/lib/tour";
 
-const DONE_KEY = "next_step_first_task_done";
 const SHOW_KEY = "next_step_show_review_hint";
 const AI_QUESTION_KEY = "next_step_ai_question_asked";
+export const FIRST_TASK_REVIEW_EVENT = "next-step:first-task-review";
 
 function tourIsActive() {
   try {
@@ -41,16 +41,9 @@ export function markFirstTaskDone() {
   if (typeof window === "undefined") return;
 
   try {
-    if (localStorage.getItem(DONE_KEY) === "1") return;
-    localStorage.setItem(DONE_KEY, "1");
-
-    // 新手期由三步引导负责讲"完成之后去哪"，不再叠一张角落卡片
-    if (tourIsActive()) {
-      notifyTourStep("4");
-      return;
-    }
-
     localStorage.setItem(SHOW_KEY, "1");
+    notifyTourStep("done");
+    window.dispatchEvent(new Event(FIRST_TASK_REVIEW_EVENT));
   } catch {
     // Ignore storage errors and continue without the hint.
   }

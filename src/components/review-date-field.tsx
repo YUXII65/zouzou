@@ -7,11 +7,12 @@ function formatReviewDate(value: string) {
   const [year, month, day] = value.split("-").map(Number);
   if (!year || !month || !day) return value;
 
-  return new Intl.DateTimeFormat("zh-CN", {
-    month: "numeric",
-    day: "numeric",
+  const date = new Date(year, month - 1, day);
+  const monthDay = `${date.getMonth() + 1}月${date.getDate()}日`;
+  const weekday = new Intl.DateTimeFormat("zh-CN", {
     weekday: "short",
-  }).format(new Date(year, month - 1, day));
+  }).format(date);
+  return `${monthDay}　${weekday}`;
 }
 
 export function ReviewDateField({ defaultValue }: { defaultValue: string }) {

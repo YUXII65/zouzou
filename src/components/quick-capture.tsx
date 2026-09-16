@@ -9,29 +9,14 @@ import {
   notifyTourStep,
 } from "@/lib/first-run-hints";
 import { trackEvent } from "@/lib/track";
-import { sampleIdeas } from "@/lib/sample-ideas";
-
-function pickRandomSample() {
-  const copy = [...sampleIdeas];
-  for (let index = copy.length - 1; index > 0; index -= 1) {
-    const randomIndex = Math.floor(Math.random() * (index + 1));
-    [copy[index], copy[randomIndex]] = [copy[randomIndex], copy[index]];
-  }
-  return copy.slice(0, 3);
-}
-
-function samplesForDate() {
-  const start = (new Date().getDate() * 7) % sampleIdeas.length;
-  return [
-    sampleIdeas[start],
-    sampleIdeas[(start + 1) % sampleIdeas.length],
-    sampleIdeas[(start + 2) % sampleIdeas.length],
-  ];
-}
+import {
+  pickRandomSampleIdeas,
+  sampleIdeasForDate,
+} from "@/lib/sample-ideas";
 
 export function QuickCapture({ compact = false }: { compact?: boolean }) {
   const [content, setContent] = useState("");
-  const [samples, setSamples] = useState(samplesForDate);
+  const [samples, setSamples] = useState(sampleIdeasForDate);
   const [apiKey, setApiKey] = useState("");
   const [model, setModel] = useState("deepseek-v4-flash");
   const [baseUrl, setBaseUrl] = useState("https://api.deepseek.com");
@@ -58,7 +43,7 @@ export function QuickCapture({ compact = false }: { compact?: boolean }) {
   }, []);
 
   function refreshSamples() {
-    setSamples(pickRandomSample());
+    setSamples(pickRandomSampleIdeas());
     trackEvent("home_sample_refresh");
   }
 

@@ -59,7 +59,7 @@ export function AuthCard({
           className="zouzou-panel rounded-xl p-6 sm:p-7"
         >
           <input type="hidden" name="next" value={next} />
-          <h2 className="text-sm font-semibold text-ink">登录</h2>
+          <h2 className="text-sm font-semibold text-ink">注册 / 登录</h2>
           <input
             name="username"
             required
@@ -80,19 +80,7 @@ export function AuthCard({
           {error === "login" ? (
             <p className="mt-3 text-sm text-danger">用户名或密码不对。</p>
           ) : null}
-          <SubmitButton className={submitClass}>登录</SubmitButton>
-          <div className="mt-5 border-t border-border pt-4">
-            <p className="text-center text-sm text-ink-secondary">
-              还没有账号？
-            </p>
-            <button
-              type="button"
-              onClick={() => setMode("register")}
-              className={switchClass}
-            >
-              注册账号
-            </button>
-          </div>
+          <SubmitButton className={submitClass}>确认</SubmitButton>
         </form>
       ) : (
         <form
@@ -102,7 +90,7 @@ export function AuthCard({
           className="zouzou-panel rounded-xl p-6 sm:p-7"
         >
           <input type="hidden" name="next" value={next} />
-          <h2 className="text-sm font-semibold text-ink">注册</h2>
+          <h2 className="text-sm font-semibold text-ink">注册 / 登录</h2>
           <input
             name="username"
             required
@@ -123,22 +111,10 @@ export function AuthCard({
           />
           {error === "register" ? (
             <p className="mt-3 text-sm text-danger">
-              注册失败，请检查用户名和密码，或账号可能已存在。
+              用户名或密码不正确，或该账号已存在。
             </p>
           ) : null}
-          <SubmitButton className={submitClass}>注册</SubmitButton>
-          <div className="mt-5 border-t border-border pt-4">
-            <p className="text-center text-sm text-ink-secondary">
-              已有账号？
-            </p>
-            <button
-              type="button"
-              onClick={() => setMode("login")}
-              className={switchClass}
-            >
-              返回登录
-            </button>
-          </div>
+          <SubmitButton className={submitClass}>确认</SubmitButton>
         </form>
       )}
 

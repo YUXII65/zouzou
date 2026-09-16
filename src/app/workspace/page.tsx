@@ -8,6 +8,7 @@ import {
 } from "lucide-react";
 import { PageHeader } from "@/components/page-header";
 import { FirstRunTour } from "@/components/first-run-tour";
+import { FirstTaskReviewHint } from "@/components/first-task-review-hint";
 import { Panel, PanelHeader } from "@/components/panel";
 import { EmptyState } from "@/components/empty-state";
 import { ProjectForm } from "@/components/project-form";
@@ -24,8 +25,10 @@ import {
 } from "@/app/actions";
 import { cx } from "@/lib/utils";
 import { prisma } from "@/lib/prisma";
-import { isGuestUser, requireUser } from "@/lib/auth";
+import { requireUser } from "@/lib/auth";
 import { getFirstRunState } from "@/lib/first-run";
+import { serializeTaskStickyNote } from "@/lib/task-sticky";
+import { buildTaskContract } from "@/lib/task-contract";
 
 export const dynamic = "force-dynamic";
 
@@ -64,11 +67,14 @@ export default async function ProjectsPage({
       ? "priority"
       : "order";
 
-  const [projects, tasks] = await Promise.all([
+  const [projects, tasks, reviewCount] = await Promise.all([
     prisma.project.findMany({
       where: { userId: user.id },
       include: {
         tasks: {
+          include: {
+            stickyNotes: { orderBy: { createdAt: "desc" } },
+          },
           orderBy: [{ planOrder: "asc" }, { createdAt: "desc" }],
         },
       },
@@ -76,15 +82,48 @@ export default async function ProjectsPage({
     }),
     prisma.task.findMany({
       where: { userId: user.id },
-      include: { project: true },
+      include: {
+        project: true,
+        stickyNotes: { orderBy: { createdAt: "desc" } },
+      },
       orderBy: { createdAt: "desc" },
     }),
+    prisma.review.count({ where: { userId: user.id } }),
   ]);
 
   const editingTask = editParam
     ? (tasks.find((task) => task.id === editParam) ?? null)
     : null;
   const unassociatedTasks = tasks.filter((task) => !task.projectId);
+  const firstTaskReviewEligible =
+    tasks.some((task) => task.status === "done") && reviewCount === 0;
+
+  // 旧任务没有任务合同，第一次打开书桌时补齐，避免列表缺少执行方式和完成标准。
+  const legacyTasks = tasks.filter((task) => !task.executionMode).slice(0, 20);
+  if (legacyTasks.length) {
+    await Promise.all(
+      legacyTasks.map((task) => {
+        const contract = buildTaskContract(
+          `${task.title} ${task.notes ?? ""}`.trim(),
+          task.title,
+        );
+        task.executionMode = contract.executionMode;
+        task.doneWhen = contract.doneWhen;
+        task.maxTurns = contract.maxTurns;
+        task.toolPolicy = contract.toolPolicy;
+        return prisma.task.update({
+          where: { id: task.id, userId: user.id },
+          data: {
+            executionMode: contract.executionMode,
+            doneWhen: contract.doneWhen,
+            maxTurns: contract.maxTurns,
+            toolPolicy: contract.toolPolicy,
+          },
+          select: { id: true },
+        });
+      }),
+    );
+  }
   const projectOptions = projects.map((project) => ({
     id: project.id,
     name: project.name,
@@ -107,11 +146,12 @@ export default async function ProjectsPage({
       {firstRun.isFirstRun ? (
         <FirstRunTour
           initialStep={firstRun.tourStep}
-          guest={isGuestUser(user)}
           context="workspace"
           hasTasks={tasks.length > 0}
         />
       ) : null}
+
+      <FirstTaskReviewHint eligible={firstTaskReviewEligible} />
 
       <div className="grid gap-6 lg:grid-cols-[220px_minmax(0,1fr)]">
         <Panel className="min-w-0 self-start">
@@ -251,7 +291,12 @@ export default async function ProjectsPage({
                     {unassociatedTasks.map((task) => (
                       <TaskRow
                         key={task.id}
-                        task={task}
+                        task={{
+                          ...task,
+                          stickyNotes: task.stickyNotes.map(
+                            serializeTaskStickyNote,
+                          ),
+                        }}
                         projectId={null}
                         showLabels={firstRun.isFirstRun}
                       />
@@ -332,7 +377,12 @@ export default async function ProjectsPage({
                       {sortTasks(selectedProject.tasks, sortParam).map((task) => (
                         <TaskRow
                           key={task.id}
-                          task={task}
+                          task={{
+                            ...task,
+                            stickyNotes: task.stickyNotes.map(
+                              serializeTaskStickyNote,
+                            ),
+                          }}
                           projectId={selectedProject.id}
                           showLabels={firstRun.isFirstRun}
                         />

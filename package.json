@@ -1,7 +1,8 @@
 {
   "name": "next-step",
-  "version": "0.1.0",
+  "version": "2.5.0",
   "private": true,
+  "description": "走走：把零散想法收成下一步的 AI 个人项目推进系统",
   "scripts": {
     "dev": "node node_modules/next/dist/bin/next dev",
     "build": "node node_modules/next/dist/bin/next build",

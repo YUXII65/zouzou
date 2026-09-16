@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import { Sparkles } from "lucide-react";
 import { generateInboxPlan } from "@/app/actions";
 import { ChatClarify } from "@/components/chat-clarify";
@@ -19,6 +20,7 @@ export function InboxClarification({
 }) {
   const [apiKey, setApiKey] = useState("");
   const [pending, startTransition] = useTransition();
+  const router = useRouter();
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -36,7 +38,10 @@ export function InboxClarification({
     });
     formData.set("supplement", payload.supplement);
     formData.set("apiKey", apiKey);
-    startTransition(() => generateInboxPlan(formData));
+    startTransition(async () => {
+      await generateInboxPlan(formData);
+      router.refresh();
+    });
   }
 
   return (

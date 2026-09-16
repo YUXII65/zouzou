@@ -82,6 +82,18 @@ export function InboxPlanEditor({
 
             <label className="mt-3 block">
               <span className="mb-1.5 block text-xs font-medium text-ink-secondary">
+                精简标题
+              </span>
+              <input
+                name={`tasks[${index}].shortTitle`}
+                defaultValue={task.shortTitle}
+                placeholder="列表展示时使用的短标题"
+                className={inputClass}
+              />
+            </label>
+
+            <label className="mt-3 block">
+              <span className="mb-1.5 block text-xs font-medium text-ink-secondary">
                 执行说明
               </span>
               <textarea

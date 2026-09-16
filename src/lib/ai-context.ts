@@ -215,7 +215,7 @@ export async function buildAiContext(
   } else if (preferenceMap.get("default_start_action") === "complete") {
     planningGuidanceParts.push("用户需要完整方案，但仍应拆成可执行步骤");
   } else {
-    planningGuidanceParts.push("第一步优先安排最小动作");
+    planningGuidanceParts.push("第一步优先安排具体动作，根据情境选择验证、反馈或直接产出");
   }
   if (preferenceMap.get("avoid_overdue") === "yes") {
     planningGuidanceParts.push("用户重视按时完成，日期安排要留余量");

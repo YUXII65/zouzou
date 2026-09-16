@@ -1,52 +1,45 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useRef, useState } from "react";
-import { ArrowRight, X } from "lucide-react";
+import { useCallback, useEffect, useState } from "react";
+import { AnchoredHint } from "@/components/anchored-hint";
+import { FIRST_TASK_REVIEW_EVENT } from "@/lib/first-run-hints";
+import { TOUR_TARGETS } from "@/lib/tour";
 
-const DONE_KEY = "next_step_first_task_done";
+const DISMISS_KEY = "next_step_review_prompt_dismissed";
 const SHOW_KEY = "next_step_show_review_hint";
-let claimed = false;
 
-export function FirstTaskReviewHint() {
+/**
+ * 首个任务完成后的复盘锚定提示。
+ *
+ * eligible 由服务端判定「有已完成任务，且一条复盘都还没有」，所以无论用户是
+ * 从引导流程完成，还是直接新建任务后点完成，刷新页面都能看到提示；
+ * 客户端事件只负责让它当场弹出，不必等下一次刷新。
+ */
+export function FirstTaskReviewHint({ eligible = false }: { eligible?: boolean }) {
   const [visible, setVisible] = useState(false);
-  const cardRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
-    if (claimed) return;
-
+  const showIfNeeded = useCallback(() => {
     try {
-      const tourStep = localStorage.getItem("next_step_tour") ?? "";
-      const tourActive =
-        tourStep === "1" || tourStep === "2" || tourStep === "3";
-      const done = localStorage.getItem(DONE_KEY) === "1";
-      const shouldShow = localStorage.getItem(SHOW_KEY) === "1";
-      // 新手三步引导会讲"完成之后去哪"，这里只服务没走引导的用户
-      if (!tourActive && done && shouldShow) {
-        claimed = true;
-        setVisible(true);
-      }
+      if (localStorage.getItem(DISMISS_KEY) === "1") return;
+      const flagged = localStorage.getItem(SHOW_KEY) === "1";
+      if (eligible || flagged) setVisible(true);
     } catch {
-      // Ignore storage errors and skip the hint.
+      if (eligible) setVisible(true);
     }
-  }, []);
+  }, [eligible]);
 
   useEffect(() => {
-    if (!visible) return;
-
-    function onPointerDown(event: PointerEvent) {
-      if (cardRef.current && !cardRef.current.contains(event.target as Node)) {
-        dismiss();
-      }
-    }
-
-    document.addEventListener("pointerdown", onPointerDown);
-    return () => document.removeEventListener("pointerdown", onPointerDown);
-  }, [visible]);
+    showIfNeeded();
+    window.addEventListener(FIRST_TASK_REVIEW_EVENT, showIfNeeded);
+    return () =>
+      window.removeEventListener(FIRST_TASK_REVIEW_EVENT, showIfNeeded);
+  }, [showIfNeeded]);
 
   function dismiss() {
     setVisible(false);
     try {
+      localStorage.setItem(DISMISS_KEY, "1");
       localStorage.removeItem(SHOW_KEY);
     } catch {
       // Ignore storage errors.
@@ -56,34 +49,30 @@ export function FirstTaskReviewHint() {
   if (!visible) return null;
 
   return (
-    <div
-      ref={cardRef}
-      role="note"
-      className="zouzou-panel fixed bottom-24 left-4 right-4 z-50 w-auto max-w-[calc(100vw-2rem)] rounded-xl p-4 shadow-pop animate-[zouzou-fade-in_240ms_ease-out] sm:bottom-auto sm:left-auto sm:right-4 sm:top-20 sm:w-80"
+    <AnchoredHint
+      target={TOUR_TARGETS.reviewNav}
+      title="抽屉复盘"
+      onDismiss={dismiss}
+      footer={
+        <div className="flex flex-wrap items-center gap-2">
+          <Link
+            href="/review"
+            onClick={dismiss}
+            className="zouzou-primary-button inline-flex h-7 items-center rounded-md bg-accent px-2.5 text-xs font-medium text-white transition-colors hover:bg-accent-strong"
+          >
+            去复盘
+          </Link>
+          <button
+            type="button"
+            onClick={dismiss}
+            className="inline-flex h-7 items-center rounded-md border border-border bg-surface px-2.5 text-xs font-medium text-ink-secondary transition-colors hover:border-accent hover:text-accent"
+          >
+            稍后
+          </button>
+        </div>
+      }
     >
-      <div className="flex items-start justify-between gap-3">
-        <p className="text-sm font-semibold text-ink">第一次完成</p>
-        <button
-          type="button"
-          onClick={dismiss}
-          aria-label="关闭提示"
-          title="关闭提示"
-          className="flex size-7 shrink-0 items-center justify-center rounded-md text-ink-muted transition-colors hover:bg-surface-muted hover:text-ink"
-        >
-          <X className="size-4" />
-        </button>
-      </div>
-      <p className="mt-1 text-xs leading-5 text-ink-secondary">
-        今天任务结束后，可以来抽屉页复盘。
-      </p>
-      <Link
-        href="/review"
-        onClick={dismiss}
-        className="mt-3 inline-flex h-8 items-center gap-1.5 rounded-md bg-accent px-3 text-xs font-medium text-white transition-colors hover:bg-accent-strong"
-      >
-        去复盘
-        <ArrowRight className="size-3.5" />
-      </Link>
-    </div>
+      你的第一项任务已完成。点左侧【抽屉】，用复盘留下今天的判断和明天的方向。
+    </AnchoredHint>
   );
 }

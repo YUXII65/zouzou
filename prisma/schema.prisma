@@ -66,6 +66,7 @@ model User {
   updatedAt         DateTime            @updatedAt
   projects          Project[]
   tasks             Task[]
+  taskStickyNotes   TaskStickyNote[]
   inboxItems        InboxItem[]
   aiPlanFeedbacks   AiPlanFeedback[]
   userPreferences   UserPreference[]
@@ -107,6 +108,7 @@ model Task {
   userId           String
   user             User              @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: Cascade)
   title            String
+  shortTitle       String?
   notes            String?
   projectId        String?
   project          Project?          @relation(fields: [projectId], references: [id], onDelete: SetNull)
@@ -116,6 +118,11 @@ model Task {
   dueDate          DateTime?
   focusDate        DateTime?
   completedAt      DateTime?
+  executionMode    String?
+  doneWhen         String?
+  completedBy      String?
+  maxTurns         Int?
+  toolPolicy       String?
   planOrder        Int?
   inboxItemId      String?
   inboxItem        InboxItem?        @relation(fields: [inboxItemId], references: [id], onDelete: SetNull)
@@ -124,9 +131,28 @@ model Task {
   reviewTasks      ReviewTask[]
   reviewNextAction ReviewNextAction?
   aiFeedbackEvents AiFeedbackEvent[]
+  stickyNotes      TaskStickyNote[]
 
   @@index([userId])
   @@map("tasks")
+}
+
+model TaskStickyNote {
+  id            String   @id @default(cuid())
+  userId        String
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  taskId        String
+  task          Task     @relation(fields: [taskId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  sourceMessage String
+  title         String
+  encouragement String
+  stepsJson     String
+  nextStep      String
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([userId, taskId, createdAt])
+  @@map("task_sticky_notes")
 }
 
 model InboxItem {

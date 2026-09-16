@@ -249,9 +249,9 @@ function buildCustomPlan(thought: string): Plan {
     firstLine.length > 18 ? `${firstLine.slice(0, 18)}…` : firstLine;
 
   return {
-    projectName: `${short}第一步`,
+    projectName: `${short}起步`,
     objective: `把“${firstLine}”推进成一件今天能开始的事，先不看完整的最终目标。`,
-    milestone: `先完成“${short}”里的第一个最小动作。`,
+    milestone: `让“${short}”出现第一个看得见的进展。`,
     tasks: [
       {
         title: `写下“${short}”今天能做的第一个动作`,
@@ -341,7 +341,7 @@ export function OnboardingDemo() {
     setUserThought("");
   }
 
-  const steps = ["说出想法", "先问几句", "最小下一步", "记住你"];
+  const steps = ["说出想法", "问清处境", "收成行动", "记住你"];
   const stageIndex =
     stage === "capture"
       ? 0
@@ -451,7 +451,7 @@ export function OnboardingDemo() {
               </div>
 
               <p className="zouzou-ai-card mt-6 px-3 py-2.5 text-xs leading-5 text-accent-strong">
-                AI 会先记住你真正想做的事，再给一个最小下一步；卡住时它会帮你减负担，而不是继续催。
+                AI 会先记住你真正想做的事，再根据你的处境收成一个具体行动；卡住时它会帮你减负担，而不是继续催。
               </p>
             </aside>
           </section>
@@ -463,7 +463,7 @@ export function OnboardingDemo() {
                 <ChatClarify
                 dimensions={demoClarifyDimensions(thought)}
                 supplementPlaceholder="也可以补充两句，比如你想先得到什么结果。"
-                submitLabel="给我一个最小下一步"
+                submitLabel="帮我收成行动"
                 onSubmit={(payload) => {
                   const keys = (payload.answers[0] ?? [])
                     .map(
@@ -622,7 +622,7 @@ export function OnboardingDemo() {
                       onClick={() => setPromptIndex(index)}
                       className={
                         active
-                          ? "rounded-lg bg-accent px-3 py-2 text-sm font-medium text-white transition-colors"
+                          ? "rounded-lg border border-border bg-surface-muted px-3 py-2 text-sm font-medium text-ink transition-colors"
                           : "rounded-lg border border-border bg-surface-muted px-3 py-2 text-sm font-medium text-ink-secondary transition-colors hover:border-accent hover:text-accent"
                       }
                     >
@@ -685,7 +685,7 @@ export function OnboardingDemo() {
               “{userThought.trim()}”
             </p>
             <p className="mt-4 text-sm leading-6 text-ink-secondary">
-              AI 接下来会先确认目标、时间投入和真正卡住的地方，再陪你拆出最小下一步，不会直接替你决定，也不会把日程排满。
+              AI 接下来会先确认目标、时间投入和真正卡住的地方，再陪你选择最适合的推进方式，不会直接替你决定，也不会把日程排满。
             </p>
             <div className="mt-6 flex flex-wrap justify-center gap-3">
               <button
