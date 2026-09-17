@@ -1,0 +1,56 @@
+name: 数据库备份
+
+# 每天 UTC 18:00（北京时间 02:00）自动导出一次 Neon 全库。
+# 需要仓库 Secrets 里配置 DATABASE_URL（Settings → Secrets and variables → Actions）。
+# 没有配的话这个 workflow 会在备份步骤明确报错，不会静默通过。
+
+on:
+  schedule:
+    - cron: "0 18 * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: db-backup
+  cancel-in-progress: false
+
+jobs:
+  backup:
+    name: 导出并校验
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # 版本跟随 package.json 的 packageManager，避免和本地写 lockfile 的 pnpm 分叉
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: 安装依赖
+        run: pnpm install --frozen-lockfile
+
+      - name: 生成 Prisma Client
+        run: pnpm db:generate
+
+      - name: 导出数据库
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: |
+          if [ -z "$DATABASE_URL" ]; then
+            echo "::error::仓库没有配置 DATABASE_URL secret，备份无法执行。"
+            exit 1
+          fi
+          node scripts/backup-db.mjs --out=backups/dump.json.gz
+
+      - name: 校验备份可恢复
+        run: node scripts/restore-db.mjs --file=backups/dump.json.gz
+
+      - name: 上传备份产物
+        uses: actions/upload-artifact@v4
+        with:
+          name: db-dump-${{ github.run_number }}
+          path: backups/dump.json.gz
+          retention-days: 30
+          if-no-files-found: error
