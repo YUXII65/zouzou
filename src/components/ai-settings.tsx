@@ -5,18 +5,22 @@ import { CheckCircle2, KeyRound, Sparkles } from "lucide-react";
 
 const KEY_STORAGE = "ai-api-key";
 
-export function AiSettings() {
+export function AiSettings({
+  serverConnected = false,
+}: {
+  serverConnected?: boolean;
+}) {
   const [apiKey, setApiKey] = useState("");
-  const [connected, setConnected] = useState(false);
+  const hasLocalKey = Boolean(apiKey);
+  const connected = hasLocalKey || serverConnected;
 
   useEffect(() => {
     function readStorage() {
       setApiKey(localStorage.getItem(KEY_STORAGE) ?? "");
-      setConnected(Boolean(localStorage.getItem(KEY_STORAGE)));
     }
 
     function onKeyUpdated() {
-      setConnected(Boolean(localStorage.getItem(KEY_STORAGE)));
+      setApiKey(localStorage.getItem(KEY_STORAGE) ?? "");
     }
 
     const timer = window.setTimeout(readStorage, 0);
@@ -38,7 +42,7 @@ export function AiSettings() {
       localStorage.removeItem("ai-model");
       localStorage.removeItem("ai-base-url");
     }
-    setConnected(Boolean(key));
+    setApiKey(key);
     window.dispatchEvent(new Event("ai-key-updated"));
   }
 
@@ -59,7 +63,7 @@ export function AiSettings() {
           {connected ? (
             <>
               <CheckCircle2 className="size-3.5" />
-              已连接
+              {hasLocalKey ? "已连接" : "服务端已连接"}
             </>
           ) : (
             <>
@@ -84,7 +88,9 @@ export function AiSettings() {
         </label>
         <div className="flex items-center justify-between gap-3">
           <p className="text-[11px] leading-4 text-ink-muted">
-            Key 只保存在本机浏览器，用于当前 AI 请求。
+            {serverConnected && !hasLocalKey
+              ? "当前使用服务端连接，也可在本机覆盖。"
+              : "Key 只保存在本机浏览器，用于当前 AI 请求。"}
           </p>
           <button
             type="button"

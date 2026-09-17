@@ -64,6 +64,7 @@ function parseClarification(item: {
 export function AiTaskPlanner({
   pending,
   quotaManaged = false,
+  serverAiConfigured = false,
 }: {
   pending: Array<{
     id: string;
@@ -72,6 +73,7 @@ export function AiTaskPlanner({
     aiSuggestionJson: string | null;
   }>;
   quotaManaged?: boolean;
+  serverAiConfigured?: boolean;
 }) {
   return (
     <div className="space-y-4">
@@ -144,7 +146,9 @@ export function AiTaskPlanner({
           偏好设置
         </summary>
         <div className="space-y-3 border-t border-border p-3">
-          {quotaManaged ? null : <AiSettings />}
+          {quotaManaged ? null : (
+            <AiSettings serverConnected={serverAiConfigured} />
+          )}
           <AiPreferences />
         </div>
       </details>

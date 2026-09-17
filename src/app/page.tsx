@@ -201,6 +201,9 @@ export default async function TodayPage() {
         <AiTaskPlanner
           pending={pendingInbox}
           quotaManaged={process.env.AI_QUOTA_ENABLED === "true"}
+          serverAiConfigured={Boolean(
+            process.env.DEEPSEEK_API_KEY || process.env.OPENAI_API_KEY,
+          )}
         />
       </Panel>
 
