@@ -17,7 +17,7 @@ export type ToolDecision = {
 };
 
 const WRITE_SIGNAL =
-  /发布|上线|提交表单|注册账号|投稿|下单|购买|付款|发送消息|私信|评论|回复|填写表单|申请|报名|预约/;
+  /发布|上线|提交表单|注册(?:一个|个|新)?(?:账号|帐号|账户)|投稿|下单|购买|付款|支付|发送消息|私信|评论|回复|填写表单|申请|报名|预约|注销|退订/;
 const READ_URL_SIGNAL = /https?:\/\/|网址|链接|这个网页|这篇文章|那个页面/;
 const GITHUB_SIGNAL = /github|仓库|开源项目|代码库|pull request|\bpr\b/;
 const DOCS_SIGNAL = /\bapi\b|接口文档|官方文档|文档|sdk|开发文档/i;
