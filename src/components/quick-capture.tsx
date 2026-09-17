@@ -3,12 +3,13 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import { Loader2, RefreshCw, Sparkles } from "lucide-react";
-import { addInboxItemAndClarify } from "@/app/actions";
 import { InboxClarification } from "@/components/inbox-clarification";
+import { useRotatingText } from "@/components/rotating-text";
 import {
   markFirstAiQuestionAsked,
   notifyTourStep,
 } from "@/lib/first-run-hints";
+import { consumeAiStream } from "@/lib/ai-stream-client";
 import { trackEvent } from "@/lib/track";
 import {
   pickRandomSampleIdeas,
@@ -21,6 +22,13 @@ type CaptureResult = {
   content: string;
   clarification: InboxClarificationData;
 };
+
+const CAPTURE_WAITING_LABELS = [
+  "正在读你的原话...",
+  "正在找最关键的问题...",
+  "正在把选项写具体...",
+  "快整理好了...",
+];
 
 export function QuickCapture({
   compact = false,
@@ -37,7 +45,10 @@ export function QuickCapture({
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState("");
   const [localResult, setLocalResult] = useState<CaptureResult | null>(null);
+  const [pendingContent, setPendingContent] = useState("");
+  const [streamPreview, setStreamPreview] = useState("");
   const router = useRouter();
+  const waitingLabel = useRotatingText(submitting, CAPTURE_WAITING_LABELS);
 
   useEffect(() => {
     if (localResult && pendingIds.includes(localResult.itemId)) {
@@ -74,23 +85,38 @@ export function QuickCapture({
   async function submitCapture(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (submitting) return;
+    const idea = content.trim();
+    if (!idea) return;
 
-    const formData = new FormData(event.currentTarget);
     setSubmitting(true);
     setSubmitError("");
+    setLocalResult(null);
+    setPendingContent(idea);
+    setStreamPreview("");
+    setContent("");
     markFirstAiQuestionAsked();
     notifyTourStep("2");
     trackEvent("home_ai_input_submit");
 
     try {
-      const result = await addInboxItemAndClarify(formData);
-      if (result) setLocalResult(result);
-      setContent("");
+      const response = await fetch("/api/ai/inbox/clarify", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ content: idea, apiKey, model, baseUrl }),
+      });
+      const result = await consumeAiStream<CaptureResult>(
+        response,
+        setStreamPreview,
+      );
+      setLocalResult(result);
       router.refresh();
     } catch {
       setSubmitError("没送出去，再试一次");
+      setContent(idea);
     } finally {
       setSubmitting(false);
+      setPendingContent("");
+      setStreamPreview("");
     }
   }
 
@@ -105,9 +131,6 @@ export function QuickCapture({
         aria-hidden
         className="pointer-events-none absolute -right-12 -top-14 size-44 rounded-full bg-accent/10 blur-3xl"
       />
-      <input type="hidden" name="apiKey" value={apiKey} />
-      <input type="hidden" name="model" value={model} />
-      <input type="hidden" name="baseUrl" value={baseUrl} />
       <label className="sr-only" htmlFor="quick-capture">
         快速记录
       </label>
@@ -154,13 +177,40 @@ export function QuickCapture({
           ) : (
             <Sparkles className="size-4" />
           )}
-          {submitting ? "已收到，正在梳理..." : "下一步"}
+          {submitting ? waitingLabel : "下一步"}
         </button>
       </div>
       {submitError ? (
         <p className="relative mt-3 text-xs text-danger">{submitError}</p>
       ) : null}
     </form>
+    {pendingContent ? (
+      <div className="mt-4 rounded-xl border border-accent/15 bg-surface p-4">
+        <p className="text-sm leading-6 text-ink">{pendingContent}</p>
+        <div className="mt-3 border-l-2 border-accent/30 pl-3 text-sm leading-7 text-ink-secondary">
+          {streamPreview ? (
+            <span className="whitespace-pre-wrap">
+              {streamPreview}
+              <span
+                className="ml-0.5 inline-block animate-pulse text-accent"
+                aria-hidden
+              >
+                |
+              </span>
+            </span>
+          ) : (
+            <span className="inline-flex items-center gap-2 text-ink-muted">
+              <span className="flex gap-1">
+                <span className="size-1.5 animate-[zouzou-soft-pulse_1s_ease-in-out_infinite] rounded-full bg-accent/60" />
+                <span className="size-1.5 animate-[zouzou-soft-pulse_1s_ease-in-out_infinite] rounded-full bg-accent/60 [animation-delay:150ms]" />
+                <span className="size-1.5 animate-[zouzou-soft-pulse_1s_ease-in-out_infinite] rounded-full bg-accent/60 [animation-delay:300ms]" />
+              </span>
+              {waitingLabel}
+            </span>
+          )}
+        </div>
+      </div>
+    ) : null}
     {localResult ? (
       <div className="mt-4">
         <InboxClarification

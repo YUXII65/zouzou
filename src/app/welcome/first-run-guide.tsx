@@ -21,6 +21,7 @@ import {
 } from "@/app/actions";
 import { BrandMark } from "@/components/brand-mark";
 import { ChatClarify } from "@/components/chat-clarify";
+import { useRotatingText } from "@/components/rotating-text";
 import { takePendingIdea } from "@/lib/pending-idea";
 import {
   pickRandomSampleIdeas,
@@ -38,6 +39,11 @@ const steps = [
 
 const inputClass =
   "zouzou-input w-full rounded-lg px-3.5 py-3 text-[15px] leading-7 text-ink";
+const UNDERSTANDING_LABELS = [
+  "正在理解你...",
+  "正在找你最在意的问题...",
+  "正在准备几个选项...",
+];
 
 export function FirstRunGuide({
   guest,
@@ -61,6 +67,7 @@ export function FirstRunGuide({
   const [aiFallback, setAiFallback] = useState(false);
   const [samples, setSamples] = useState(sampleIdeasForDate);
   const signupTracked = useRef(false);
+  const understandingLabel = useRotatingText(generating, UNDERSTANDING_LABELS);
 
   useEffect(() => {
     if (!signupEvent || signupTracked.current) return;
@@ -254,7 +261,7 @@ export function FirstRunGuide({
                     {generating ? (
                       <>
                         <Sparkles className="size-4 animate-pulse" />
-                        正在理解你...
+                        {understandingLabel}
                       </>
                     ) : (
                       <>

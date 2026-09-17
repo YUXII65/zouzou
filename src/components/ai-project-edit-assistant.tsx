@@ -6,7 +6,15 @@ import {
   getProjectEditSuggestion,
   recordEditSuggestionApplied,
 } from "@/app/actions";
+import { useRotatingText } from "@/components/rotating-text";
+import { TypewriterText } from "@/components/typewriter-text";
 import type { ProjectEditSuggestion } from "@/lib/ai";
+
+const WAITING_LABELS = [
+  "正在看项目当前的状态...",
+  "正在判断目标和里程碑怎么改...",
+  "正在写修改建议...",
+];
 
 const inputClass =
   "zouzou-input w-full rounded-lg px-3 py-2 text-sm leading-6 text-ink";
@@ -34,6 +42,7 @@ export function AiProjectEditAssistant({
     null,
   );
   const [loading, setLoading] = useState(false);
+  const waitingLabel = useRotatingText(loading, WAITING_LABELS);
 
   async function generate() {
     if (!idea.trim()) return;
@@ -119,13 +128,15 @@ export function AiProjectEditAssistant({
           className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border bg-surface px-3 text-xs font-medium text-ink-secondary transition-colors hover:border-accent hover:text-accent disabled:cursor-not-allowed disabled:opacity-50"
         >
           <Sparkles className="size-3.5" />
-          {loading ? "AI 思考中..." : "让 AI 给修改建议"}
+          {loading ? waitingLabel : "让 AI 给修改建议"}
         </button>
       </div>
 
       {suggestion ? (
         <div className="mt-3 rounded-lg bg-surface p-3">
-          <p className="text-sm leading-6 text-ink">{suggestion.reason}</p>
+          <p className="text-sm leading-6 text-ink">
+            <TypewriterText text={suggestion.reason} />
+          </p>
           <button
             type="button"
             onClick={apply}

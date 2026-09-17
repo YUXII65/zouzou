@@ -11,10 +11,8 @@ import { Panel, PanelHeader } from "@/components/panel";
 import { EmptyState } from "@/components/empty-state";
 import { StatusBadge } from "@/components/status-badge";
 import { ReviewDraftFeedback } from "@/components/review-draft-feedback";
-import { ReviewDateField } from "@/components/review-date-field";
-import { SubmitButton } from "@/components/submit-button";
+import { ReviewDraftGenerator } from "@/components/review-draft-generator";
 import { ReviewSaveForm } from "@/components/review-save-form";
-import { generateReviewDraftAction } from "@/app/actions";
 import { prisma } from "@/lib/prisma";
 import { requireUser } from "@/lib/auth";
 import { getFirstRunState } from "@/lib/first-run";
@@ -221,13 +219,7 @@ export default async function ReviewPage({
                 />
               </>
             ) : (
-              <form action={generateReviewDraftAction} className="space-y-4 p-4">
-                <ReviewDateField defaultValue={dateParam} />
-                <SubmitButton className="zouzou-primary-button inline-flex h-9 w-full items-center justify-center gap-2 rounded-lg bg-accent px-4 text-sm font-medium text-white transition-colors hover:bg-accent-strong disabled:cursor-not-allowed disabled:opacity-60">
-                  <CalendarDays className="size-4" />
-                  生成复盘
-                </SubmitButton>
-              </form>
+              <ReviewDraftGenerator defaultDate={dateParam} />
             )}
           </Panel>
 

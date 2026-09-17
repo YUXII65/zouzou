@@ -22,6 +22,8 @@ import {
 } from "@/lib/auth";
 import { endOfDay, startOfDay, toDateInputValue } from "@/lib/date";
 import { buildAiContext } from "@/lib/ai-context";
+import { createInboxClarification, createInboxPlan } from "@/lib/inbox-ai";
+import { createReviewDraft } from "@/lib/review-ai";
 import { recordAiFeedback } from "@/lib/feedback";
 import { recordUsageEvent } from "@/lib/usage";
 import { isAiQuotaEnabled, withAiQuota } from "@/lib/ai-quota";
@@ -38,7 +40,6 @@ import { buildTaskContract } from "@/lib/task-contract";
 import {
   clarifyInbox,
   generateFirstRunPlan,
-  generateReviewDraft,
   generateTaskCoachAdvice,
   generateTaskEditSuggestion,
   generateTaskShortTitle,
@@ -655,57 +656,11 @@ export async function addInboxItemAndClarify(formData: FormData) {
   if (!content) return;
   const user = await requireUser();
   const { apiKey, model, baseUrl } = clientAiOverrides(formData);
-
-  const item = await prisma.inboxItem.create({
-    data: {
-      userId: user.id,
-      content,
-      source: "manual",
-    },
-  });
-
-  const projects = await prisma.project.findMany({
-    where: { userId: user.id },
-    select: {
-      name: true,
-      objective: true,
-      currentMilestone: true,
-    },
-    orderBy: { name: "asc" },
-  });
-  const projectContext = projects.map((project) => ({
-    name: project.name,
-    objective: project.objective,
-    currentMilestone: project.currentMilestone,
-  }));
-  const aiContext = await buildAiContext({
-    kind: "inbox_plan",
-    inboxItemId: item.id,
+  return createInboxClarification({
     userId: user.id,
+    content,
+    overrides: { apiKey, model, baseUrl },
   });
-
-  const clarification = await withAiQuota("inbox_clarify", () =>
-    clarifyInbox(
-      content,
-      projects.map((project) => project.name),
-      apiKey,
-      model,
-      baseUrl,
-      projectContext,
-      aiContext.summary,
-      aiContext.evidence,
-    ),
-  );
-
-  await prisma.inboxItem.update({
-    where: { id: item.id, userId: user.id },
-    data: {
-      aiSuggestionJson: JSON.stringify(clarification),
-      aiAnalyzedAt: new Date(),
-    },
-  });
-
-  return { itemId: item.id, content, clarification };
 }
 
 export async function getTaskEditSuggestion(input: {
@@ -1127,58 +1082,14 @@ export async function generateInboxPlan(formData: FormData) {
     .map((index) => text(formData, `choice_${index}`))
     .filter((choice): choice is string => Boolean(choice));
   const { apiKey, model, baseUrl } = clientAiOverrides(formData);
-
-  const item = await prisma.inboxItem.findUnique({
-    where: { id, userId: user.id },
-    select: { id: true, content: true, status: true },
-  });
-
-  if (!item || item.status !== "inbox") return;
-
-  const projects = await prisma.project.findMany({
-    where: { userId: user.id },
-    select: {
-      name: true,
-      objective: true,
-      currentMilestone: true,
-    },
-    orderBy: { name: "asc" },
-  });
-  const aiContext = await buildAiContext({
-    kind: "inbox_plan",
-    inboxItemId: item.id,
+  return createInboxPlan({
     userId: user.id,
+    itemId: id,
+    option: option ?? undefined,
+    supplement: supplement ?? undefined,
+    dimensionChoices,
+    overrides: { apiKey, model, baseUrl },
   });
-  const plan = await withAiQuota("inbox_plan", () =>
-    planInbox(
-      item.content,
-      projects.map((project) => project.name),
-      apiKey,
-      model,
-      baseUrl,
-      option ?? undefined,
-      supplement ?? undefined,
-      projects.map((project) => ({
-        name: project.name,
-        objective: project.objective,
-        currentMilestone: project.currentMilestone,
-      })),
-      aiContext.summary,
-      dimensionChoices,
-      aiContext.evidence,
-      aiContext.maxPlanTasks,
-    ),
-  );
-
-  await prisma.inboxItem.update({
-    where: { id, userId: user.id },
-    data: {
-      aiPlanJson: JSON.stringify(plan),
-      aiAnalyzedAt: new Date(),
-    },
-  });
-
-  return plan;
 }
 
 export async function confirmInboxPlan(formData: FormData) {
@@ -1488,93 +1399,11 @@ export async function generateReviewDraftAction(formData: FormData) {
   const user = await requireUser();
   const today = startOfDay();
   const reviewDate = dateInput(formData, "reviewDate") ?? today;
-  const dayStart = startOfDay(reviewDate);
-  const dayEnd = endOfDay(reviewDate);
-
-  const [completedTasks, openTasks, plannedTasks, activeProjects] =
-    await Promise.all([
-    prisma.task.findMany({
-      where: {
-        userId: user.id,
-        completedAt: { gte: dayStart, lte: dayEnd },
-        status: "done",
-      },
-      select: { title: true, project: { select: { name: true } } },
-      orderBy: [{ completedAt: "desc" }, { id: "asc" }],
-    }),
-    prisma.task.findMany({
-      where: { status: { in: ["todo", "in_progress"] }, userId: user.id },
-      select: { title: true, project: { select: { name: true } } },
-      orderBy: [{ createdAt: "desc" }, { id: "asc" }],
-      take: 20,
-    }),
-    prisma.task.findMany({
-      where: {
-        userId: user.id,
-        status: { in: ["todo", "in_progress"] },
-        OR: [
-          { scheduledDate: { gte: dayStart, lte: dayEnd } },
-          { focusDate: { gte: dayStart, lte: dayEnd } },
-          { createdAt: { gte: dayStart, lte: dayEnd } },
-        ],
-      },
-      select: { title: true },
-      orderBy: [{ createdAt: "desc" }, { id: "asc" }],
-      take: 20,
-    }),
-    prisma.project.findMany({
-      where: { status: "active", userId: user.id },
-      select: {
-        name: true,
-        currentMilestone: true,
-        _count: { select: { tasks: true } },
-      },
-      orderBy: [{ updatedAt: "desc" }, { id: "asc" }],
-    }),
-  ]);
-
-  const aiContext = await buildAiContext({ kind: "review", userId: user.id });
-  const draft = await withAiQuota("review_draft", () =>
-    generateReviewDraft(
-      {
-        completed: completedTasks.map((task) => ({
-          title: task.title,
-          projectName: task.project?.name ?? null,
-        })),
-        open: openTasks.map((task) => ({
-          title: task.title,
-          projectName: task.project?.name ?? null,
-        })),
-        planned: plannedTasks.map((task) => ({ title: task.title })),
-        projects: activeProjects.map((project) => ({
-          name: project.name,
-          currentMilestone: project.currentMilestone,
-          taskCount: project._count.tasks,
-        })),
-      },
-      aiContext.evidence,
-    ),
-  );
-
-  await prisma.review.upsert({
-    where: { userId_reviewDate: { userId: user.id, reviewDate } },
-    update: {
-      summary: draft.summary,
-      nextActions: draft.nextActions,
-      status: "draft",
-    },
-    create: {
-      userId: user.id,
-      reviewDate,
-      summary: draft.summary,
-      nextActions: draft.nextActions,
-      status: "draft",
-    },
+  const result = await createReviewDraft({
+    userId: user.id,
+    reviewDate,
   });
-
-  revalidatePath("/");
-  revalidatePath("/review");
-  redirect(`/review?date=${toDateInputValue(reviewDate)}`);
+  redirect(`/review?date=${result.date}`);
 }
 
 async function syncReviewRelations(

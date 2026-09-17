@@ -6,12 +6,20 @@ import {
   createTaskStickyNote,
   deleteTaskStickyNote,
 } from "@/app/actions";
+import { useRotatingText } from "@/components/rotating-text";
+import { TypewriterText } from "@/components/typewriter-text";
 import { trackEvent } from "@/lib/track";
 import { useClickOutside } from "@/lib/use-click-outside";
 import type { TaskStickyNoteData } from "@/lib/task-sticky";
 
 const DEFAULT_MESSAGE =
   "这个任务我还没有头绪，请给我一个能直接开始的行动方案";
+const STICKY_WAITING_LABELS = [
+  "正在看这项任务...",
+  "正在找能立刻开始的动作...",
+  "正在写具体步骤...",
+  "快写好了...",
+];
 
 function formatNoteTime(value: string) {
   return new Intl.DateTimeFormat("zh-CN", {
@@ -49,6 +57,7 @@ export function AiTaskSticky({
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
   const [supplementOpen, setSupplementOpen] = useState(false);
+  const waitingLabel = useRotatingText(loading, STICKY_WAITING_LABELS);
 
   useEffect(() => {
     setSavedNotes(initialNotes);
@@ -234,8 +243,13 @@ export function AiTaskSticky({
           </div>
 
           {loading ? (
-            <p className="mt-4 text-sm leading-6 text-ink-secondary">
-              AI 正在写便利贴...
+            <p className="mt-4 inline-flex items-center gap-2 text-sm leading-6 text-ink-secondary">
+              <span className="flex gap-1">
+                <span className="size-1.5 animate-[zouzou-soft-pulse_1s_ease-in-out_infinite] rounded-full bg-ai" />
+                <span className="size-1.5 animate-[zouzou-soft-pulse_1s_ease-in-out_infinite] rounded-full bg-ai [animation-delay:150ms]" />
+                <span className="size-1.5 animate-[zouzou-soft-pulse_1s_ease-in-out_infinite] rounded-full bg-ai [animation-delay:300ms]" />
+              </span>
+              {waitingLabel}
             </p>
           ) : savedNotes.length ? (
             <div className="mt-3 max-h-80 space-y-2 overflow-y-auto pr-1">
@@ -301,7 +315,7 @@ export function AiTaskSticky({
                     {active ? (
                       <div className="mt-2 border-t border-warning/20 pt-2">
                         <p className="text-xs leading-5 text-ink-secondary">
-                          {note.encouragement}
+                          <TypewriterText text={note.encouragement} />
                         </p>
                         <ol className="mt-2 space-y-1.5">
                           {note.steps.map((step, stepIndex) => (
@@ -312,12 +326,12 @@ export function AiTaskSticky({
                               <span className="mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-full bg-surface/80 text-xs font-medium text-ink-secondary">
                                 {stepIndex + 1}
                               </span>
-                              {step}
+                              <TypewriterText text={step} />
                             </li>
                           ))}
                         </ol>
                         <p className="mt-2 rounded-md bg-surface/75 px-3 py-2 text-sm leading-6 text-ink">
-                          现在可以做：{note.nextStep}
+                          现在可以做：<TypewriterText text={note.nextStep} />
                         </p>
                       </div>
                     ) : (

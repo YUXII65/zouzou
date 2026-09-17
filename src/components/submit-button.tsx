@@ -4,6 +4,7 @@ import { useFormStatus } from "react-dom";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { Loader2 } from "lucide-react";
+import { useRotatingText } from "@/components/rotating-text";
 
 /**
  * 统一的提交按钮。
@@ -13,6 +14,7 @@ export function SubmitButton({
   children,
   pendingText = "处理中...",
   slowPendingText,
+  rotatingText,
   className,
   disabled = false,
   refreshOnSuccess = true,
@@ -20,6 +22,7 @@ export function SubmitButton({
   children: ReactNode;
   pendingText?: string | null;
   slowPendingText?: string;
+  rotatingText?: string[];
   className?: string;
   disabled?: boolean;
   refreshOnSuccess?: boolean;
@@ -28,6 +31,10 @@ export function SubmitButton({
   const router = useRouter();
   const wasPending = useRef(false);
   const [slow, setSlow] = useState(false);
+  const rotatingLabel = useRotatingText(
+    pending && pendingText !== null,
+    rotatingText ?? [],
+  );
 
   useEffect(() => {
     if (pending) {
@@ -47,9 +54,11 @@ export function SubmitButton({
   const label = pending
     ? pendingText === null
       ? children
-      : slow
-        ? (slowPendingText ?? pendingText)
-        : pendingText
+      : rotatingText?.length
+        ? rotatingLabel
+        : slow
+          ? (slowPendingText ?? pendingText)
+          : pendingText
     : children;
 
   return (

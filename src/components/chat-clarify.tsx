@@ -2,12 +2,15 @@
 
 import { useEffect, useRef, useState } from "react";
 import { Check, CornerDownLeft, Send, Sparkles } from "lucide-react";
+import { useRotatingText } from "@/components/rotating-text";
+import { TypewriterText } from "@/components/typewriter-text";
 import type { InboxClarificationDimension } from "@/lib/ai";
 
 type Props = {
   dimensions: InboxClarificationDimension[];
   supplementPlaceholder: string;
   busy?: boolean;
+  liveText?: string;
   submitLabel?: string;
   onSubmit: (payload: { answers: string[][]; supplement: string }) => void;
 };
@@ -20,6 +23,12 @@ type Turn = {
 };
 
 const TYPING_MS = 600;
+const WAITING_LABELS = [
+  "正在把你的选择合在一起...",
+  "正在判断这次推进的重点...",
+  "正在把任务写具体...",
+  "快整理好了...",
+];
 
 function closingFor(answers: string[]) {
   const signal = answers.join(" ");
@@ -55,6 +64,7 @@ function closingFor(answers: string[]) {
 export function ChatClarify({
   dimensions,
   busy = false,
+  liveText = "",
   submitLabel = "看看怎么走",
   onSubmit,
 }: Props) {
@@ -76,8 +86,8 @@ export function ChatClarify({
   const [done, setDone] = useState(dimensions.length === 0);
   const [typed, setTyped] = useState("");
   const [directInput, setDirectInput] = useState(false);
-  const [slowBusy, setSlowBusy] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const waitingLabel = useRotatingText(busy, WAITING_LABELS);
 
   const answeredCount = answers.length;
   const lastTurn = turns[turns.length - 1];
@@ -88,17 +98,7 @@ export function ChatClarify({
   useEffect(() => {
     const node = scrollRef.current;
     if (node) node.scrollTop = node.scrollHeight;
-  }, [turns, thinking, done, busy]);
-
-  // 等待超过 8 秒就给出刷新入口，避免用户以为界面卡死。
-  useEffect(() => {
-    if (!busy) {
-      setSlowBusy(false);
-      return;
-    }
-    const timer = window.setTimeout(() => setSlowBusy(true), 8000);
-    return () => window.clearTimeout(timer);
-  }, [busy]);
+  }, [turns, thinking, done, busy, liveText]);
 
   function toggle(option: string) {
     if (busy || thinking) return;
@@ -193,7 +193,10 @@ export function ChatClarify({
                 </span>
                 <div className="min-w-0 max-w-full">
                   <div className="rounded-xl rounded-tl-sm border border-border/70 bg-surface px-3 py-2.5 text-sm leading-6 text-ink">
-                    {turn.text}
+                    <TypewriterText
+                      text={turn.text}
+                      animate={index === turns.length - 1}
+                    />
                   </div>
                   {showOptions && index === turns.length - 1 ? (
                     <div className="mt-2">
@@ -261,10 +264,27 @@ export function ChatClarify({
             <span className="mt-1 flex size-6 shrink-0 items-center justify-center rounded-md bg-accent-soft text-accent-strong">
               <Sparkles className="size-3.5" />
             </span>
-            <div className="flex items-center gap-1 rounded-xl rounded-tl-sm border border-border/70 bg-surface px-3 py-2.5">
-              <span className="size-1.5 animate-[zouzou-soft-pulse_1s_ease-in-out_infinite] rounded-full bg-ink-muted" />
-              <span className="size-1.5 animate-[zouzou-soft-pulse_1s_ease-in-out_infinite] rounded-full bg-ink-muted [animation-delay:150ms]" />
-              <span className="size-1.5 animate-[zouzou-soft-pulse_1s_ease-in-out_infinite] rounded-full bg-ink-muted [animation-delay:300ms]" />
+            <div className="max-w-[86%] rounded-xl rounded-tl-sm border border-border/70 bg-surface px-3 py-2.5 text-sm leading-6 text-ink-secondary">
+              {liveText ? (
+                <span className="whitespace-pre-wrap">
+                  {liveText}
+                  <span
+                    className="ml-0.5 inline-block animate-pulse text-accent"
+                    aria-hidden
+                  >
+                    |
+                  </span>
+                </span>
+              ) : (
+                <span className="inline-flex items-center gap-2">
+                  <span className="flex gap-1">
+                    <span className="size-1.5 animate-[zouzou-soft-pulse_1s_ease-in-out_infinite] rounded-full bg-ink-muted" />
+                    <span className="size-1.5 animate-[zouzou-soft-pulse_1s_ease-in-out_infinite] rounded-full bg-ink-muted [animation-delay:150ms]" />
+                    <span className="size-1.5 animate-[zouzou-soft-pulse_1s_ease-in-out_infinite] rounded-full bg-ink-muted [animation-delay:300ms]" />
+                  </span>
+                  {waitingLabel}
+                </span>
+              )}
             </div>
           </div>
         ) : null}
@@ -316,7 +336,7 @@ export function ChatClarify({
                     <span className="size-1 animate-[zouzou-soft-pulse_1s_ease-in-out_infinite] rounded-full bg-white [animation-delay:160ms]" />
                     <span className="size-1 animate-[zouzou-soft-pulse_1s_ease-in-out_infinite] rounded-full bg-white [animation-delay:320ms]" />
                   </span>
-                  {slowBusy ? "还在整理" : "正在整理"}
+                  {waitingLabel}
                 </span>
               ) : (
                 submitLabel

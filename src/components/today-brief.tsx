@@ -4,8 +4,16 @@ import { useActionState, useState } from "react";
 import { Focus, Sparkles, ThumbsDown, ThumbsUp } from "lucide-react";
 import { generateTodaySuggestion, recordSuggestionFeedback } from "@/app/actions";
 import { SubmitButton } from "@/components/submit-button";
+import { TypewriterText } from "@/components/typewriter-text";
 import type { TodaySuggestion } from "@/lib/ai";
 import { trackEvent } from "@/lib/track";
+
+const BRIEF_WAITING_LABELS = [
+  "正在看今天的任务...",
+  "正在判断先推进哪件...",
+  "正在写推荐理由...",
+  "快整理好了...",
+];
 
 export function TodayBrief({
   initialSuggestions,
@@ -57,7 +65,7 @@ export function TodayBrief({
                   {suggestion.title}
                 </p>
                 <p className="mt-1 text-xs leading-5 text-ink-secondary">
-                  {suggestion.reason}
+                  <TypewriterText text={suggestion.reason} />
                 </p>
                 {suggestion.evidence.length ? (
                   <div className="mt-2 flex flex-wrap gap-1.5">
@@ -121,6 +129,7 @@ export function TodayBrief({
       >
         <SubmitButton
           pendingText="正在理解今天..."
+          rotatingText={BRIEF_WAITING_LABELS}
           className="zouzou-secondary-button inline-flex h-9 items-center gap-2 rounded-lg border border-border bg-surface px-3 text-sm font-medium text-ink-secondary transition-colors hover:border-accent hover:text-accent"
         >
           <Sparkles className="size-4" />

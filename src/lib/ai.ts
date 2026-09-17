@@ -1,4 +1,5 @@
 import { toDateInputValue } from "@/lib/date";
+import { after } from "next/server";
 import { buildTaskContract } from "@/lib/task-contract";
 import {
   estimateAiUsage,
@@ -224,6 +225,70 @@ function safePlanTask(value: unknown): InboxPlanTask {
   };
 }
 
+type CallModelOptions = {
+  onDelta?: (delta: string) => void;
+  reasoningEffort?: "none" | "low" | "medium" | "high";
+  maxTokens?: number;
+};
+
+type ChatCompletionUsage = {
+  prompt_tokens?: number;
+  completion_tokens?: number;
+  total_tokens?: number;
+  prompt_cache_hit_tokens?: number;
+  prompt_cache_miss_tokens?: number;
+};
+
+type ChatCompletionPayload = {
+  choices?: Array<{
+    message?: { content?: string };
+    delta?: { content?: string };
+  }>;
+  usage?: ChatCompletionUsage;
+};
+
+async function readStreamingContent(
+  response: Response,
+  onDelta: (delta: string) => void,
+) {
+  const reader = response.body?.getReader();
+  if (!reader) return { content: "", usage: undefined };
+
+  const decoder = new TextDecoder();
+  let buffer = "";
+  let content = "";
+  let usage: ChatCompletionUsage | undefined;
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+
+    buffer += decoder.decode(value, { stream: true });
+    const lines = buffer.split(/\r?\n/);
+    buffer = lines.pop() ?? "";
+
+    for (const line of lines) {
+      if (!line.startsWith("data:")) continue;
+      const payloadText = line.slice(5).trim();
+      if (!payloadText || payloadText === "[DONE]") continue;
+
+      try {
+        const payload = JSON.parse(payloadText) as ChatCompletionPayload;
+        const delta = payload.choices?.[0]?.delta?.content ?? "";
+        if (delta) {
+          content += delta;
+          onDelta(delta);
+        }
+        if (payload.usage) usage = payload.usage;
+      } catch {
+        // Some compatible providers send keep-alive data that is not JSON.
+      }
+    }
+  }
+
+  return { content, usage };
+}
+
 async function callModel(
   system: string,
   user: string,
@@ -231,6 +296,7 @@ async function callModel(
   modelOverride?: string,
   baseUrlOverride?: string,
   temperatureOverride = 0.2,
+  options: CallModelOptions = {},
 ) {
   const apiKey =
     apiKeyOverride ||
@@ -250,6 +316,7 @@ async function callModel(
 
   const startedAt = Date.now();
   const totalBudgetMs = 26_000;
+  let streamed = false;
 
   for (let attempt = 0; attempt < 2; attempt += 1) {
     if (isAiQuotaEnabled() && !(await hasAiQuota())) return null;
@@ -259,6 +326,9 @@ async function callModel(
     if (remaining <= 2_000) return null;
 
     try {
+      const shouldStream = Boolean(options.onDelta);
+      const useDeepSeekReasoningControl =
+        /deepseek/i.test(model) || /deepseek/i.test(baseUrl);
       const response = await fetch(`${baseUrl}/chat/completions`, {
         method: "POST",
         headers: {
@@ -272,6 +342,16 @@ async function callModel(
             { role: "user", content: user },
           ],
           temperature: temperatureOverride,
+          ...(useDeepSeekReasoningControl
+            ? { reasoning_effort: options.reasoningEffort ?? "none" }
+            : {}),
+          ...(options.maxTokens ? { max_tokens: options.maxTokens } : {}),
+          ...(shouldStream
+            ? {
+                stream: true,
+                stream_options: { include_usage: true },
+              }
+            : {}),
         }),
         signal: AbortSignal.timeout(Math.min(20_000, remaining)),
       });
@@ -289,34 +369,41 @@ async function callModel(
         return null;
       }
 
-      const data = (await response.json()) as {
-        choices?: Array<{ message?: { content?: string } }>;
-        usage?: {
-          prompt_tokens?: number;
-          completion_tokens?: number;
-          total_tokens?: number;
-          prompt_cache_hit_tokens?: number;
-          prompt_cache_miss_tokens?: number;
-        };
-      };
-      const content = data.choices?.[0]?.message?.content ?? null;
+      const streamedResponse = shouldStream
+        ? await readStreamingContent(response, (delta) => {
+            streamed = true;
+            options.onDelta?.(delta);
+          })
+        : null;
+      const data = streamedResponse
+        ? null
+        : ((await response.json()) as ChatCompletionPayload);
+      const content =
+        streamedResponse?.content ??
+        data?.choices?.[0]?.message?.content ??
+        null;
+      const responseUsage = streamedResponse?.usage ?? data?.usage;
 
-      const usage = data.usage
+      const usage = responseUsage
         ? {
-            promptTokens: data.usage.prompt_tokens ?? 0,
-            completionTokens: data.usage.completion_tokens ?? 0,
-            totalTokens: data.usage.total_tokens ?? 0,
-            promptCacheHitTokens: data.usage.prompt_cache_hit_tokens ?? null,
-            promptCacheMissTokens: data.usage.prompt_cache_miss_tokens ?? null,
+            promptTokens: responseUsage.prompt_tokens ?? 0,
+            completionTokens: responseUsage.completion_tokens ?? 0,
+            totalTokens: responseUsage.total_tokens ?? 0,
+            promptCacheHitTokens: responseUsage.prompt_cache_hit_tokens ?? null,
+            promptCacheMissTokens: responseUsage.prompt_cache_miss_tokens ?? null,
             model,
           }
         : await estimateAiUsage({ system, user }, content);
-      await recordAiUsage(usage);
+      after(() => recordAiUsage(usage));
 
+      console.info(
+        `[ai] model=${model} stream=${shouldStream ? "yes" : "no"} total=${Date.now() - startedAt}ms`,
+      );
       return content;
     } catch (error) {
       console.warn("[ai] request error", error);
       if (
+        !streamed &&
         attempt === 0 &&
         totalBudgetMs - (Date.now() - startedAt) > 6_000
       ) {
@@ -763,6 +850,7 @@ export async function clarifyInbox(
   projectContext?: InboxProjectContext[],
   memorySummary?: string,
   evidence?: string[],
+  onDelta?: (delta: string) => void,
 ) {
   const fallback = heuristicClarification(content, projectNames);
   const text = await callModel(
@@ -784,6 +872,7 @@ export async function clarifyInbox(
     model,
     baseUrl,
     0.7,
+    { onDelta, maxTokens: 1200 },
   );
 
   if (!text) return fallback;
@@ -854,6 +943,7 @@ export async function planInbox(
   dimensionChoices?: string[],
   evidence?: string[],
   maxTasks?: number,
+  onDelta?: (delta: string) => void,
 ) {
   const clarifiedContent = [content, direction, supplement]
     .filter((part): part is string => Boolean(part?.trim()))
@@ -889,6 +979,7 @@ export async function planInbox(
     model,
     baseUrl,
     0.65,
+    { onDelta, maxTokens: 1600 },
   );
 
   if (!text) return fallback;
@@ -1617,7 +1708,7 @@ export async function generateReviewDraft(input: {
     currentMilestone: string | null;
     taskCount: number;
   }>;
-}, evidence?: string[]) {
+}, evidence?: string[], onDelta?: (delta: string) => void) {
   const fallback = heuristicReview(
     input.completed,
     input.open,
@@ -1632,6 +1723,7 @@ export async function generateReviewDraft(input: {
     undefined,
     undefined,
     0.65,
+    { onDelta, maxTokens: 1200 },
   );
 
   if (!text) return fallback;

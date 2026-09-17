@@ -1,11 +1,11 @@
 "use client";
 
-import { useEffect, useState, useTransition } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Sparkles } from "lucide-react";
-import { generateInboxPlan } from "@/app/actions";
 import { ChatClarify } from "@/components/chat-clarify";
 import { InboxPlanEditor } from "@/components/inbox-plan-editor";
+import { consumeAiStream } from "@/lib/ai-stream-client";
 import type {
   InboxClarificationDimension,
   InboxPlan,
@@ -24,7 +24,9 @@ export function InboxClarification({
 }) {
   const [apiKey, setApiKey] = useState("");
   const [localPlan, setLocalPlan] = useState<InboxPlan | null>(null);
-  const [pending, startTransition] = useTransition();
+  const [pending, setPending] = useState(false);
+  const [streamPreview, setStreamPreview] = useState("");
+  const [error, setError] = useState("");
   const router = useRouter();
 
   useEffect(() => {
@@ -34,20 +36,32 @@ export function InboxClarification({
     return () => window.clearTimeout(timer);
   }, []);
 
-  function submit(payload: { answers: string[][]; supplement: string }) {
-    const formData = new FormData();
-    formData.set("id", itemId);
-    formData.set("option", payload.answers[0]?.join("、") ?? "");
-    payload.answers.forEach((group, index) => {
-      formData.set(`choice_${index}`, group.join("、"));
-    });
-    formData.set("supplement", payload.supplement);
-    formData.set("apiKey", apiKey);
-    startTransition(async () => {
-      const plan = await generateInboxPlan(formData);
-      if (plan) setLocalPlan(plan);
+  async function submit(payload: { answers: string[][]; supplement: string }) {
+    if (pending) return;
+    setPending(true);
+    setError("");
+    setStreamPreview("");
+    try {
+      const response = await fetch("/api/ai/inbox/plan", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          itemId,
+          option: payload.answers[0]?.join("、") ?? "",
+          dimensionChoices: payload.answers.map((group) => group.join("、")),
+          supplement: payload.supplement,
+          apiKey,
+        }),
+      });
+      const plan = await consumeAiStream<InboxPlan>(response, setStreamPreview);
+      setLocalPlan(plan);
       router.refresh();
-    });
+    } catch {
+      setError("这次没有整理出来，再试一次");
+    } finally {
+      setPending(false);
+      setStreamPreview("");
+    }
   }
 
   if (localPlan) {
@@ -67,6 +81,7 @@ export function InboxClarification({
           dimensions={dimensions}
           supplementPlaceholder={supplementPlaceholder}
           busy={pending}
+          liveText={streamPreview}
           submitLabel="确定方向，给我下一步"
           onSubmit={submit}
         />
@@ -89,6 +104,7 @@ export function InboxClarification({
             <Sparkles className="size-4" />
             {pending ? "正在整理..." : "给我下一步"}
           </button>
+          {error ? <p className="mt-2 text-xs text-danger">{error}</p> : null}
         </form>
       )}
     </div>

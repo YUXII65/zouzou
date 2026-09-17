@@ -4,6 +4,7 @@ import { useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import { CheckCircle2, Loader2, Sparkles } from "lucide-react";
 import { confirmInboxPlan } from "@/app/actions";
+import { TypewriterText } from "@/components/typewriter-text";
 import type { InboxPlan } from "@/lib/ai";
 
 const inputClass =
@@ -169,7 +170,7 @@ export function InboxPlanEditor({
       <div className="rounded-lg bg-accent-soft/60 p-3 text-sm leading-6 text-ink-secondary">
         <div className="flex items-start gap-2">
           <Sparkles className="mt-1 size-4 shrink-0 text-accent" />
-          <span>{plan.reason}</span>
+          <TypewriterText text={plan.reason} />
         </div>
       </div>
 

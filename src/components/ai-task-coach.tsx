@@ -3,12 +3,19 @@
 import { useState } from "react";
 import { MessageCircle, Sparkles, ThumbsDown, ThumbsUp, X } from "lucide-react";
 import { getTaskCoachAdvice, recordSuggestionFeedback } from "@/app/actions";
+import { useRotatingText } from "@/components/rotating-text";
+import { TypewriterText } from "@/components/typewriter-text";
 import { trackEvent } from "@/lib/track";
 import { useClickOutside } from "@/lib/use-click-outside";
 import type { TaskCoachAdvice } from "@/lib/ai";
 
 const inputClass =
   "zouzou-input w-full rounded-lg px-3 py-2 text-sm leading-6 text-ink";
+const WAITING_LABELS = [
+  "正在看你卡在哪里...",
+  "正在找能直接开始的动作...",
+  "正在写具体建议...",
+];
 
 export function AiTaskCoach({
   taskId,
@@ -31,6 +38,7 @@ export function AiTaskCoach({
   const [advice, setAdvice] = useState<TaskCoachAdvice | null>(null);
   const [loading, setLoading] = useState(false);
   const [feedback, setFeedback] = useState<"useful" | "useless" | null>(null);
+  const waitingLabel = useRotatingText(loading, WAITING_LABELS);
 
   async function ask() {
     if (!message.trim()) return;
@@ -87,10 +95,10 @@ export function AiTaskCoach({
             <div className="zouzou-ai-card mt-3 p-3">
               <p className="text-xs text-ink-muted">你说：“{message}”</p>
               <p className="mt-2 text-sm font-semibold text-ink">
-                {advice.title}
+                <TypewriterText text={advice.title} />
               </p>
               <p className="mt-1 text-sm leading-6 text-ink-secondary">
-                {advice.encouragement}
+                <TypewriterText text={advice.encouragement} />
               </p>
               <ol className="mt-3 space-y-2">
                 {advice.steps.map((step, index) => (
@@ -101,12 +109,12 @@ export function AiTaskCoach({
                     <span className="mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-full bg-surface-muted text-xs font-medium text-ink-secondary">
                       {index + 1}
                     </span>
-                    {step}
+                    <TypewriterText text={step} />
                   </li>
                 ))}
               </ol>
               <p className="mt-3 rounded-md bg-surface-muted/80 px-3 py-2 text-sm leading-6 text-ink">
-                现在可以做：{advice.nextStep}
+                现在可以做：<TypewriterText text={advice.nextStep} />
               </p>
             </div>
           ) : (
@@ -128,7 +136,7 @@ export function AiTaskCoach({
                 className="zouzou-primary-button mt-2 inline-flex h-8 items-center gap-1.5 rounded-md bg-accent px-3 text-xs font-medium text-white transition-colors hover:bg-accent-strong disabled:cursor-not-allowed disabled:opacity-50"
               >
                 <Sparkles className="size-3.5" />
-                {loading ? "AI 正在写便利贴..." : "帮我想想"}
+                {loading ? waitingLabel : "帮我想想"}
               </button>
             </>
           )}
