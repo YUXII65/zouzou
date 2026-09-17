@@ -1,0 +1,251 @@
+{
+  "format": "zouzou-logical-dump",
+  "version": 1,
+  "createdAt": "2026-09-17T00:00:00.000Z",
+  "source": { "provider": "postgresql", "host": "fixture", "database": "fixture" },
+  "totalRows": 15,
+  "counts": {
+    "User": 1,
+    "Project": 2,
+    "InboxItem": 1,
+    "Task": 2,
+    "TaskStickyNote": 1,
+    "AiPlanFeedback": 1,
+    "UserPreference": 1,
+    "AiFeedbackEvent": 1,
+    "Review": 1,
+    "ReviewTask": 1,
+    "ReviewNextAction": 1,
+    "AiUsageLog": 1,
+    "UsageEvent": 1
+  },
+  "data": {
+    "User": [
+      {
+        "id": "u1",
+        "username": "fixture-user",
+        "passwordHash": "x",
+        "displayName": "样本用户",
+        "avatarUrl": null,
+        "createdAt": "2026-09-01T00:00:00.000Z",
+        "updatedAt": "2026-09-01T00:00:00.000Z"
+      }
+    ],
+    "Project": [
+      {
+        "id": "p1",
+        "userId": "u1",
+        "name": "带自环外键的项目",
+        "objective": "验证 Project.createdFromInboxItemId 的回填",
+        "status": "active",
+        "currentMilestone": "跑通恢复",
+        "notes": null,
+        "createdFromInboxItemId": "i1",
+        "lastReviewedAt": null,
+        "createdAt": "2026-09-02T00:00:00.000Z",
+        "updatedAt": "2026-09-02T00:00:00.000Z"
+      },
+      {
+        "id": "p2",
+        "userId": "u1",
+        "name": "没有自环外键的项目",
+        "objective": "覆盖 createdFromInboxItemId 为空的分支",
+        "status": "paused",
+        "currentMilestone": null,
+        "notes": "备注",
+        "createdFromInboxItemId": null,
+        "lastReviewedAt": "2026-09-10T00:00:00.000Z",
+        "createdAt": "2026-09-03T00:00:00.000Z",
+        "updatedAt": "2026-09-03T00:00:00.000Z"
+      }
+    ],
+    "InboxItem": [
+      {
+        "id": "i1",
+        "userId": "u1",
+        "content": "想做点什么",
+        "source": "manual",
+        "status": "processed",
+        "category": "project_note",
+        "title": "想法",
+        "projectId": "p1",
+        "priority": "high",
+        "dueDate": "2026-09-20T00:00:00.000Z",
+        "aiSuggestionJson": null,
+        "aiPlanJson": null,
+        "aiAnalyzedAt": null,
+        "confirmedAt": null,
+        "processedAt": "2026-09-02T00:00:00.000Z",
+        "createdAt": "2026-09-02T00:00:00.000Z",
+        "updatedAt": "2026-09-02T00:00:00.000Z"
+      }
+    ],
+    "Task": [
+      {
+        "id": "t1",
+        "userId": "u1",
+        "title": "第一条任务",
+        "shortTitle": "第一条",
+        "notes": null,
+        "projectId": "p1",
+        "status": "todo",
+        "priority": "medium",
+        "scheduledDate": "2026-09-02T00:00:00.000Z",
+        "dueDate": null,
+        "focusDate": null,
+        "completedAt": null,
+        "executionMode": "quick",
+        "doneWhen": "拿到答案",
+        "completedBy": null,
+        "maxTurns": 1,
+        "toolPolicy": "none",
+        "planOrder": 1,
+        "inboxItemId": "i1",
+        "createdAt": "2026-09-02T01:00:00.000Z",
+        "updatedAt": "2026-09-02T01:00:00.000Z"
+      },
+      {
+        "id": "t2",
+        "userId": "u1",
+        "title": "第二条任务",
+        "shortTitle": null,
+        "notes": "备注",
+        "projectId": "p2",
+        "status": "done",
+        "priority": "urgent",
+        "scheduledDate": null,
+        "dueDate": null,
+        "focusDate": null,
+        "completedAt": "2026-09-11T00:00:00.000Z",
+        "executionMode": null,
+        "doneWhen": null,
+        "completedBy": "user",
+        "maxTurns": null,
+        "toolPolicy": null,
+        "planOrder": null,
+        "inboxItemId": null,
+        "createdAt": "2026-09-04T00:00:00.000Z",
+        "updatedAt": "2026-09-11T00:00:00.000Z"
+      }
+    ],
+    "TaskStickyNote": [
+      {
+        "id": "s1",
+        "userId": "u1",
+        "taskId": "t1",
+        "sourceMessage": "想推起来",
+        "title": "便利贴标题",
+        "encouragement": "可以开始",
+        "stepsJson": "[\"第一步\",\"第二步\"]",
+        "nextStep": "先写第一段",
+        "createdAt": "2026-09-05T00:00:00.000Z",
+        "updatedAt": "2026-09-05T00:00:00.000Z"
+      }
+    ],
+    "AiPlanFeedback": [
+      {
+        "id": "apf1",
+        "userId": "u1",
+        "inboxItemId": "i1",
+        "action": "accepted",
+        "planJson": "{}",
+        "editedJson": null,
+        "createdAt": "2026-09-02T02:00:00.000Z",
+        "updatedAt": "2026-09-02T02:00:00.000Z"
+      }
+    ],
+    "UserPreference": [
+      {
+        "id": "up1",
+        "userId": "u1",
+        "key": "plan_scale",
+        "value": "few",
+        "source": "manual",
+        "note": null,
+        "createdAt": "2026-09-06T00:00:00.000Z",
+        "updatedAt": "2026-09-06T00:00:00.000Z"
+      }
+    ],
+    "AiFeedbackEvent": [
+      {
+        "id": "afe1",
+        "userId": "u1",
+        "source": "plan",
+        "action": "plan_accepted",
+        "inboxItemId": "i1",
+        "taskId": "t1",
+        "projectId": "p1",
+        "beforeJson": null,
+        "afterJson": null,
+        "detail": null,
+        "createdAt": "2026-09-02T03:00:00.000Z"
+      }
+    ],
+    "Review": [
+      {
+        "id": "r1",
+        "userId": "u1",
+        "reviewDate": "2026-09-11T16:00:00.000Z",
+        "summary": "今天推进了任务",
+        "nextActions": null,
+        "status": "final",
+        "createdAt": "2026-09-11T16:00:00.000Z",
+        "updatedAt": "2026-09-11T16:00:00.000Z"
+      }
+    ],
+    "ReviewTask": [
+      {
+        "id": "rt1",
+        "userId": "u1",
+        "reviewId": "r1",
+        "taskId": "t2",
+        "projectId": "p2",
+        "titleAtReview": "第二条任务",
+        "statusAtReview": "done",
+        "priorityAtReview": "urgent",
+        "createdAt": "2026-09-11T16:00:00.000Z"
+      }
+    ],
+    "ReviewNextAction": [
+      {
+        "id": "rna1",
+        "userId": "u1",
+        "reviewId": "r1",
+        "title": "明天的下一步",
+        "status": "pending",
+        "sortOrder": 0,
+        "taskId": null,
+        "createdAt": "2026-09-11T16:00:00.000Z",
+        "updatedAt": "2026-09-11T16:00:00.000Z"
+      }
+    ],
+    "AiUsageLog": [
+      {
+        "id": "aul1",
+        "userId": "u1",
+        "visitorId": "v1",
+        "feature": "plan",
+        "status": "ok",
+        "promptTokens": 100,
+        "completionTokens": 50,
+        "totalTokens": 150,
+        "promptCacheHitTokens": null,
+        "promptCacheMissTokens": null,
+        "model": "fixture",
+        "createdAt": "2026-09-02T04:00:00.000Z"
+      }
+    ],
+    "UsageEvent": [
+      {
+        "id": "ue1",
+        "userId": "u1",
+        "visitorId": null,
+        "event": "task_completed",
+        "page": "/workspace",
+        "detail": null,
+        "metadata": null,
+        "createdAt": "2026-09-11T05:00:00.000Z"
+      }
+    ]
+  }
+}

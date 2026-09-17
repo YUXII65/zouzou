@@ -1,5 +1,14 @@
 # 中心托管部署指南
 
+> **本文已过时（SQLite 阶段文档）**
+>
+> 数据库现在是 Neon Postgres，公开部署走 EdgeOne（见 [docs/deploy-edgeone.md](./deploy-edgeone.md)）。
+> 文中出现的 `DATABASE_URL="file:./dev.db"`、`prisma/dev.db` 都已失效 ——
+> Prisma 会直接拒绝 `file:` 连接串（必须以 `postgresql://` 开头）。
+> `APP_ACCESS_PASSWORD` 也已在应用代码里没有任何地方读取，"访问密码"从来没有生效过。
+> 保留本文只为追溯历史。
+
+
 这个方案适合“由你提供 DeepSeek API Key，访客只访问你部署的网页，不接触 Key”。
 
 ## 架构

@@ -18,8 +18,13 @@
     "db:seed:demo": "node scripts/seed-demo-data.mjs --force",
     "public:demo": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/start-public-demo.ps1",
     "public:demo:reset": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/start-public-demo.ps1 -Reset",
-    "eval:ai": "node scripts/evaluate-ai.mjs",
-    "metrics:ai": "node scripts/ai-metrics.mjs"
+    "eval:ai": "node --experimental-strip-types --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/evaluate-ai.mjs",
+    "metrics:ai": "node scripts/ai-metrics.mjs",
+    "typecheck": "tsc --noEmit",
+    "test": "node --experimental-strip-types --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --import ./scripts/ts-alias-loader.mjs --test \"src/**/*.test.ts\" \"scripts/**/*.test.mjs\"",
+    "db:verify": "node scripts/restore-db.mjs",
+    "db:verify:restore": "node scripts/verify-restore.mjs",
+    "db:verify:restore:fixture": "node scripts/verify-restore.mjs --fixture"
   },
   "dependencies": {
     "@prisma/client": "^6.19.3",
@@ -31,15 +36,23 @@
     "react-dom": "19.2.8"
   },
   "devDependencies": {
+    "@electric-sql/pglite": "^0.5.8",
+    "@electric-sql/pglite-socket": "^0.2.11",
+    "@next/eslint-plugin-next": "15.5.23",
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "@typescript-eslint/eslint-plugin": "^8.66.0",
+    "@typescript-eslint/parser": "^8.66.0",
     "eslint": "^9",
     "eslint-config-next": "15.5.23",
+    "eslint-plugin-jsx-a11y": "6.10.0",
+    "eslint-plugin-react": "7.37.0",
+    "eslint-plugin-react-hooks": "5.2.0",
     "prisma": "^6.19.3",
     "tailwindcss": "^4",
     "typescript": "^5"
   },
-  "packageManager": "pnpm@11.9.0"
+  "packageManager": "pnpm@11.19.0"
 }

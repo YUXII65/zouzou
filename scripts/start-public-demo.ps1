@@ -1,8 +1,45 @@
-param(
+﻿param(
   [switch]$Reset
 )
 
 $ErrorActionPreference = "Stop"
+
+# ---------------------------------------------------------------------------
+# 失效守卫（2026-09-17 加）
+#
+# 这个脚本来自 SQLite 单机阶段，现在整条路都是坏的：
+#
+#   1. 它把 DATABASE_URL 设成 "file:./public-demo.db"。数据库早已迁到 Neon
+#      Postgres（schema provider = "postgresql"），Prisma 会直接拒绝这个连接串：
+#      "the URL must start with the protocol postgresql:// or postgres://"
+#      —— 实测确认，任何碰数据库的请求都会失败。
+#
+#   2. 它设置 APP_ACCESS_PASSWORD，但整个 src/ 里没有任何代码读取这个变量，
+#      也没有 middleware。所谓"访问密码"从来没有生效过，实例实际上是公开的。
+#
+#   合起来就是：跑一次就会把一台连不上库、且没有访问密码的实例挂到公网隧道上。
+#   与其让它继续悄悄这么做，不如直接拦住。
+#
+#   现在对外分享/验收统一用正式域名 https://nextstep9.work（见 docs/deploy-edgeone.md）。
+#   如果确实要重建公开演示实例，请先改成连接 PostgreSQL、补上真正的访问控制，
+#   再删掉这段守卫。
+# ---------------------------------------------------------------------------
+$stopMessage = @"
+scripts/start-public-demo.ps1 已失效，未执行任何操作。
+
+原因：
+  1. 数据库已迁移到 PostgreSQL，脚本里的 DATABASE_URL="file:./public-demo.db"
+     会被 Prisma 直接拒绝（连接串必须以 postgresql:// 开头）。
+  2. 脚本设置的 APP_ACCESS_PASSWORD 在应用代码里没有任何地方读取，
+     这个"访问密码"从来没有生效过。
+
+继续跑这个脚本，只会把一台连不上数据库、且没有访问密码的实例挂到公网隧道上。
+
+现在对外分享请使用正式域名：https://nextstep9.work
+部署方式见：docs/deploy-edgeone.md
+"@
+Write-Host $stopMessage -ForegroundColor Red
+exit 1
 
 $root = Split-Path -Parent $PSScriptRoot
 $runtimeRoot = Join-Path $env:USERPROFILE ".cache\codex-runtimes\codex-primary-runtime\dependencies"

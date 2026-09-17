@@ -78,6 +78,20 @@ pnpm dev
 
 本地开发时，数据库连接、AI Key 和会话密钥通过 `.env` 配置，不要提交到仓库。
 
+## 开发校验
+
+```bash
+pnpm typecheck   # TypeScript 类型检查
+pnpm lint        # ESLint（扁平配置）
+pnpm test        # node:test，零新增依赖
+pnpm db:backup   # 把 Neon 全库逻辑导出到 backups/
+pnpm db:verify   # 校验最近一份备份的格式、行数与引用完整性
+pnpm eval:ai     # AI 计划质量评测（会调模型）
+```
+
+CI 在 `.github/workflows/ci.yml`，备份自动化在 `.github/workflows/backup.yml`。
+细节见 [`docs/testing.md`](docs/testing.md) 和 [`docs/backup.md`](docs/backup.md)。
+
 ## 目录
 
 ```text

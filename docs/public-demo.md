@@ -1,5 +1,17 @@
 # 公开演示服务
 
+> **本文已过时（SQLite 阶段文档）**
+>
+> 数据库现在是 Neon Postgres，公开部署走 EdgeOne（见 [docs/deploy-edgeone.md](./deploy-edgeone.md)）。
+> 文中出现的 `DATABASE_URL="file:./dev.db"`、`prisma/dev.db` 都已失效 ——
+> Prisma 会直接拒绝 `file:` 连接串（必须以 `postgresql://` 开头）。
+> `APP_ACCESS_PASSWORD` 也已在应用代码里没有任何地方读取，"访问密码"从来没有生效过。
+> 保留本文只为追溯历史。
+>
+> **补充**：`scripts/start-public-demo.ps1` 现在已经加了失效守卫，运行会直接退出并说明原因，
+> 不会再启动服务或公网隧道。
+
+
 `scripts/start-public-demo.ps1` 会启动一个独立的公开演示实例：
 
 - 端口：`3001`

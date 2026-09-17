@@ -1,5 +1,14 @@
 # 让别人访问当前项目
 
+> **本文已过时（SQLite 阶段文档）**
+>
+> 数据库现在是 Neon Postgres，公开部署走 EdgeOne（见 [docs/deploy-edgeone.md](./deploy-edgeone.md)）。
+> 文中出现的 `DATABASE_URL="file:./dev.db"`、`prisma/dev.db` 都已失效 ——
+> Prisma 会直接拒绝 `file:` 连接串（必须以 `postgresql://` 开头）。
+> `APP_ACCESS_PASSWORD` 也已在应用代码里没有任何地方读取，"访问密码"从来没有生效过。
+> 保留本文只为追溯历史。
+
+
 > 当前版本是本地单用户 SQLite 应用，共享访问前先理解安全边界。
 
 ## 一、同一局域网访问
