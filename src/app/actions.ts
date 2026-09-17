@@ -31,7 +31,10 @@ import {
   isOnboardingCompleted,
   setOnboardingCompleted,
 } from "@/lib/onboarding";
-import { setFirstRunTourStep as persistFirstRunTourStep } from "@/lib/first-run";
+import {
+  isFirstPlanGroupComplete,
+  setFirstRunTourStep as persistFirstRunTourStep,
+} from "@/lib/first-run";
 import {
   serializeTaskStickyNote,
   type TaskStickyNoteData,
@@ -1874,6 +1877,15 @@ export async function setTaskStatus(formData: FormData) {
 
   if (!updated.length) return;
 
+  let reviewHintEligible = false;
+  if (status === "done" || status === "cancelled") {
+    const [firstPlanGroupComplete, reviewCount] = await Promise.all([
+      isFirstPlanGroupComplete(user.id),
+      prisma.review.count({ where: { userId: user.id } }),
+    ]);
+    reviewHintEligible = firstPlanGroupComplete && reviewCount === 0;
+  }
+
   const updatedTask = updated[0];
   const reviewNextStatus =
     status === "done"
@@ -1923,6 +1935,8 @@ export async function setTaskStatus(formData: FormData) {
 
     await Promise.all(backgroundTasks).catch(() => {});
   });
+
+  return { reviewHintEligible };
 }
 
 export async function markTodayFocus(formData: FormData) {

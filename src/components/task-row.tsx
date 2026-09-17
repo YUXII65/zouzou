@@ -12,7 +12,10 @@ import { StatusBadge } from "@/components/status-badge";
 import { AiTaskSticky } from "@/components/ai-task-sticky";
 import { TaskSettingsMenu } from "@/components/task-settings-menu";
 import { TaskTitleButton } from "@/components/task-title-button";
-import { markFirstTaskDone, notifyTourStep } from "@/lib/first-run-hints";
+import {
+  markFirstTaskGroupDone,
+  notifyTourStep,
+} from "@/lib/first-run-hints";
 import { setTaskStatus } from "@/app/actions";
 import { formatDate } from "@/lib/date";
 import { taskModeLabel } from "@/lib/task-contract";
@@ -95,9 +98,9 @@ export function TaskRow({
     setOptimisticStatus(next);
     setUpdating(true);
     if (next === "in_progress") notifyTourStep("3");
-    if (next === "done") markFirstTaskDone();
     try {
-      await setTaskStatus(formData);
+      const result = await setTaskStatus(formData);
+      if (result?.reviewHintEligible) markFirstTaskGroupDone();
       router.refresh();
     } catch {
       setOptimisticStatus(previous);

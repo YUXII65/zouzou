@@ -24,7 +24,7 @@ import { SubmitButton } from "@/components/submit-button";
 import { StatusBadge } from "@/components/status-badge";
 import { ConfirmActionButton } from "@/components/confirm-action-button";
 import { AiTaskSticky } from "@/components/ai-task-sticky";
-import { markFirstTaskDone } from "@/lib/first-run-hints";
+import { markFirstTaskGroupDone } from "@/lib/first-run-hints";
 import type { TaskStickyNoteData } from "@/lib/task-sticky";
 import { trackEvent } from "@/lib/track";
 import { useClickOutside } from "@/lib/use-click-outside";
@@ -102,9 +102,9 @@ export function TodayTaskActions({
     setOptimisticStatus(next);
     setUpdating(true);
     trackEvent("home_task_status", { status: next });
-    if (next === "done") markFirstTaskDone();
     try {
-      await setTaskStatus(formData);
+      const result = await setTaskStatus(formData);
+      if (result?.reviewHintEligible) markFirstTaskGroupDone();
       router.refresh();
     } catch {
       setOptimisticStatus(previous);

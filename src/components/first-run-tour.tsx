@@ -19,8 +19,8 @@ const dismissButtonClass =
 /**
  * 新人引导只负责「记想法 → 推进任务 → 用便利贴」三步。
  *
- * 首个任务完成后的复盘提示由 FirstTaskReviewHint 单独处理，
- * 这样用户在任何入口完成第一项任务都会看到，不用依赖引导走到哪一步。
+ * 首组任务完成后的复盘提示由 FirstTaskReviewHint 单独处理，
+ * 这样用户完成首组任务的最后一件事就会看到，不用依赖引导走到哪一步。
  */
 export function FirstRunTour({
   initialStep,

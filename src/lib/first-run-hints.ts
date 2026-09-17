@@ -37,7 +37,8 @@ export function notifyTourStep(step: TourStep) {
   window.dispatchEvent(new CustomEvent(TOUR_EVENT, { detail: { step } }));
 }
 
-export function markFirstTaskDone() {
+/** 只有首组计划任务全部收尾后，才进入复盘引导。 */
+export function markFirstTaskGroupDone() {
   if (typeof window === "undefined") return;
 
   try {

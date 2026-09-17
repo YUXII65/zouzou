@@ -27,7 +27,10 @@ import {
 import { cx } from "@/lib/utils";
 import { prisma } from "@/lib/prisma";
 import { requireUser } from "@/lib/auth";
-import { getFirstRunState } from "@/lib/first-run";
+import {
+  getFirstRunState,
+  isFirstPlanGroupComplete,
+} from "@/lib/first-run";
 import { serializeTaskStickyNote } from "@/lib/task-sticky";
 import { buildTaskContract } from "@/lib/task-contract";
 
@@ -96,8 +99,8 @@ export default async function ProjectsPage({
     ? (tasks.find((task) => task.id === editParam) ?? null)
     : null;
   const unassociatedTasks = tasks.filter((task) => !task.projectId);
-  const firstTaskReviewEligible =
-    tasks.some((task) => task.status === "done") && reviewCount === 0;
+  const firstGroupReviewEligible =
+    reviewCount === 0 && (await isFirstPlanGroupComplete(user.id));
 
   // 旧任务没有任务合同，第一次打开书桌时补齐，避免列表缺少执行方式和完成标准。
   const legacyTasks = tasks.filter((task) => !task.executionMode).slice(0, 20);
@@ -164,7 +167,7 @@ export default async function ProjectsPage({
         />
       ) : null}
 
-      <FirstTaskReviewHint eligible={firstTaskReviewEligible} />
+      <FirstTaskReviewHint eligible={firstGroupReviewEligible} />
 
       <WorkspaceProjectBrowser
         projects={browserProjects}

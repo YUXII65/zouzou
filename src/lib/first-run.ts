@@ -67,3 +67,28 @@ export async function setFirstRunTourStep(userId: string, step: string) {
     },
   });
 }
+
+/**
+ * 首组任务指第一次 AI 计划生成的一批任务（共享 inboxItemId）。
+ * 只有组内至少完成一件，且没有仍待办/进行中的任务时，才允许进入复盘引导。
+ */
+export async function isFirstPlanGroupComplete(userId: string) {
+  const firstPlanTask = await prisma.task.findFirst({
+    where: { userId, inboxItemId: { not: null } },
+    orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+    select: { inboxItemId: true },
+  });
+  const inboxItemId = firstPlanTask?.inboxItemId;
+  if (!inboxItemId) return false;
+
+  const tasks = await prisma.task.findMany({
+    where: { userId, inboxItemId },
+    select: { status: true },
+  });
+  const hasDone = tasks.some((task) => task.status === "done");
+  const hasOpen = tasks.some(
+    (task) => task.status === "todo" || task.status === "in_progress",
+  );
+
+  return hasDone && !hasOpen;
+}

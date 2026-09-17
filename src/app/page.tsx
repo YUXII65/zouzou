@@ -18,7 +18,10 @@ import { TaskTitleButton } from "@/components/task-title-button";
 import { AiTaskPlanner } from "@/components/ai-task-planner";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
-import { getFirstRunState } from "@/lib/first-run";
+import {
+  getFirstRunState,
+  isFirstPlanGroupComplete,
+} from "@/lib/first-run";
 import { serializeTaskStickyNote } from "@/lib/task-sticky";
 import {
   endOfDay,
@@ -176,8 +179,8 @@ export default async function TodayPage() {
   });
 
   const todayTasks = (todayRelevant.length ? todayRelevant : agenda).slice(0, 3);
-  const firstTaskReviewEligible =
-    tasks.some((task) => task.status === "done") && reviewCount === 0;
+  const firstGroupReviewEligible =
+    reviewCount === 0 && (await isFirstPlanGroupComplete(user.id));
 
   return (
     <>
@@ -188,7 +191,7 @@ export default async function TodayPage() {
           hasTasks={tasks.length > 0}
         />
       ) : null}
-      <FirstTaskReviewHint eligible={firstTaskReviewEligible} />
+      <FirstTaskReviewHint eligible={firstGroupReviewEligible} />
       <CalendarDatePanel
         now={now}
         completedToday={completedToday}

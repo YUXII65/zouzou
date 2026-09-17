@@ -10,11 +10,10 @@ const DISMISS_KEY = "next_step_review_prompt_dismissed";
 const SHOW_KEY = "next_step_show_review_hint";
 
 /**
- * 首个任务完成后的复盘锚定提示。
+ * 首组任务完成后的复盘锚定提示。
  *
- * eligible 由服务端判定「有已完成任务，且一条复盘都还没有」，所以无论用户是
- * 从引导流程完成，还是直接新建任务后点完成，刷新页面都能看到提示；
- * 客户端事件只负责让它当场弹出，不必等下一次刷新。
+ * eligible 由服务端判定「首个 AI 计划组已收尾，且一条复盘都还没有」，
+ * 客户端事件只负责在最后一件事完成时当场弹出，不必等下一次刷新。
  */
 export function FirstTaskReviewHint({ eligible = false }: { eligible?: boolean }) {
   const [visible, setVisible] = useState(false);
@@ -72,7 +71,7 @@ export function FirstTaskReviewHint({ eligible = false }: { eligible?: boolean }
         </div>
       }
     >
-      你的第一项任务已完成。点左侧【抽屉】，用复盘留下今天的判断和明天的方向。
+      首组任务已完成。点左侧【抽屉】，用复盘留下今天的判断和明天的方向。
     </AnchoredHint>
   );
 }
