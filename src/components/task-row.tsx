@@ -10,7 +10,6 @@ import {
 } from "lucide-react";
 import { StatusBadge } from "@/components/status-badge";
 import { AiTaskSticky } from "@/components/ai-task-sticky";
-import { TaskSettingsMenu } from "@/components/task-settings-menu";
 import { TaskTitleButton } from "@/components/task-title-button";
 import {
   markFirstTaskGroupDone,
@@ -59,7 +58,6 @@ function statusIcon(status: string) {
 
 export function TaskRow({
   task,
-  projectId,
   showLabels = false,
 }: {
   task: {
@@ -136,7 +134,7 @@ export function TaskRow({
         </div>
       </div>
 
-      <div className="flex items-center gap-2">
+      <div className="flex w-full items-center gap-2 lg:w-auto">
         {canChangeStatus ? (
           <button
             type="button"
@@ -154,7 +152,7 @@ export function TaskRow({
           </button>
         ) : null}
 
-        <div className="flex items-center gap-2">
+        <div className="ml-auto flex items-center gap-2">
           <AiTaskSticky
             taskId={task.id}
             title={task.title}
@@ -164,15 +162,7 @@ export function TaskRow({
             showLabel={showLabels}
             initialNotes={task.stickyNotes ?? []}
           />
-
-          <TaskSettingsMenu
-            taskId={task.id}
-            projectId={projectId}
-            title={task.title}
-            showLabel={showLabels}
-          />
         </div>
-
       </div>
     </div>
   );
