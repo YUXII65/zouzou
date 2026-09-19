@@ -1,0 +1,36 @@
+<view class="page">
+  <image class="page-bg" src="./login-bg.png" mode="aspectFill"></image>
+  <view class="content">
+    <view class="brand-block">
+      <view class="brand-mark"><view class="brand-arrow"></view></view>
+      <view class="brand-title">走走</view>
+      <view class="brand-subtitle">让想法，走成下一步</view>
+    </view>
+
+    <view class="auth-card">
+      <view class="card-title">注册 / 登录</view>
+      <input
+        class="auth-input first-input"
+        value="{{username}}"
+        maxlength="20"
+        placeholder="用户名"
+        placeholder-class="input-placeholder"
+        bindinput="onUsernameInput"
+      />
+      <input
+        class="auth-input"
+        value="{{password}}"
+        password
+        placeholder="密码"
+        placeholder-class="input-placeholder"
+        bindinput="onPasswordInput"
+      />
+      <view class="confirm-button" bindtap="onConfirm">确认</view>
+    </view>
+
+    <view class="back-button" bindtap="onBack">
+      <text class="back-arrow">←</text>
+      <text>先看看走走是什么</text>
+    </view>
+  </view>
+</view>

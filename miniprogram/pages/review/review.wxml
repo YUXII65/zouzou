@@ -1,0 +1,68 @@
+<view class="page">
+  <view class="topbar">
+    <view class="brand-row">
+      <view class="brand-mark"><view class="brand-arrow"></view></view>
+      <text class="brand-name">走走</text>
+    </view>
+    <view class="top-actions">
+      <view class="top-icon" bindtap="onToolsTap">▦</view>
+      <view class="avatar">氵</view>
+    </view>
+  </view>
+
+  <view class="content">
+    <view class="page-heading">
+      <text class="eyebrow">让想法，走成下一步</text>
+      <text class="page-title">抽屉</text>
+      <text class="page-subtitle">每日复盘，并给出明天的执行建议</text>
+    </view>
+
+    <view class="panel history-panel">
+      <view class="panel-header">
+        <text class="panel-title">历史复盘</text>
+        <text class="panel-count">0 份</text>
+      </view>
+      <view class="today-row">
+        <text>今天</text>
+        <text class="muted">未写</text>
+      </view>
+      <view class="history-empty">还没有历史复盘</view>
+    </view>
+
+    <view class="panel review-panel">
+      <view class="panel-header">
+        <text class="panel-title">写今日复盘</text>
+      </view>
+      <view class="review-form">
+        <picker mode="date" value="{{date}}" bindchange="onDateChange">
+          <view class="date-field">{{date}}</view>
+        </picker>
+        <view class="generate-button" bindtap="onGenerate">▦ 生成复盘</view>
+      </view>
+    </view>
+
+    <view class="panel week-panel">
+      <view class="panel-header">
+        <text class="panel-title">本周回看</text>
+        <text class="panel-count">0 份每日复盘</text>
+      </view>
+      <view class="week-stats">
+        <view class="week-stat success"><text>本周完成</text><text class="week-number">0</text></view>
+        <view class="week-stat warning"><text>待推进</text><text class="week-number">0</text></view>
+        <view class="week-stat neutral"><text>涉及项目</text><text class="week-number">0</text></view>
+      </view>
+    </view>
+  </view>
+
+  <view class="bottom-nav">
+    <view class="nav-item" data-key="today" bindtap="onTabTap">
+      <text class="nav-icon">▦</text><text>日历</text>
+    </view>
+    <view class="nav-item" data-key="desk" bindtap="onTabTap">
+      <text class="nav-icon">▤</text><text>书桌</text>
+    </view>
+    <view class="nav-item nav-item-active" data-key="review" bindtap="onTabTap">
+      <text class="nav-icon">▣</text><text>抽屉</text>
+    </view>
+  </view>
+</view>

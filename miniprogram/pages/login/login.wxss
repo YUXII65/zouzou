@@ -1,0 +1,137 @@
+.page {
+  position: relative;
+  width: 100vw;
+  height: 100vh;
+  overflow: hidden;
+  background: #eef4ff;
+}
+
+.page-bg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.content {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  padding: 52rpx 40rpx;
+  box-sizing: border-box;
+}
+
+.brand-block {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin-bottom: 40rpx;
+}
+
+.brand-mark {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 86rpx;
+  height: 86rpx;
+  border-radius: 22rpx;
+  background: #2f63e6;
+  box-shadow: 0 18rpx 36rpx rgba(47, 99, 230, 0.22);
+}
+
+.brand-arrow {
+  width: 24rpx;
+  height: 24rpx;
+  border-top: 7rpx solid #ffffff;
+  border-right: 7rpx solid #ffffff;
+  transform: rotate(45deg) translate(-4rpx, 4rpx);
+}
+
+.brand-title {
+  margin-top: 22rpx;
+  color: #182238;
+  font-size: 42rpx;
+  font-weight: 700;
+}
+
+.brand-subtitle {
+  margin-top: 10rpx;
+  color: #4d6d94;
+  font-size: 26rpx;
+}
+
+.auth-card {
+  width: 100%;
+  padding: 42rpx 34rpx 38rpx;
+  box-sizing: border-box;
+  border: 1rpx solid rgba(255, 255, 255, 0.88);
+  border-radius: 28rpx;
+  background: rgba(255, 255, 255, 0.86);
+  box-shadow: 0 24rpx 60rpx rgba(52, 92, 160, 0.12);
+}
+
+.card-title {
+  margin-bottom: 30rpx;
+  color: #182238;
+  font-size: 30rpx;
+  font-weight: 700;
+}
+
+.auth-input {
+  width: 100%;
+  height: 88rpx;
+  padding: 0 26rpx;
+  box-sizing: border-box;
+  border-radius: 16rpx;
+  background: rgba(237, 244, 251, 0.92);
+  color: #182238;
+  font-size: 28rpx;
+}
+
+.first-input {
+  margin-bottom: 22rpx;
+}
+
+.input-placeholder {
+  color: #8296b0;
+}
+
+.confirm-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 88rpx;
+  margin-top: 28rpx;
+  border-radius: 16rpx;
+  background: #2f63e6;
+  color: #ffffff;
+  font-size: 28rpx;
+  font-weight: 600;
+  box-shadow: 0 14rpx 28rpx rgba(47, 99, 230, 0.2);
+}
+
+.back-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12rpx;
+  width: 100%;
+  height: 84rpx;
+  margin-top: 30rpx;
+  border: 1rpx solid rgba(255, 255, 255, 0.88);
+  border-radius: 18rpx;
+  background: rgba(255, 255, 255, 0.78);
+  color: #2f63e6;
+  font-size: 27rpx;
+  font-weight: 600;
+}
+
+.back-arrow {
+  font-size: 34rpx;
+  line-height: 1;
+}

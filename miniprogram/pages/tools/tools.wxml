@@ -1,0 +1,102 @@
+<view class="page">
+  <view class="topbar">
+    <view class="brand-row">
+      <view class="brand-mark"><view class="brand-arrow"></view></view>
+      <text class="brand-name">走走</text>
+    </view>
+    <view class="top-actions">
+      <view class="top-icon active">▦</view>
+      <view class="avatar">氵</view>
+    </view>
+  </view>
+
+  <view class="content">
+    <view class="page-heading">
+      <text class="eyebrow">让想法，走成下一步</text>
+      <text class="page-title">工具匣</text>
+      <text class="page-subtitle">需要什么再打开什么，核心流程保持简单。</text>
+    </view>
+
+    <view class="panel">
+      <view class="panel-header"><text class="panel-title">现状速览</text></view>
+      <view class="stat-grid">
+        <view class="stat-card warning"><text class="stat-label">未整理想法</text><text class="stat-number">{{pendingInbox}}</text></view>
+        <view class="stat-card accent"><text class="stat-label">未完成任务</text><text class="stat-number">{{openTasks}}</text></view>
+        <view class="stat-card success"><text class="stat-label">已完成任务</text><text class="stat-number">{{doneTasks}}</text></view>
+        <view class="stat-card ai"><text class="stat-label">本周复盘</text><text class="stat-number">{{weekReviewCount}}</text></view>
+      </view>
+    </view>
+
+    <view class="panel">
+      <view class="panel-header"><text class="panel-title">需要关注</text></view>
+      <view class="attention-body" wx:if="{{stalledProjects.length === 0}}">暂无停滞项目。</view><view class="attention-body" wx:else><view class="attention-item" wx:for="{{stalledProjects}}" wx:key="name">{{item.name}} 已停 {{item.days}} 天</view></view>
+    </view>
+
+    <view class="panel">
+      <view class="panel-header">
+        <text class="panel-title">推荐工具</text>
+        <text class="panel-count">已启用 {{enabled.length}} 个</text>
+      </view>
+
+      <view class="module-list">
+        <view class="module" wx:for="{{modules}}" wx:key="id">
+          <view class="module-main">
+            <view class="module-icon">{{item.icon}}</view>
+            <view class="module-copy">
+              <view class="module-title-row">
+                <text class="module-title">{{item.name}}</text>
+                <text class="module-badge {{item.available ? 'module-badge-open' : ''}}">{{item.badge}}</text>
+              </view>
+              <text class="module-desc">{{item.description}}</text>
+            </view>
+          </view>
+          <view class="module-action {{item.available ? 'module-action-open' : 'module-action-disabled'}} {{enabled.indexOf(item.id) >= 0 ? 'module-action-active' : ''}}" data-id="{{item.id}}" bindtap="onModuleTap">
+            {{!item.available ? item.badge : (enabled.indexOf(item.id) >= 0 ? '✓ 已启用' : '＋ 启用')}}
+          </view>
+
+          <view class="module-expand" wx:if="{{enabled.indexOf(item.id) >= 0 && item.id === 'focus'}}">
+            <view class="timer-row">
+              <view>
+                <text class="timer-label">专注计时</text>
+                <text class="timer-time {{timerFinished ? 'timer-finished' : ''}}">{{timerFinished ? '时间到' : timerText}}</text>
+              </view>
+              <view class="timer-modes">
+                <text class="timer-mode {{timerMode === 15 ? 'timer-mode-active' : ''}}" data-minutes="15" bindtap="chooseMode">15 分钟</text>
+                <text class="timer-mode {{timerMode === 25 ? 'timer-mode-active' : ''}}" data-minutes="25" bindtap="chooseMode">25 分钟</text>
+                <text class="timer-mode {{timerMode === 45 ? 'timer-mode-active' : ''}}" data-minutes="45" bindtap="chooseMode">45 分钟</text>
+              </view>
+            </view>
+            <view class="timer-actions">
+              <view class="timer-button" bindtap="toggleTimer">{{timerRunning ? 'Ⅱ 暂停' : '▶ 开始'}}</view>
+              <view class="timer-reset" bindtap="resetTimer">↻</view>
+            </view>
+          </view>
+
+          <view class="module-expand" wx:if="{{enabled.indexOf(item.id) >= 0 && item.id === 'weekly'}}">
+            <view class="week-grid">
+              <view><text class="week-label">本周复盘</text><text class="week-number">{{weekReviewCount}}</text></view>
+              <view><text class="week-label success">本周完成</text><text class="week-number">{{weekCompleted}}</text></view>
+              <view><text class="week-label warning">待推进</text><text class="week-number">{{weekOpen}}</text></view>
+              <view><text class="week-label">涉及项目</text><text class="week-number">{{weekProjects}}</text></view>
+            </view>
+            <view class="review-button" bindtap="onReviewTap">☑ 去复盘</view>
+          </view>
+        </view>
+      </view>
+    </view>
+
+    <view class="panel">
+      <view class="panel-header"><text class="panel-title">数据导出</text></view>
+      <view class="export-body">
+        <text>导出项目、任务、收件箱和复盘，方便备份或迁移。</text>
+        <view class="export-button" bindtap="onExport">↓ 导出 JSON</view>
+      </view>
+    </view>
+  </view>
+
+  <view class="bottom-nav">
+    <view class="nav-item" data-key="today" bindtap="onTabTap"><text class="nav-icon">▦</text><text>日历</text></view>
+    <view class="nav-item" data-key="desk" bindtap="onTabTap"><text class="nav-icon">▤</text><text>书桌</text></view>
+    <view class="nav-item" data-key="review" bindtap="onTabTap"><text class="nav-icon">▣</text><text>抽屉</text></view>
+  </view>
+</view>

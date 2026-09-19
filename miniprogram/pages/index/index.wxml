@@ -1,0 +1,131 @@
+<view class="page">
+  <view class="container">
+    <view class="header">
+      <view class="brand-row">
+        <view class="brand-mark">
+          <view class="brand-arrow"></view>
+        </view>
+        <text class="brand-name">走走</text>
+      </view>
+    </view>
+
+    <view class="hero">
+      <text class="eyebrow">让想法，走成下一步</text>
+      <view class="hero-title">把脑子里的一堆<text class="accent">想法</text>，变成今天能做的 1-3 件事。</view>
+      <text class="hero-copy">不用自学 AI 工作流，也不用自己拆任务，走走陪你一起让想法落地。</text>
+      <button class="primary-button-plain" bindtap="onLoginTap">注册/登录 →</button>
+    </view>
+
+    <view class="outcome-list">
+      <view class="outcome-card" wx:for="{{outcomes}}" wx:key="title">
+        <view class="outcome-icon">{{item.icon}}</view>
+        <view class="outcome-title">{{item.title}}</view>
+        <view class="outcome-body">{{item.body}}</view>
+      </view>
+    </view>
+
+    <view class="panel demo-panel">
+      <view class="section-title">看看它怎么把你的一堆想法，走成今天的下一步。</view>
+
+      <view class="step-tabs">
+        <view
+          class="step-tab {{activeStep === index ? 'step-tab-active' : ''}}"
+          wx:for="{{steps}}"
+          wx:key="*this"
+          data-index="{{index}}"
+          bindtap="onStepTap"
+        >
+          <text class="step-number">{{index + 1}}.</text>
+          <text>{{item}}</text>
+        </view>
+      </view>
+
+      <view class="demo-stage" wx:if="{{activeStep === 0}}">
+        <view class="bubble-row bubble-row-right">
+          <view class="bubble bubble-user">{{demo.idea}}</view>
+        </view>
+        <view class="ai-row">
+          <view class="ai-mark">✦</view>
+          <view class="ai-copy">
+            <text>{{demo.clarifyIntro}}</text>
+            <text class="ai-question">{{demo.clarifyQuestion}}</text>
+          </view>
+        </view>
+        <view class="chips chips-indent">
+          <view class="chip" wx:for="{{demo.clarifyOptions}}" wx:key="*this">{{item}}</view>
+        </view>
+        <view class="bubble-row bubble-row-right">
+          <view class="bubble bubble-user bubble-small">{{demo.clarifySelected}}</view>
+        </view>
+        <view class="ai-row">
+          <view class="ai-mark">✦</view>
+          <view class="ai-copy"><text>{{demo.followUp}}</text></view>
+        </view>
+        <view class="chips chips-indent">
+          <view class="chip" wx:for="{{demo.followUpOptions}}" wx:key="*this">{{item}}</view>
+        </view>
+      </view>
+
+      <view class="demo-stage" wx:elif="{{activeStep === 1}}">
+        <view class="plan-card">
+          <view class="plan-kicker">项目</view>
+          <view class="plan-name">{{demo.plan.projectName}}</view>
+          <view class="plan-line"><text class="plan-label">目标</text><text>{{demo.plan.objective}}</text></view>
+          <view class="plan-line"><text class="plan-label">阶段</text><text>{{demo.plan.milestone}}</text></view>
+        </view>
+        <view class="task-list">
+          <view class="demo-task" wx:for="{{demo.plan.tasks}}" wx:key="title">
+            <view class="task-index">{{index + 1}}</view>
+            <view class="task-copy">
+              <view class="task-title">{{item.title}}</view>
+              <view class="task-note">{{item.note}} · {{item.time}}</view>
+            </view>
+          </view>
+        </view>
+      </view>
+
+      <view class="demo-stage" wx:else>
+        <view class="review-card">
+          <view class="review-label">今日复盘</view>
+          <view class="review-copy">{{demo.review.progress}}</view>
+        </view>
+        <view class="review-card">
+          <view class="review-label">判断</view>
+          <view class="review-copy">{{demo.review.insight}}</view>
+        </view>
+        <view class="review-card review-next">
+          <view class="review-label">下一步</view>
+          <view class="review-copy">{{demo.review.nextAction}}</view>
+        </view>
+      </view>
+    </view>
+
+    <view class="panel comparison-panel">
+      <view class="section-title section-title-small">为什么选择我们</view>
+      <view class="comparison-row" wx:for="{{comparisons}}" wx:key="name">
+        <view class="compare-icon {{item.name === '走走' ? 'compare-icon-success' : ''}}">{{item.name === '走走' ? '✓' : '◎'}}</view>
+        <view class="compare-copy">
+          <view class="compare-name">{{item.name}}</view>
+          <view class="compare-gap">{{item.gap}}</view>
+        </view>
+      </view>
+    </view>
+
+    <view class="panel audience-panel">
+      <view class="section-title section-title-small">适合谁</view>
+      <view class="audience-row" wx:for="{{audiences}}" wx:key="*this">
+        <text class="audience-icon">▣</text>
+        <text class="audience-copy">{{item}}</text>
+      </view>
+      <view class="audience-note">如果你已经有一套稳定的 GTD 流程，或者只想要 AI 替你干活，走走暂时不适合你。</view>
+    </view>
+
+    <view class="panel cta-panel">
+      <view class="cta-title">现在从一句真实想法开始。</view>
+      <view class="cta-copy">不用整理，不用选模板，先把你脑子里转的东西说出来。</view>
+      <button class="primary-button-plain cta-button-plain" bindtap="onLoginTap">注册/登录 →</button>
+    </view>
+
+    <view class="footer">走走 v2.5 · Coded by 氵</view>
+  </view>
+</view>

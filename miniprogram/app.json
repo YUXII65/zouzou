@@ -1,0 +1,19 @@
+{
+  "pages": [
+    "pages/index/index",
+    "pages/login/login",
+    "pages/today/today",
+    "pages/workspace/workspace",
+    "pages/review/review",
+    "pages/tools/tools"
+  ],
+  "window": {
+    "navigationBarTitleText": "走走",
+    "navigationBarBackgroundColor": "#edf4fb",
+    "navigationBarTextStyle": "black",
+    "backgroundColor": "#edf4fb",
+    "backgroundTextStyle": "light"
+  },
+  "style": "v2",
+  "sitemapLocation": "sitemap.json"
+}

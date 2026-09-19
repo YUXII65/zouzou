@@ -1,0 +1,50 @@
+<view class="page">
+  <view class="topbar">
+    <view class="brand-row">
+      <view class="brand-mark"><view class="brand-arrow"></view></view>
+      <text class="brand-name">走走</text>
+    </view>
+    <view class="top-actions">
+      <view class="top-icon" bindtap="onToolsTap">▦</view>
+      <view class="avatar">氵</view>
+    </view>
+  </view>
+
+  <view class="content">
+    <view class="page-heading">
+      <text class="eyebrow">让想法，走成下一步</text>
+      <text class="page-title">书桌</text>
+    </view>
+
+    <view class="panel projects-panel">
+      <view class="panel-header">
+        <text class="panel-title">项目</text>
+      </view>
+      <view class="new-project" bindtap="onNewProject">＋ 新建项目</view>
+      <view class="empty-state compact">
+        <view class="empty-icon">▣</view>
+        <view class="empty-text">还没有项目</view>
+      </view>
+    </view>
+
+    <view class="panel detail-panel">
+      <view class="empty-state">
+        <view class="empty-icon">▤</view>
+        <view class="empty-title">选择或创建一个项目</view>
+        <view class="empty-hint">项目详情会显示在这里，保持页面专注。</view>
+      </view>
+    </view>
+  </view>
+
+  <view class="bottom-nav">
+    <view class="nav-item" data-key="today" bindtap="onTabTap">
+      <text class="nav-icon">▦</text><text>日历</text>
+    </view>
+    <view class="nav-item nav-item-active" data-key="desk" bindtap="onTabTap">
+      <text class="nav-icon">▤</text><text>书桌</text>
+    </view>
+    <view class="nav-item" data-key="review" bindtap="onTabTap">
+      <text class="nav-icon">▣</text><text>抽屉</text>
+    </view>
+  </view>
+</view>

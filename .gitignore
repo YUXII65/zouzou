@@ -71,3 +71,5 @@ prisma/dev.db
 # 竞品分析抓取的参考资料（本地保留，不提交）
 /.atypica/
 
+# WeChat DevTools local settings
+miniprogram/project.private.config.json
