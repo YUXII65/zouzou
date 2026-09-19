@@ -57,7 +57,15 @@ Page({
     editProjectStatusIndex: 0,
     showCreateTask: false,
     taskTitle: "",
-    taskNotes: ""
+    taskNotes: "",
+    taskShortTitle: "",
+    taskPriorityIndex: 1,
+    taskStatusIndex: 0,
+    taskScheduledDate: "",
+    taskDueDate: "",
+    taskFocusDate: "",
+    priorityLabels: ["低", "中", "高", "紧急"],
+    statusLabels: ["待办", "进行中", "已完成", "已取消"]
   },
 
   syncUserHeader() {
@@ -262,7 +270,13 @@ Page({
   },
 
   onTaskTitleInput(event) { this.setData({ taskTitle: event.detail.value }); },
+  onTaskShortTitleInput(event) { this.setData({ taskShortTitle: event.detail.value }); },
   onTaskNotesInput(event) { this.setData({ taskNotes: event.detail.value }); },
+  onTaskPriorityChange(event) { this.setData({ taskPriorityIndex: Number(event.detail.value) }); },
+  onTaskStatusChange(event) { this.setData({ taskStatusIndex: Number(event.detail.value) }); },
+  onTaskScheduledChange(event) { this.setData({ taskScheduledDate: event.detail.value }); },
+  onTaskDueChange(event) { this.setData({ taskDueDate: event.detail.value }); },
+  onTaskFocusChange(event) { this.setData({ taskFocusDate: event.detail.value }); },
 
   onCreateTask() {
     const { createTask } = require("../../utils/api");
@@ -277,18 +291,23 @@ Page({
     wx.showLoading({ title: "正在添加..." });
     createTask({
       title: this.data.taskTitle,
+      shortTitle: this.data.taskShortTitle,
       notes: this.data.taskNotes,
-      projectId: this.data.showUnassigned ? "" : this.data.activeProjectId
+      projectId: this.data.showUnassigned ? "" : this.data.activeProjectId,
+      priority: ["low", "medium", "high", "urgent"][this.data.taskPriorityIndex] || "medium",
+      status: ["todo", "in_progress", "done", "cancelled"][this.data.taskStatusIndex] || "todo",
+      scheduledDate: this.data.taskScheduledDate,
+      dueDate: this.data.taskDueDate,
+      focusDate: this.data.taskFocusDate
     }).then(() => {
       wx.hideLoading();
-      this.setData({ showCreateTask: false, taskTitle: "", taskNotes: "" });
+      this.setData({ showCreateTask: false, taskTitle: "", taskShortTitle: "", taskNotes: "", taskPriorityIndex: 1, taskStatusIndex: 0, taskScheduledDate: "", taskDueDate: "", taskFocusDate: "" });
       this.loadWorkspace();
     }).catch(() => {
       wx.hideLoading();
       wx.showToast({ title: "任务没添加成功", icon: "none" });
     });
   },
-
   onTaskStatusTap(event) {
     const taskId = event.currentTarget.dataset.id;
     const status = event.currentTarget.dataset.status;

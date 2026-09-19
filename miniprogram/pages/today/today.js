@@ -58,7 +58,8 @@ Page({
     pendingItems: [],
     tasks: [],
     submittingPlanId: "",
-    submittingClarifyId: ""
+    submittingClarifyId: "",
+    ignoringInboxId: ""
   },
 
   onLoad() {
