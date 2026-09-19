@@ -1,6 +1,6 @@
 <view class="page">
   <view class="profile-card">
-    <view class="avatar"><image wx:if="{{avatarUrl}}" src="{{avatarUrl}}" mode="aspectFill"></image><text wx:else>{{(displayName || username || '走').slice(0, 1)}}</text></view>
+    <view class="avatar" bindtap="onChooseAvatar"><image wx:if="{{avatarUrl}}" src="{{avatarUrl}}" mode="aspectFill"></image><text wx:else>{{(displayName || username || '走').slice(0, 1)}}</text></view>
     <text class="username">@{{username}}</text>
     <text class="label">显示名称</text>
     <input class="input" value="{{displayName}}" placeholder="设置展示名称" bindinput="onNameInput" />
