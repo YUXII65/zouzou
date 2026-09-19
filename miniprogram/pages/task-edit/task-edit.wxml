@@ -10,6 +10,21 @@
     <picker mode="date" value="{{scheduledDate}}" bindchange="onScheduledChange"><view class="picker">{{scheduledDate || '未设置'}}</view></picker>
     <text class="label">截止日期</text>
     <picker mode="date" value="{{dueDate}}" bindchange="onDueChange"><view class="picker">{{dueDate || '未设置'}}</view></picker>
+    <view class="sticky-section">
+      <text class="label">便利贴（最多 10 张）</text>
+      <view class="sticky-card" wx:for="{{stickyNotes}}" wx:key="id">
+        <view class="sticky-head">
+          <text class="sticky-title">{{item.title}}</text>
+          <text class="sticky-delete" data-id="{{item.id}}" bindtap="onDeleteSticky">删除</text>
+        </view>
+        <text class="sticky-copy">{{item.encouragement}}</text>
+        <view class="sticky-step" wx:for="{{item.steps}}" wx:key="*this" wx:for-item="step">• {{step}}</view>
+        <view class="sticky-next">现在可以做：{{item.nextStep}}</view>
+      </view>
+      <input class="input" placeholder="你有什么想法补充" value="{{stickyMessage}}" bindinput="onStickyInput" />
+      <view class="sticky-button" bindtap="onGenerateSticky">生成便利贴</view>
+    </view>
+
     <view class="save-button" bindtap="onSave">保存任务</view>
     <view class="delete-button" bindtap="onDelete">删除任务</view>
   </view>

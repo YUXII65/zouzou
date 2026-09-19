@@ -190,6 +190,24 @@ function deleteTask(taskId) {
   });
 }
 
+function getStickyNotes(taskId) {
+  return request(`/api/miniprogram/tasks/sticky?taskId=${encodeURIComponent(taskId)}`);
+}
+
+function createStickyNote(taskId, message) {
+  return request("/api/miniprogram/tasks/sticky", {
+    method: "POST",
+    data: { taskId, message }
+  });
+}
+
+function deleteStickyNote(noteId) {
+  return request("/api/miniprogram/tasks/sticky/delete", {
+    method: "POST",
+    data: { noteId }
+  });
+}
+
 function updateProfile(data) {
   return request("/api/miniprogram/profile/update", {
     method: "POST",
@@ -222,5 +240,8 @@ module.exports = {
   getTaskDetail,
   updateTask,
   deleteTask,
+  getStickyNotes,
+  createStickyNote,
+  deleteStickyNote,
   updateProfile,
 };
