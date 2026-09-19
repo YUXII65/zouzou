@@ -13,11 +13,13 @@ export async function POST(request: Request) {
 
   const displayName = body.displayName?.trim().slice(0, 30) || null;
   const avatarUrl =
-    body.avatarUrl &&
-    body.avatarUrl.startsWith("data:image/") &&
-    body.avatarUrl.length <= 1000000
-      ? body.avatarUrl
-      : undefined;
+    body.avatarUrl === ""
+      ? null
+      : body.avatarUrl &&
+          body.avatarUrl.startsWith("data:image/") &&
+          body.avatarUrl.length <= 400_000
+        ? body.avatarUrl
+        : undefined;
 
   await prisma.user.update({
     where: { id: user.id },

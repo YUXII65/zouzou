@@ -582,3 +582,124 @@
 .cta-button-plain {
   margin-top: 30rpx;
 }
+/* 演示区：对齐网页 LandingDemo 的 5 个处境与自动播放 */
+.step-tab-done {
+  background: #e6f6ef;
+  color: #1c9d6a;
+}
+
+.bubble-line {
+  display: block;
+}
+
+.chip-selected {
+  border-color: #2f63e6;
+  background: #2f63e6;
+  color: #ffffff;
+  font-weight: 600;
+}
+
+.plan-intro {
+  display: block;
+  margin: 12rpx 0 18rpx;
+  color: #182238;
+  font-size: 25rpx;
+  line-height: 1.7;
+}
+
+.task-time {
+  flex-shrink: 0;
+  color: #7e93ae;
+  font-size: 22rpx;
+  line-height: 1.5;
+}
+
+.next-step-banner {
+  margin-top: 20rpx;
+  padding: 18rpx 20rpx;
+  border-radius: 16rpx;
+  background: #e6f6ef;
+  color: #1c9d6a;
+  font-size: 23rpx;
+  line-height: 1.6;
+}
+
+.loop-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  color: #4d6d94;
+  font-size: 23rpx;
+  font-weight: 600;
+}
+
+.loop-status {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 28rpx;
+  color: #7e93ae;
+  font-size: 24rpx;
+  line-height: 1;
+}
+
+.loop-status-done {
+  color: #1c9d6a;
+  font-weight: 700;
+}
+
+.loop-status-doing {
+  color: #2f63e6;
+  font-weight: 700;
+}
+
+.review-insight {
+  margin-top: 12rpx;
+  padding-left: 14rpx;
+  border-left: 4rpx solid rgba(47, 99, 230, 0.42);
+  color: #4d6d94;
+  font-size: 23rpx;
+  line-height: 1.65;
+}
+
+.review-next {
+  margin-top: 12rpx;
+  color: #1c9d6a;
+  font-size: 23rpx;
+  line-height: 1.65;
+}
+
+.loop-cta {
+  margin-top: 20rpx;
+  padding: 20rpx;
+  border-radius: 16rpx;
+  background: #e8f0ff;
+  color: #1e45b4;
+  font-size: 25rpx;
+  font-weight: 600;
+  text-align: center;
+}
+
+.refresh-demo {
+  position: fixed;
+  right: 28rpx;
+  bottom: 38rpx;
+  z-index: 20;
+  padding: 18rpx 24rpx;
+  border: 1rpx solid rgba(47, 99, 230, 0.2);
+  border-radius: 999rpx;
+  background: rgba(255, 255, 255, 0.96);
+  color: #1e45b4;
+  font-size: 24rpx;
+  font-weight: 600;
+  box-shadow: 0 16rpx 38rpx rgba(52, 92, 160, 0.16);
+}
+.primary-button-plain {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  height: 88rpx !important;
+  box-sizing: border-box !important;
+  text-align: center !important;
+}

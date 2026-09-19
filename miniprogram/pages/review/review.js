@@ -1,13 +1,22 @@
 Page({
   data: {
+    userAvatar: "",
+    userInitial: "走",
     date: "",
     reviewId: "",
     summary: "",
     nextActions: "",
     reviewStatus: "",
+    reviewSavedAlready: false,
+    feedback: "",
     tasks: [],
+    reviews: [],
     completedCount: 0,
-    openCount: 0
+    openCount: 0,
+    weekReviewCount: 0,
+    weekCompleted: 0,
+    weekOpen: 0,
+    weekProjects: 0
   },
 
   onLoad() {
@@ -16,8 +25,18 @@ Page({
     this.loadReview();
   },
 
+  syncUserHeader() {
+    const { getCachedUser } = require("../../utils/api");
+    const user = getCachedUser();
+    const displayName = user ? (user.displayName || user.username || "走") : "走";
+    this.setData({
+      userAvatar: user && user.avatarUrl ? user.avatarUrl : "",
+      userInitial: displayName.slice(0, 1)
+    });
+  },
   onShow() {
     if (this.data.date) this.loadReview();
+    this.syncUserHeader();
   },
 
   formatToday() {
@@ -37,12 +56,34 @@ Page({
     getReview(this.data.date)
       .then((result) => {
         const review = result.review;
+        const weekStats = result.weekStats || {};
+        const nextData = {
+          reviews: result.reviews || [],
+          weekReviewCount: weekStats.weekReviewCount || 0,
+          weekCompleted: weekStats.weekCompleted || 0,
+          weekOpen: weekStats.weekOpen || 0,
+          weekProjects: weekStats.weekProjects || 0,
+          reviewSavedAlready: Boolean(result.reviewSavedAlready),
+          feedback: ""
+        };
+
         if (!review) {
-          this.setData({ reviewId: "", summary: "", nextActions: "", reviewStatus: "", tasks: [], completedCount: 0, openCount: 0 });
+          this.setData({
+            ...nextData,
+            reviewId: "",
+            summary: "",
+            nextActions: "",
+            reviewStatus: "",
+            tasks: [],
+            completedCount: 0,
+            openCount: 0
+          });
           return;
         }
+
         const completedCount = (review.tasks || []).filter((task) => task.status === "done").length;
         this.setData({
+          ...nextData,
           reviewId: review.id,
           summary: review.summary || "",
           nextActions: review.nextActions || "",
@@ -62,17 +103,19 @@ Page({
   },
 
   onDateChange(event) {
-    this.setData({ date: event.detail.value });
+    this.setData({ date: event.detail.value, feedback: "" });
     this.loadReview();
   },
 
-  onSummaryInput(event) {
-    this.setData({ summary: event.detail.value });
+  onHistoryTap(event) {
+    const date = event.currentTarget.dataset.date;
+    if (!date || date === this.data.date) return;
+    this.setData({ date, feedback: "" });
+    this.loadReview();
   },
 
-  onNextActionsInput(event) {
-    this.setData({ nextActions: event.detail.value });
-  },
+  onSummaryInput(event) { this.setData({ summary: event.detail.value, reviewSavedAlready: false }); },
+  onNextActionsInput(event) { this.setData({ nextActions: event.detail.value, reviewSavedAlready: false }); },
 
   onGenerate() {
     const { generateReviewDraft } = require("../../utils/api");
@@ -99,11 +142,16 @@ Page({
       wx.showToast({ title: "先写下当日总结", icon: "none" });
       return;
     }
+    if (this.data.reviewSavedAlready) {
+      wx.showToast({ title: "这份复盘已经保存", icon: "none" });
+      return;
+    }
 
     wx.showLoading({ title: "正在保存..." });
     saveReview({ reviewId: this.data.reviewId, summary: this.data.summary, nextActions: this.data.nextActions })
       .then(() => {
         wx.hideLoading();
+        this.setData({ reviewSavedAlready: true });
         wx.showToast({ title: "已保存", icon: "success" });
         this.loadReview();
       })
@@ -115,6 +163,17 @@ Page({
         }
         wx.showToast({ title: "没保存成功，再试一次", icon: "none" });
       });
+  },
+
+  onFeedbackTap(event) {
+    const action = event.currentTarget.dataset.action;
+    if (!this.data.reviewId || this.data.feedback) return;
+    const { sendReviewFeedback } = require("../../utils/api");
+    this.setData({ feedback: action });
+    sendReviewFeedback(this.data.reviewId, action).catch(() => {
+      this.setData({ feedback: "" });
+      wx.showToast({ title: "反馈没记上，再试一次", icon: "none" });
+    });
   },
 
   onProfileTap() { wx.navigateTo({ url: "/pages/profile/profile" }); },

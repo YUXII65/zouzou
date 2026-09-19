@@ -4,13 +4,15 @@ import { prisma } from "@/lib/prisma";
 
 export const dynamic = "force-dynamic";
 
+const statuses = ["active", "paused", "completed", "archived"] as const;
+
 export async function POST(request: Request) {
   const user = await getMiniProgramUser(request);
   if (!user) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
 
-  let body: { name?: string; objective?: string; currentMilestone?: string; notes?: string };
+  let body: { name?: string; objective?: string; currentMilestone?: string; notes?: string; status?: string };
   try {
     body = (await request.json()) as typeof body;
   } catch {
@@ -29,6 +31,7 @@ export async function POST(request: Request) {
       name: name.slice(0, 80),
       objective: objective.slice(0, 500),
       currentMilestone: body.currentMilestone?.trim().slice(0, 300) || null,
+      status: typeof body.status === "string" && statuses.includes(body.status as (typeof statuses)[number]) ? (body.status as (typeof statuses)[number]) : "active",
       notes: body.notes?.trim().slice(0, 1000) || null,
     },
     select: {

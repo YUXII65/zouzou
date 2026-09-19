@@ -6,7 +6,7 @@
     </view>
     <view class="top-actions">
       <view class="top-icon" bindtap="onToolsTap">▦</view>
-      <view class="avatar" bindtap="onProfileTap">氵</view>
+      <view class="avatar" bindtap="onProfileTap"><image wx:if="{{userAvatar}}" src="{{userAvatar}}" mode="aspectFill"></image><text wx:else>{{userInitial}}</text></view>
     </view>
   </view>
 
@@ -23,6 +23,9 @@
         <input class="form-input" placeholder="项目名称" value="{{projectName}}" bindinput="onProjectNameInput" />
         <input class="form-input" placeholder="目标：完成后能得到什么" value="{{projectObjective}}" bindinput="onProjectObjectiveInput" />
         <input class="form-input" placeholder="当前里程碑（可选）" value="{{projectMilestone}}" bindinput="onProjectMilestoneInput" />
+        <picker mode="selector" range="{{projectStatusLabels}}" value="{{projectStatusIndex}}" bindchange="onProjectStatusChange">
+          <view class="form-input picker-display">{{projectStatusLabels[projectStatusIndex]}}</view>
+        </picker>
         <view class="form-button" bindtap="onCreateProject">创建项目</view>
       </view>
 
@@ -72,7 +75,7 @@
     <view class="panel detail-panel" wx:elif="{{activeProject}}">
       <view class="panel-header">
         <text class="panel-title">{{activeProject.name}}</text>
-        <text class="panel-count">{{activeProject.tasks.length}} 个任务</text>
+        <text class="panel-count">{{activeProject.statusLabel}} · {{activeProject.tasks.length}} 个任务</text>
       </view>
       <view class="project-meta">
         <view><text class="meta-label">目标</text><text class="meta-value">{{activeProject.objective}}</text></view>
@@ -83,6 +86,9 @@
         <input class="form-input" placeholder="项目名称" value="{{editProjectName}}" bindinput="onEditProjectNameInput" />
         <input class="form-input" placeholder="目标" value="{{editProjectObjective}}" bindinput="onEditProjectObjectiveInput" />
         <input class="form-input" placeholder="当前里程碑" value="{{editProjectMilestone}}" bindinput="onEditProjectMilestoneInput" />
+        <picker mode="selector" range="{{projectStatusLabels}}" value="{{editProjectStatusIndex}}" bindchange="onEditProjectStatusChange">
+          <view class="form-input picker-display">{{projectStatusLabels[editProjectStatusIndex]}}</view>
+        </picker>
         <view class="form-button" bindtap="onSaveProject">保存项目</view>
       </view>
       <view class="new-project" bindtap="onToggleCreateTask">＋ 新增任务</view>

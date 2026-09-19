@@ -27,6 +27,7 @@ export async function GET(request: Request) {
       priority: true,
       scheduledDate: true,
       dueDate: true,
+      focusDate: true,
       projectId: true,
       project: { select: { name: true } },
     },
@@ -40,6 +41,7 @@ export async function GET(request: Request) {
       ...task,
       scheduledDate: task.scheduledDate ? toDateInputValue(task.scheduledDate) : "",
       dueDate: task.dueDate ? toDateInputValue(task.dueDate) : "",
+      focusDate: task.focusDate ? toDateInputValue(task.focusDate) : "",
       projectName: task.project?.name ?? "",
     },
   });

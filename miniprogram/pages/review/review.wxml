@@ -6,7 +6,7 @@
     </view>
     <view class="top-actions">
       <view class="top-icon" bindtap="onToolsTap">▦</view>
-      <view class="avatar" bindtap="onProfileTap">氵</view>
+      <view class="avatar" bindtap="onProfileTap"><image wx:if="{{userAvatar}}" src="{{userAvatar}}" mode="aspectFill"></image><text wx:else>{{userInitial}}</text></view>
     </view>
   </view>
 
@@ -20,20 +20,29 @@
     <view class="panel history-panel">
       <view class="panel-header">
         <text class="panel-title">历史复盘</text>
-        <text class="panel-count">{{reviewId ? 1 : 0}} 份</text>
+        <text class="panel-count">{{reviews.length}} 份</text>
       </view>
       <picker mode="date" value="{{date}}" bindchange="onDateChange">
         <view class="today-row">
-          <text>{{date}}</text>
-          <text class="muted">{{reviewStatus === 'final' ? '已保存' : (reviewId ? '草稿' : '未写')}}</text>
+          <text>选择日期</text>
+          <text class="muted">{{date}} · {{reviewStatus === 'final' ? '已保存' : (reviewId ? '草稿' : '未写')}}</text>
         </view>
       </picker>
-      <view class="history-empty" wx:if="{{!reviewId}}">还没有历史复盘</view>
+      <view class="history-list" wx:if="{{reviews.length}}">
+        <view class="history-item {{item.date === date ? 'history-item-active' : ''}}" wx:for="{{reviews}}" wx:key="id" data-date="{{item.date}}" bindtap="onHistoryTap">
+          <text>{{item.date}}</text>
+          <text class="muted">{{item.completedCount}} / {{item.openCount}}</text>
+        </view>
+      </view>
+      <view class="history-empty" wx:else>还没有历史复盘</view>
     </view>
-
     <view class="panel review-panel">
       <view class="panel-header">
         <text class="panel-title">{{reviewId ? '当日复盘' : '写今日复盘'}}</text>
+      </view>
+      <view class="review-feedback" wx:if="{{reviewId}}">
+        <view class="feedback-button {{feedback === 'useful' ? 'feedback-useful' : ''}}" data-action="useful" bindtap="onFeedbackTap">有帮助</view>
+        <view class="feedback-button {{feedback === 'useless' ? 'feedback-useless' : ''}}" data-action="useless" bindtap="onFeedbackTap">没帮助</view>
       </view>
       <view class="review-form" wx:if="{{!reviewId}}">
         <picker mode="date" value="{{date}}" bindchange="onDateChange">
@@ -46,7 +55,7 @@
         <textarea class="review-textarea" value="{{summary}}" placeholder="写下今天真正推进了什么，卡在哪里" bindinput="onSummaryInput"></textarea>
         <text class="field-label">下一步任务（1-3 条）</text>
         <textarea class="review-textarea small" value="{{nextActions}}" placeholder="每条两行：精简标题 + 具体说明" bindinput="onNextActionsInput"></textarea>
-        <view class="save-button" bindtap="onSave">保存复盘</view>
+        <view class="save-button {{reviewSavedAlready ? 'save-button-saved' : ''}}" bindtap="onSave">{{reviewSavedAlready ? '保存成功' : '保存复盘'}}</view>
       </view>
     </view>
 
@@ -68,12 +77,12 @@
     <view class="panel week-panel">
       <view class="panel-header">
         <text class="panel-title">本周回看</text>
-        <text class="panel-count">{{reviewId ? 1 : 0}} 份每日复盘</text>
+        <text class="panel-count">{{weekReviewCount}} 份每日复盘</text>
       </view>
       <view class="week-stats">
-        <view class="week-stat success"><text>本周完成</text><text class="week-number">{{completedCount}}</text></view>
-        <view class="week-stat warning"><text>待推进</text><text class="week-number">{{openCount}}</text></view>
-        <view class="week-stat neutral"><text>涉及项目</text><text class="week-number">0</text></view>
+        <view class="week-stat success"><text>本周完成</text><text class="week-number">{{weekCompleted}}</text></view>
+        <view class="week-stat warning"><text>待推进</text><text class="week-number">{{weekOpen}}</text></view>
+        <view class="week-stat neutral"><text>涉及项目</text><text class="week-number">{{weekProjects}}</text></view>
       </view>
     </view>
   </view>

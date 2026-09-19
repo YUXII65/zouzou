@@ -6,7 +6,7 @@
     </view>
     <view class="top-actions">
       <view class="top-icon active">▦</view>
-      <view class="avatar" bindtap="onProfileTap">氵</view>
+      <view class="avatar" bindtap="onProfileTap"><image wx:if="{{userAvatar}}" src="{{userAvatar}}" mode="aspectFill"></image><text wx:else>{{userInitial}}</text></view>
     </view>
   </view>
 
@@ -30,6 +30,7 @@
     <view class="panel">
       <view class="panel-header"><text class="panel-title">需要关注</text></view>
       <view class="attention-body" wx:if="{{stalledProjects.length === 0}}">暂无停滞项目。</view><view class="attention-body" wx:else><view class="attention-item" wx:for="{{stalledProjects}}" wx:key="name">{{item.name}} 已停 {{item.days}} 天</view></view>
+      <view class="attention-feedback" wx:if="{{feedbackCount > 0}}">已记录 {{feedbackCount}} 条 AI 反馈事件</view>
     </view>
 
     <view class="panel">

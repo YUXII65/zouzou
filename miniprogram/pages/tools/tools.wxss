@@ -146,3 +146,5 @@
 }
 .nav-item { display: flex; flex: 1; flex-direction: column; align-items: center; justify-content: center; gap: 6rpx; color: #8296b0; font-size: 22rpx; }
 .nav-icon { font-size: 32rpx; line-height: 1; }.attention-item { margin-top: 10rpx; padding: 14rpx 16rpx; border-radius: 12rpx; background: #edf4fb; color: #4d6d94; font-size: 24rpx; }
+
+.attention-feedback { padding: 0 26rpx 24rpx; color: #8296b0; font-size: 22rpx; }

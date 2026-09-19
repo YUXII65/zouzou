@@ -1,6 +1,8 @@
 Page({
   data: {
     enabled: [],
+    userAvatar: "",
+    userInitial: "走",
     pendingInbox: 0,
     openTasks: 0,
     doneTasks: 0,
@@ -25,8 +27,18 @@ Page({
 
   timerId: null,
 
+  syncUserHeader() {
+    const { getCachedUser } = require("../../utils/api");
+    const user = getCachedUser();
+    const displayName = user ? (user.displayName || user.username || "走") : "走";
+    this.setData({
+      userAvatar: user && user.avatarUrl ? user.avatarUrl : "",
+      userInitial: displayName.slice(0, 1)
+    });
+  },
   onShow() {
     this.loadTools();
+    this.syncUserHeader();
   },
 
   loadTools() {

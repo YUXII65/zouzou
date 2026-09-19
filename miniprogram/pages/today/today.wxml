@@ -6,7 +6,7 @@
     </view>
     <view class="top-actions">
       <view class="top-icon" bindtap="onToolsTap">▦</view>
-      <view class="avatar" bindtap="onProfileTap">氵</view>
+      <view class="avatar" bindtap="onProfileTap"><image wx:if="{{userAvatar}}" src="{{userAvatar}}" mode="aspectFill"></image><text wx:else>{{userInitial}}</text></view>
     </view>
   </view>
 
@@ -145,6 +145,10 @@
           <view class="pending-confirm {{submittingPlanId ? 'pending-confirm-disabled' : ''}}" data-item-index="{{itemIndex}}" bindtap="onConfirmPlan">
             {{submittingPlanId === pending.id ? '正在生成...' : '生成任务'}}
           </view>
+        </view>
+
+        <view class="pending-footer">
+          <view class="pending-ignore {{ignoringInboxId === pending.id ? 'pending-confirm-disabled' : ''}}" data-id="{{pending.id}}" bindtap="onIgnoreInbox">忽略</view>
         </view>
       </view>
     </view>

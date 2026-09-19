@@ -12,6 +12,9 @@ const PRIORITY_LABELS = {
   urgent: "紧急"
 };
 
+const PROJECT_STATUSES = ["active", "paused", "completed", "archived"];
+const PROJECT_STATUS_LABELS = ["进行中", "已暂停", "已完成", "已归档"];
+
 function decorateTasks(tasks) {
   return (tasks || []).map((task) => ({
     ...task,
@@ -33,6 +36,8 @@ function decorateTasks(tasks) {
 
 Page({
   data: {
+    userAvatar: "",
+    userInitial: "走",
     projects: [],
     unassociatedTasks: [],
     activeProjectId: "",
@@ -43,17 +48,30 @@ Page({
     projectName: "",
     projectObjective: "",
     projectMilestone: "",
+    projectStatusIndex: 0,
+    projectStatusLabels: PROJECT_STATUS_LABELS,
     showEditProject: false,
     editProjectName: "",
     editProjectObjective: "",
     editProjectMilestone: "",
+    editProjectStatusIndex: 0,
     showCreateTask: false,
     taskTitle: "",
     taskNotes: ""
   },
 
+  syncUserHeader() {
+    const { getCachedUser } = require("../../utils/api");
+    const user = getCachedUser();
+    const displayName = user ? (user.displayName || user.username || "走") : "走";
+    this.setData({
+      userAvatar: user && user.avatarUrl ? user.avatarUrl : "",
+      userInitial: displayName.slice(0, 1)
+    });
+  },
   onShow() {
     this.loadWorkspace();
+    this.syncUserHeader();
   },
 
   loadWorkspace() {
@@ -87,7 +105,11 @@ Page({
   },
 
   applyWorkspace(projects, unassociatedTasks, activeProjectId, showUnassigned) {
-    const activeProject = projects.find((project) => project.id === activeProjectId) || null;
+    const normalizedProjects = projects.map((project) => ({
+      ...project,
+      statusLabel: PROJECT_STATUS_LABELS[PROJECT_STATUSES.indexOf(project.status)] || project.status
+    }));
+    const activeProject = normalizedProjects.find((project) => project.id === activeProjectId) || null;
     const normalizedProject = activeProject
       ? { ...activeProject, tasks: decorateTasks(activeProject.tasks) }
       : null;
@@ -113,9 +135,7 @@ Page({
     this.setData({
       showUnassigned: false,
       activeProjectId: id,
-      activeProject: activeProject
-        ? { ...activeProject, tasks: decorateTasks(activeProject.tasks) }
-        : null,
+      activeProject: activeProject ? { ...activeProject, tasks: decorateTasks(activeProject.tasks) } : null,
       showCreateTask: false,
       showEditProject: false
     }, () => {
@@ -141,6 +161,7 @@ Page({
   onProjectNameInput(event) { this.setData({ projectName: event.detail.value }); },
   onProjectObjectiveInput(event) { this.setData({ projectObjective: event.detail.value }); },
   onProjectMilestoneInput(event) { this.setData({ projectMilestone: event.detail.value }); },
+  onProjectStatusChange(event) { this.setData({ projectStatusIndex: Number(event.detail.value) }); },
 
   onCreateProject() {
     const { createProject } = require("../../utils/api");
@@ -152,7 +173,8 @@ Page({
     createProject({
       name: this.data.projectName,
       objective: this.data.projectObjective,
-      currentMilestone: this.data.projectMilestone
+      currentMilestone: this.data.projectMilestone,
+      status: PROJECT_STATUSES[this.data.projectStatusIndex] || "active"
     }).then((result) => {
       wx.hideLoading();
       this.setData({
@@ -160,6 +182,7 @@ Page({
         projectName: "",
         projectObjective: "",
         projectMilestone: "",
+        projectStatusIndex: 0,
         activeProjectId: result.project.id,
         showUnassigned: false
       });
@@ -177,13 +200,15 @@ Page({
       showEditProject: !this.data.showEditProject,
       editProjectName: project.name,
       editProjectObjective: project.objective,
-      editProjectMilestone: project.currentMilestone || ""
+      editProjectMilestone: project.currentMilestone || "",
+      editProjectStatusIndex: Math.max(PROJECT_STATUSES.indexOf(project.status), 0)
     });
   },
 
   onEditProjectNameInput(event) { this.setData({ editProjectName: event.detail.value }); },
   onEditProjectObjectiveInput(event) { this.setData({ editProjectObjective: event.detail.value }); },
   onEditProjectMilestoneInput(event) { this.setData({ editProjectMilestone: event.detail.value }); },
+  onEditProjectStatusChange(event) { this.setData({ editProjectStatusIndex: Number(event.detail.value) }); },
 
   onSaveProject() {
     const { updateProject } = require("../../utils/api");
@@ -198,7 +223,7 @@ Page({
       name: this.data.editProjectName,
       objective: this.data.editProjectObjective,
       currentMilestone: this.data.editProjectMilestone,
-      status: this.data.activeProject.status
+      status: PROJECT_STATUSES[this.data.editProjectStatusIndex] || this.data.activeProject.status
     }).then(() => {
       wx.hideLoading();
       wx.showToast({ title: "已保存", icon: "success" });

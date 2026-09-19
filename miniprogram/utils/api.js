@@ -1,6 +1,7 @@
 const { apiBase } = require("../config");
 
 const TOKEN_KEY = "next_step_miniprogram_token";
+const USER_KEY = "next_step_miniprogram_user";
 
 function getToken() {
   return wx.getStorageSync(TOKEN_KEY) || "";
@@ -10,8 +11,18 @@ function setToken(token) {
   wx.setStorageSync(TOKEN_KEY, token);
 }
 
+
 function clearToken() {
   wx.removeStorageSync(TOKEN_KEY);
+  wx.removeStorageSync(USER_KEY);
+}
+
+function setCachedUser(user) {
+  if (user) wx.setStorageSync(USER_KEY, user);
+}
+
+function getCachedUser() {
+  return wx.getStorageSync(USER_KEY) || null;
 }
 
 function request(path, options = {}) {
@@ -117,6 +128,13 @@ function confirmPlan(data) {
   });
 }
 
+function ignoreInbox(itemId) {
+  return request("/api/miniprogram/inbox/ignore", {
+    method: "POST",
+    data: { itemId }
+  });
+}
+
 function setTaskStatus(taskId, status) {
   return request("/api/miniprogram/tasks/status", {
     method: "POST",
@@ -139,6 +157,13 @@ function saveReview(data) {
   return request("/api/miniprogram/review/save", {
     method: "POST",
     data
+  });
+}
+
+function sendReviewFeedback(reviewId, action) {
+  return request("/api/miniprogram/review/feedback", {
+    method: "POST",
+    data: { reviewId, action }
   });
 }
 
@@ -226,6 +251,8 @@ module.exports = {
   getToken,
   setToken,
   clearToken,
+  setCachedUser,
+  getCachedUser,
   loginOrRegister,
   getMe,
   getToday,
@@ -234,10 +261,12 @@ module.exports = {
   clarifyIdea,
   planInbox,
   confirmPlan,
+  ignoreInbox,
   setTaskStatus,
   generateReviewDraft,
   getReview,
   saveReview,
+  sendReviewFeedback,
   getWorkspace,
   createProject,
   updateProject,

@@ -181,3 +181,13 @@
 .task-state-done { color: #1c9d6a; }
 .task-title { flex: 1; min-width: 0; color: #182238; font-size: 25rpx; }
 .task-project { color: #8296b0; font-size: 21rpx; }
+
+/* 历史复盘、草稿反馈：对齐网页 ReviewPage / ReviewDraftFeedback */
+.history-list { padding: 10rpx; }
+.history-item { display: flex; align-items: center; justify-content: space-between; gap: 16rpx; padding: 18rpx 20rpx; border-radius: 14rpx; color: #4d6d94; font-size: 24rpx; }
+.history-item-active { background: #e8f0ff; color: #1e45b4; font-weight: 600; }
+.review-feedback { display: flex; gap: 12rpx; padding: 16rpx 26rpx 0; }
+.feedback-button { padding: 10rpx 18rpx; border: 1rpx solid #dce8f7; border-radius: 999rpx; background: #ffffff; color: #8296b0; font-size: 22rpx; }
+.feedback-useful { border-color: rgba(28, 157, 106, 0.25); background: rgba(28, 157, 106, 0.1); color: #1c9d6a; }
+.feedback-useless { border-color: rgba(217, 80, 80, 0.22); background: rgba(217, 80, 80, 0.1); color: #d95050; }
+.save-button-saved { background: rgba(28, 157, 106, 0.12); color: #1c9d6a; }

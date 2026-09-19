@@ -39,6 +39,8 @@ function normalizeDimensions(clarification) {
 
 Page({
   data: {
+    userAvatar: "",
+    userInitial: "走",
     dateText: "",
     weekdayText: "",
     timeText: "",
@@ -63,8 +65,18 @@ Page({
     this.updateClock();
   },
 
+  syncUserHeader() {
+    const { getCachedUser } = require("../../utils/api");
+    const user = getCachedUser();
+    const displayName = user ? (user.displayName || user.username || "走") : "走";
+    this.setData({
+      userAvatar: user && user.avatarUrl ? user.avatarUrl : "",
+      userInitial: displayName.slice(0, 1)
+    });
+  },
   onShow() {
     this.updateClock();
+    this.syncUserHeader();
     this.loadToday();
   },
 
@@ -352,6 +364,29 @@ Page({
           return;
         }
         wx.showToast({ title: "创建失败，再试一次", icon: "none" });
+      });
+  },
+
+  onIgnoreInbox(event) {
+    const itemId = event.currentTarget.dataset.id;
+    if (!itemId || this.data.ignoringInboxId) return;
+    const { ignoreInbox } = require("../../utils/api");
+    this.setData({ ignoringInboxId: itemId });
+    wx.showLoading({ title: "正在忽略..." });
+    ignoreInbox(itemId)
+      .then(() => {
+        wx.hideLoading();
+        this.setData({ ignoringInboxId: "" });
+        this.loadToday();
+      })
+      .catch((error) => {
+        wx.hideLoading();
+        this.setData({ ignoringInboxId: "" });
+        if (error.statusCode === 401) {
+          wx.reLaunch({ url: "/pages/login/login" });
+          return;
+        }
+        wx.showToast({ title: "忽略失败，再试一次", icon: "none" });
       });
   },
 
