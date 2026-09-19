@@ -229,6 +229,8 @@ Page({
     wx.navigateTo({ url: /pages/task-edit/task-edit?id= });
   },
 
+  onProfileTap() { wx.navigateTo({ url: "/pages/profile/profile" }); },
+
   onToolsTap() {
     wx.reLaunch({ url: "/pages/tools/tools" });
   },

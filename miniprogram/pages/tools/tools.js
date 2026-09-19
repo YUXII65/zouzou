@@ -125,6 +125,8 @@ Page({
 
   onExport() { wx.showToast({ title: "导出接口接入中", icon: "none" }); },
 
+  onProfileTap() { wx.navigateTo({ url: "/pages/profile/profile" }); },
+
   onTabTap(event) {
     const key = event.currentTarget.dataset.key;
     const routes = { today: "/pages/today/today", desk: "/pages/workspace/workspace", review: "/pages/review/review" };

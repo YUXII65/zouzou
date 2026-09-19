@@ -6,7 +6,7 @@
     </view>
     <view class="top-actions">
       <view class="top-icon active">▦</view>
-      <view class="avatar">氵</view>
+      <view class="avatar" bindtap="onProfileTap">氵</view>
     </view>
   </view>
 

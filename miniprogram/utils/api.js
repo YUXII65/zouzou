@@ -190,6 +190,13 @@ function deleteTask(taskId) {
   });
 }
 
+function updateProfile(data) {
+  return request("/api/miniprogram/profile/update", {
+    method: "POST",
+    data
+  });
+}
+
 module.exports = {
   request,
   getToken,
@@ -215,4 +222,5 @@ module.exports = {
   getTaskDetail,
   updateTask,
   deleteTask,
+  updateProfile,
 };

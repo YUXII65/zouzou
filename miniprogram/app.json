@@ -6,7 +6,8 @@
     "pages/workspace/workspace",
     "pages/review/review",
     "pages/tools/tools",
-    "pages/task-edit/task-edit"
+    "pages/task-edit/task-edit",
+    "pages/profile/profile"
   ],
   "window": {
     "navigationBarTitleText": "走走",
