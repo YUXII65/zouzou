@@ -140,6 +140,24 @@ function saveReview(data) {
   });
 }
 
+function getWorkspace() {
+  return request("/api/miniprogram/workspace");
+}
+
+function createProject(data) {
+  return request("/api/miniprogram/projects", {
+    method: "POST",
+    data
+  });
+}
+
+function createTask(data) {
+  return request("/api/miniprogram/tasks", {
+    method: "POST",
+    data
+  });
+}
+
 module.exports = {
   request,
   getToken,
@@ -157,4 +175,7 @@ module.exports = {
   generateReviewDraft,
   getReview,
   saveReview,
+  getWorkspace,
+  createProject,
+  createTask,
 };

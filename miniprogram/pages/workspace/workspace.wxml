@@ -17,17 +17,48 @@
     </view>
 
     <view class="panel projects-panel">
-      <view class="panel-header">
-        <text class="panel-title">项目</text>
+      <view class="panel-header"><text class="panel-title">项目</text></view>
+      <view class="new-project" bindtap="onToggleCreateProject">＋ 新建项目</view>
+      <view class="create-form" wx:if="{{showCreateProject}}">
+        <input class="form-input" placeholder="项目名称" value="{{projectName}}" bindinput="onProjectNameInput" />
+        <input class="form-input" placeholder="目标：完成后能得到什么" value="{{projectObjective}}" bindinput="onProjectObjectiveInput" />
+        <input class="form-input" placeholder="当前里程碑（可选）" value="{{projectMilestone}}" bindinput="onProjectMilestoneInput" />
+        <view class="form-button" bindtap="onCreateProject">创建项目</view>
       </view>
-      <view class="new-project" bindtap="onNewProject">＋ 新建项目</view>
-      <view class="empty-state compact">
-        <view class="empty-icon">▣</view>
-        <view class="empty-text">还没有项目</view>
+      <view class="project-list" wx:if="{{projects.length}}">
+        <view class="project-item {{item.id === activeProjectId ? 'project-item-active' : ''}}" wx:for="{{projects}}" wx:key="id" data-id="{{item.id}}" bindtap="onProjectTap">
+          <text class="project-name">{{item.name}}</text>
+          <text class="project-count">{{item.tasks.length}} 个任务</text>
+        </view>
       </view>
+      <view class="empty-state compact" wx:else><view class="empty-icon">▣</view><view class="empty-text">还没有项目</view></view>
     </view>
 
-    <view class="panel detail-panel">
+    <view class="panel detail-panel" wx:if="{{activeProject}}">
+      <view class="panel-header">
+        <text class="panel-title">{{activeProject.name}}</text>
+        <text class="panel-count">{{activeProject.tasks.length}} 个任务</text>
+      </view>
+      <view class="project-meta">
+        <view><text class="meta-label">目标</text><text class="meta-value">{{activeProject.objective}}</text></view>
+        <view><text class="meta-label">里程碑</text><text class="meta-value">{{activeProject.currentMilestone || '暂无'}}</text></view>
+      </view>
+      <view class="new-project" bindtap="onToggleCreateTask">＋ 新增任务</view>
+      <view class="create-form" wx:if="{{showCreateTask}}">
+        <input class="form-input" placeholder="任务标题" value="{{taskTitle}}" bindinput="onTaskTitleInput" />
+        <input class="form-input" placeholder="具体说明（可选）" value="{{taskNotes}}" bindinput="onTaskNotesInput" />
+        <view class="form-button" bindtap="onCreateTask">添加任务</view>
+      </view>
+      <view class="task-list" wx:if="{{activeProject.tasks.length}}">
+        <view class="task-row" wx:for="{{activeProject.tasks}}" wx:key="id">
+          <text class="task-title">{{item.shortTitle || item.title}}</text>
+          <text class="task-status">{{item.status}}</text>
+        </view>
+      </view>
+      <view class="empty-state compact" wx:else><view class="empty-icon">▤</view><view class="empty-text">项目下还没有任务</view></view>
+    </view>
+
+    <view class="panel detail-panel" wx:else>
       <view class="empty-state">
         <view class="empty-icon">▤</view>
         <view class="empty-title">选择或创建一个项目</view>
@@ -37,14 +68,8 @@
   </view>
 
   <view class="bottom-nav">
-    <view class="nav-item" data-key="today" bindtap="onTabTap">
-      <text class="nav-icon">▦</text><text>日历</text>
-    </view>
-    <view class="nav-item nav-item-active" data-key="desk" bindtap="onTabTap">
-      <text class="nav-icon">▤</text><text>书桌</text>
-    </view>
-    <view class="nav-item" data-key="review" bindtap="onTabTap">
-      <text class="nav-icon">▣</text><text>抽屉</text>
-    </view>
+    <view class="nav-item" data-key="today" bindtap="onTabTap"><text class="nav-icon">▦</text><text>日历</text></view>
+    <view class="nav-item nav-item-active" data-key="desk" bindtap="onTabTap"><text class="nav-icon">▤</text><text>书桌</text></view>
+    <view class="nav-item" data-key="review" bindtap="onTabTap"><text class="nav-icon">▣</text><text>抽屉</text></view>
   </view>
 </view>
