@@ -123,7 +123,20 @@ Page({
 
   onReviewTap() { wx.reLaunch({ url: "/pages/review/review" }); },
 
-  onExport() { wx.showToast({ title: "导出接口接入中", icon: "none" }); },
+  onExport() {
+    const { getExportData } = require("../../utils/api");
+    wx.showLoading({ title: "正在导出..." });
+    getExportData().then((data) => {
+      const filePath = `${wx.env.USER_DATA_PATH}/zouzou-export.json`;
+      wx.getFileSystemManager().writeFile({
+        filePath,
+        data: JSON.stringify(data, null, 2),
+        encoding: "utf8",
+        success: () => { wx.hideLoading(); wx.showModal({ title: "导出完成", content: `已保存到小程序本地文件：${filePath}`, showCancel: false }); },
+        fail: () => { wx.hideLoading(); wx.showToast({ title: "文件保存失败", icon: "none" }); }
+      });
+    }).catch(() => { wx.hideLoading(); wx.showToast({ title: "导出失败，再试一次", icon: "none" }); });
+  },
 
   onProfileTap() { wx.navigateTo({ url: "/pages/profile/profile" }); },
 

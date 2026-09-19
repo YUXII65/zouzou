@@ -215,6 +215,10 @@ function updateProfile(data) {
   });
 }
 
+function getExportData() {
+  return request("/api/miniprogram/export");
+}
+
 module.exports = {
   request,
   getToken,
@@ -244,4 +248,5 @@ module.exports = {
   createStickyNote,
   deleteStickyNote,
   updateProfile,
+  getExportData,
 };
