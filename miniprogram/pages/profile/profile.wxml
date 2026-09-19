@@ -3,7 +3,7 @@
   <view class="profile-card">
     <view class="avatar" bindtap="onChooseAvatar">
       <image wx:if="{{avatarUrl}}" src="{{avatarUrl}}" mode="aspectFill"></image>
-      <text wx:else>{{(displayName || username || '走').slice(0, 1)}}</text>
+      <text wx:else>{{displayInitial}}</text>
     </view>
     <text class="username">@{{username}}</text>
     <view class="reset-avatar" wx:if="{{avatarUrl}}" bindtap="onResetAvatar">恢复默认头像</view>

@@ -6,6 +6,7 @@ Page({
     username: "",
     displayName: "",
     avatarUrl: "",
+    displayInitial: "走",
     saving: false
   },
 
@@ -23,13 +24,17 @@ Page({
         this.setData({
           username: user.username || "",
           displayName: user.displayName || user.username || "",
-          avatarUrl: user.avatarUrl || ""
+          avatarUrl: user.avatarUrl || "",
+          displayInitial: (user.displayName || user.username || "走").slice(0, 1)
         });
       })
       .catch(() => wx.showToast({ title: "资料没加载出来", icon: "none" }));
   },
 
-  onNameInput(event) { this.setData({ displayName: event.detail.value }); },
+  onNameInput(event) {
+    const displayName = event.detail.value;
+    this.setData({ displayName, displayInitial: (displayName || this.data.username || "走").slice(0, 1) });
+  },
 
   onChooseAvatar() {
     wx.chooseImage({
