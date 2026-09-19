@@ -74,8 +74,11 @@
       </view>
       <view class="task-list" wx:else>
         <view class="task-row" wx:for="{{tasks}}" wx:key="id">
-          <view class="task-title">{{item.title}}</view>
-          <view class="task-meta">{{item.projectName}}</view>
+          <view class="task-copy">
+            <view class="task-title">{{item.title}}</view>
+            <view class="task-meta">{{item.projectName}}</view>
+          </view>
+          <view class="task-action" data-id="{{item.id}}" data-status="{{item.nextStatus}}" bindtap="onTaskStatusTap">{{item.actionLabel}}</view>
         </view>
       </view>
     </view>

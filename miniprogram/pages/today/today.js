@@ -82,7 +82,19 @@ Page({
               planTasks: plan && Array.isArray(plan.tasks) ? plan.tasks : []
             };
           }),
-          tasks: result.tasks || []
+          tasks: (result.tasks || []).map((task) => ({
+            ...task,
+            actionLabel: task.status === "todo"
+              ? "下一步"
+              : task.status === "in_progress"
+                ? "完成"
+                : "重新开始",
+            nextStatus: task.status === "todo"
+              ? "in_progress"
+              : task.status === "in_progress"
+                ? "done"
+                : "todo"
+          }))
         });
       })
       .catch((error) => {
@@ -190,6 +202,27 @@ Page({
           return;
         }
         wx.showToast({ title: "创建失败，再试一次", icon: "none" });
+      });
+  },
+  onTaskStatusTap(event) {
+    const taskId = event.currentTarget.dataset.id;
+    const status = event.currentTarget.dataset.status;
+    if (!taskId || !status) return;
+
+    const { setTaskStatus } = require("../../utils/api");
+    wx.showLoading({ title: "正在同步..." });
+    setTaskStatus(taskId, status)
+      .then(() => {
+        wx.hideLoading();
+        this.loadToday();
+      })
+      .catch((error) => {
+        wx.hideLoading();
+        if (error.statusCode === 401) {
+          wx.reLaunch({ url: "/pages/login/login" });
+          return;
+        }
+        wx.showToast({ title: "状态没更新成功", icon: "none" });
       });
   },
   onToolsTap() {

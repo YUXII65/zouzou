@@ -115,6 +115,13 @@ function confirmPlan(itemId) {
   });
 }
 
+function setTaskStatus(taskId, status) {
+  return request("/api/miniprogram/tasks/status", {
+    method: "POST",
+    data: { taskId, status }
+  });
+}
+
 module.exports = {
   request,
   getToken,
@@ -128,4 +135,5 @@ module.exports = {
   clarifyIdea,
   planInbox,
   confirmPlan,
+  setTaskStatus,
 };
