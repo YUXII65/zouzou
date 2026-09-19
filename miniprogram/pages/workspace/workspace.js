@@ -60,6 +60,9 @@ Page({
     editProjectObjective: "",
     editProjectMilestone: "",
     editProjectStatusIndex: 0,
+    editAiIdea: "",
+    editAiSuggestion: null,
+    editAiLoading: false,
     showCreateTask: false,
     taskTitle: "",
     taskNotes: "",
@@ -223,6 +226,49 @@ Page({
   onEditProjectObjectiveInput(event) { this.setData({ editProjectObjective: event.detail.value }); },
   onEditProjectMilestoneInput(event) { this.setData({ editProjectMilestone: event.detail.value }); },
   onEditProjectStatusChange(event) { this.setData({ editProjectStatusIndex: Number(event.detail.value) }); },
+
+  onEditAiIdeaInput(event) { this.setData({ editAiIdea: event.detail.value }); },
+
+  onEditProjectSuggest() {
+    const idea = this.data.editAiIdea.trim();
+    if (!idea) { wx.showToast({ title: "先写下你想怎么改", icon: "none" }); return; }
+    if (this.data.editAiLoading || !this.data.activeProject) return;
+    const { getProjectEditSuggestion } = require("../../utils/api");
+    this.setData({ editAiLoading: true });
+    wx.showLoading({ title: "正在判断怎么改..." });
+    getProjectEditSuggestion({
+      projectId: this.data.activeProjectId,
+      name: this.data.editProjectName,
+      objective: this.data.editProjectObjective,
+      currentMilestone: this.data.editProjectMilestone,
+      status: PROJECT_STATUSES[this.data.editProjectStatusIndex] || "active",
+      idea
+    })
+      .then((result) => {
+        wx.hideLoading();
+        this.setData({ editAiLoading: false, editAiSuggestion: result.suggestion });
+      })
+      .catch(() => {
+        wx.hideLoading();
+        this.setData({ editAiLoading: false });
+        wx.showToast({ title: "这次没整理出来", icon: "none" });
+      });
+  },
+
+  onApplyProjectAiSuggestion() {
+    const suggestion = this.data.editAiSuggestion;
+    if (!suggestion) return;
+    const nextStatus = suggestion.status && PROJECT_STATUSES.includes(suggestion.status)
+      ? suggestion.status
+      : PROJECT_STATUSES[this.data.editProjectStatusIndex];
+    this.setData({
+      editProjectName: suggestion.name || this.data.editProjectName,
+      editProjectObjective: suggestion.objective || this.data.editProjectObjective,
+      editProjectMilestone: suggestion.currentMilestone === undefined ? this.data.editProjectMilestone : (suggestion.currentMilestone || ""),
+      editProjectStatusIndex: Math.max(PROJECT_STATUSES.indexOf(nextStatus), 0)
+    });
+    wx.showToast({ title: "已应用建议", icon: "success" });
+  },
 
   onSaveProject() {
     const { updateProject } = require("../../utils/api");

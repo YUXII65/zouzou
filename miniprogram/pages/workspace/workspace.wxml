@@ -111,6 +111,15 @@
         <picker mode="selector" range="{{projectStatusLabels}}" value="{{editProjectStatusIndex}}" bindchange="onEditProjectStatusChange">
           <view class="form-input picker-display">{{projectStatusLabels[editProjectStatusIndex]}}</view>
         </picker>
+        <view class="ai-help">
+          <text class="form-label">AI 修改建议</text>
+          <textarea class="form-input ai-textarea" value="{{editAiIdea}}" placeholder="输入一个想法，例如：这个项目应该先聚焦到内容整理，暂不追求完整上线。" bindinput="onEditAiIdeaInput"></textarea>
+          <view class="form-button ai-button {{editAiLoading ? 'ai-button-disabled' : ''}}" bindtap="onEditProjectSuggest">{{editAiLoading ? '正在整理...' : '让 AI 给修改建议'}}</view>
+          <view class="ai-suggestion" wx:if="{{editAiSuggestion}}">
+            <text class="ai-reason">{{editAiSuggestion.reason}}</text>
+            <view class="ai-apply" bindtap="onApplyProjectAiSuggestion">应用建议</view>
+          </view>
+        </view>
         <view class="form-button" bindtap="onSaveProject">保存项目</view>
       </view>
       <view class="new-project" bindtap="onToggleCreateTask">＋ 新增任务</view>

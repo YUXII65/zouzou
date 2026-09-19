@@ -209,3 +209,10 @@
 .task-detail-copy { margin-top: 10rpx; padding-top: 10rpx; border-top: 1rpx solid #e5eefb; color: #4d6d94; font-size: 22rpx; line-height: 1.6; white-space: pre-wrap; }
 .task-detail-standard { margin-top: 10rpx; padding-top: 10rpx; border-top: 1rpx solid #e5eefb; color: #4d6d94; font-size: 22rpx; line-height: 1.6; }
 .task-detail-edit { display: inline-block; margin-top: 12rpx; color: #2f63e6; font-size: 22rpx; font-weight: 600; }
+.ai-help { margin-top: 18rpx; padding: 18rpx; border-radius: 14rpx; background: rgba(232, 240, 255, 0.58); }
+.form-label { display: block; margin-bottom: 10rpx; color: #4d6d94; font-size: 22rpx; font-weight: 600; }
+.ai-textarea { min-height: 120rpx; line-height: 1.55; }
+.ai-button-disabled { opacity: 0.55; }
+.ai-suggestion { margin-top: 14rpx; padding: 16rpx; border-radius: 14rpx; background: #ffffff; }
+.ai-reason { display: block; color: #4d6d94; font-size: 23rpx; line-height: 1.6; }
+.ai-apply { display: flex; align-items: center; justify-content: center; height: 64rpx; margin-top: 12rpx; border-radius: 14rpx; background: #2f63e6; color: #ffffff; font-size: 23rpx; font-weight: 600; }

@@ -210,6 +210,20 @@ function updateTask(data) {
   });
 }
 
+function getTaskEditSuggestion(data) {
+  return request("/api/miniprogram/ai/task/edit", {
+    method: "POST",
+    data
+  });
+}
+
+function getProjectEditSuggestion(data) {
+  return request("/api/miniprogram/ai/project/edit", {
+    method: "POST",
+    data
+  });
+}
+
 function deleteTask(taskId) {
   return request("/api/miniprogram/tasks/delete", {
     method: "POST",
@@ -274,6 +288,8 @@ module.exports = {
   createTask,
   getTaskDetail,
   updateTask,
+  getTaskEditSuggestion,
+  getProjectEditSuggestion,
   deleteTask,
   getStickyNotes,
   createStickyNote,

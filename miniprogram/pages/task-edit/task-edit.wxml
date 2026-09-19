@@ -9,6 +9,16 @@
     <text class="label">具体说明</text>
     <textarea class="textarea" value="{{notes}}" bindinput="onNotesInput"></textarea>
 
+    <view class="ai-help">
+      <text class="label">AI 修改建议</text>
+      <textarea class="textarea ai-textarea" value="{{aiIdea}}" placeholder="输入一个想法，例如：这个任务应该更聚焦到本周能完成的范围。" bindinput="onAiIdeaInput"></textarea>
+      <view class="ai-button {{aiLoading ? 'ai-button-disabled' : ''}}" bindtap="onAiTaskSuggest">{{aiLoading ? '正在整理...' : '让 AI 给修改建议'}}</view>
+      <view class="ai-suggestion" wx:if="{{aiSuggestion}}">
+        <text class="ai-reason">{{aiSuggestion.reason}}</text>
+        <view class="ai-apply" bindtap="onApplyAiSuggestion">应用建议</view>
+      </view>
+    </view>
+
     <text class="label">所属项目</text>
     <picker mode="selector" range="{{projectNames}}" value="{{projectIndex}}" bindchange="onProjectChange">
       <view class="picker">{{projectNames[projectIndex]}}</view>

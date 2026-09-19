@@ -23,7 +23,10 @@ Page({
     priorityLabels: PRIORITY_LABELS,
     statusLabels: STATUS_LABELS,
     stickyNotes: [],
-    stickyMessage: ""
+    stickyMessage: "",
+    aiIdea: "",
+    aiSuggestion: null,
+    aiLoading: false
   },
 
   onLoad(options) {
@@ -123,6 +126,60 @@ Page({
           .catch(() => wx.showToast({ title: "删除失败", icon: "none" }));
       }
     });
+  },
+
+  onAiIdeaInput(event) { this.setData({ aiIdea: event.detail.value }); },
+
+  onAiTaskSuggest() {
+    const idea = this.data.aiIdea.trim();
+    if (!idea) {
+      wx.showToast({ title: "先写下你想怎么改", icon: "none" });
+      return;
+    }
+    if (this.data.aiLoading) return;
+    const { getTaskEditSuggestion } = require("../../utils/api");
+    this.setData({ aiLoading: true });
+    wx.showLoading({ title: "正在判断怎么改..." });
+    getTaskEditSuggestion({
+      taskId: this.data.taskId,
+      title: this.data.title,
+      shortTitle: this.data.shortTitle,
+      notes: this.data.notes,
+      priority: this.data.priority,
+      scheduledDate: this.data.scheduledDate,
+      dueDate: this.data.dueDate,
+      focusDate: this.data.focusDate,
+      idea
+    })
+      .then((result) => {
+        wx.hideLoading();
+        this.setData({ aiLoading: false, aiSuggestion: result.suggestion });
+      })
+      .catch(() => {
+        wx.hideLoading();
+        this.setData({ aiLoading: false });
+        wx.showToast({ title: "这次没整理出来", icon: "none" });
+      });
+  },
+
+  onApplyAiSuggestion() {
+    const suggestion = this.data.aiSuggestion;
+    if (!suggestion) return;
+    const nextPriority = suggestion.priority && PRIORITIES.includes(suggestion.priority)
+      ? suggestion.priority
+      : this.data.priority;
+    const priorityIndex = Math.max(PRIORITIES.indexOf(nextPriority), 0);
+    this.setData({
+      title: suggestion.title || this.data.title,
+      shortTitle: suggestion.shortTitle || this.data.shortTitle,
+      notes: suggestion.notes === undefined ? this.data.notes : (suggestion.notes || ""),
+      priority: nextPriority,
+      priorityIndex,
+      scheduledDate: suggestion.scheduledDate === undefined ? this.data.scheduledDate : (suggestion.scheduledDate || ""),
+      dueDate: suggestion.dueDate === undefined ? this.data.dueDate : (suggestion.dueDate || ""),
+      focusDate: suggestion.focusDate === undefined ? this.data.focusDate : (suggestion.focusDate || "")
+    });
+    wx.showToast({ title: "已应用建议", icon: "success" });
   },
 
   onSave() {
