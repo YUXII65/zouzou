@@ -48,15 +48,103 @@
     </view>
 
     <view class="pending-list" wx:if="{{pendingItems.length > 0}}">
-      <view class="pending-card" wx:for="{{pendingItems}}" wx:key="id" wx:for-item="pending">
-        <view class="pending-content">{{pending.content}}</view>
-        <view class="pending-action">{{pending.action}}</view>
-        <view class="pending-options" wx:if="{{pending.options.length > 0}}">
-          <view class="pending-option" wx:for="{{pending.options}}" wx:key="*this" wx:for-item="option" data-id="{{pending.id}}" data-option="{{option}}" bindtap="onClarifyOptionTap">{{option}}</view>
+      <view class="pending-card" wx:for="{{pendingItems}}" wx:key="id" wx:for-item="pending" wx:for-index="itemIndex">
+        <view class="pending-head">
+          <view class="pending-content">{{pending.content}}</view>
+          <view class="pending-action">{{pending.action}}</view>
         </view>
+
+        <view class="pending-clarify" wx:if="{{pending.dimensions.length > 0}}">
+          <view class="clarify-dimension" wx:for="{{pending.dimensions}}" wx:key="key" wx:for-item="dimension" wx:for-index="dimensionIndex">
+            <view class="clarify-question">{{dimension.question}}</view>
+            <view class="pending-options">
+              <view
+                class="pending-option {{option.selected ? 'pending-option-selected' : ''}}"
+                wx:for="{{dimension.options}}"
+                wx:key="label"
+                wx:for-item="option"
+                wx:for-index="optionIndex"
+                data-item-index="{{itemIndex}}"
+                data-dimension-index="{{dimensionIndex}}"
+                data-option-index="{{optionIndex}}"
+                bindtap="onClarifyOptionTap"
+              >{{option.label}}</view>
+            </view>
+          </view>
+          <textarea
+            class="clarify-supplement"
+            value="{{pending.supplement}}"
+            maxlength="500"
+            placeholder="{{pending.supplementPlaceholder}}"
+            data-item-index="{{itemIndex}}"
+            bindinput="onClarifySupplementInput"
+          ></textarea>
+          <view class="pending-confirm {{submittingClarifyId ? 'pending-confirm-disabled' : ''}}" data-item-index="{{itemIndex}}" bindtap="onClarifySubmit">
+            {{submittingClarifyId === pending.id ? '正在整理...' : '确定方向，给我下一步'}}
+          </view>
+        </view>
+
         <view class="pending-plan" wx:if="{{pending.planTasks.length > 0}}">
-          <view class="pending-plan-row" wx:for="{{pending.planTasks}}" wx:key="title" wx:for-item="task">{{task.shortTitle || task.title}}</view>
-          <view class="pending-confirm" data-id="{{pending.id}}" bindtap="onConfirmPlan">确认计划 →</view>
+          <view class="plan-project" wx:if="{{pending.showProjectFields}}">
+            <view class="plan-field">
+              <text class="plan-label">项目名称</text>
+              <input class="plan-input" value="{{pending.projectName}}" placeholder="项目名称" data-item-index="{{itemIndex}}" data-field="projectName" bindinput="onPlanProjectInput" />
+            </view>
+            <view class="plan-field">
+              <text class="plan-label">项目目标</text>
+              <input class="plan-input" value="{{pending.projectObjective}}" placeholder="希望达到什么结果" data-item-index="{{itemIndex}}" data-field="projectObjective" bindinput="onPlanProjectInput" />
+            </view>
+          </view>
+
+          <view class="plan-task" wx:for="{{pending.planTasks}}" wx:key="title" wx:for-item="task" wx:for-index="taskIndex">
+            <view class="plan-task-head">
+              <view class="plan-task-number">{{taskIndex + 1}}</view>
+              <text class="plan-task-title">任务 {{taskIndex + 1}}</text>
+              <text class="plan-task-hint">可执行步骤</text>
+            </view>
+
+            <view class="plan-field">
+              <text class="plan-label">标题</text>
+              <input class="plan-input" value="{{task.title}}" data-item-index="{{itemIndex}}" data-task-index="{{taskIndex}}" data-field="title" bindinput="onPlanTaskInput" />
+            </view>
+            <view class="plan-field">
+              <text class="plan-label">精简标题</text>
+              <input class="plan-input" value="{{task.shortTitle}}" placeholder="列表展示时使用的短标题" data-item-index="{{itemIndex}}" data-task-index="{{taskIndex}}" data-field="shortTitle" bindinput="onPlanTaskInput" />
+            </view>
+            <view class="plan-field">
+              <text class="plan-label">执行说明</text>
+              <textarea class="plan-textarea" value="{{task.notes}}" data-item-index="{{itemIndex}}" data-task-index="{{taskIndex}}" data-field="notes" bindinput="onPlanTaskInput"></textarea>
+            </view>
+
+            <view class="plan-grid">
+              <view class="plan-field">
+                <text class="plan-label">优先级</text>
+                <picker mode="selector" range="{{priorityLabels}}" value="{{task.priorityIndex}}" data-item-index="{{itemIndex}}" data-task-index="{{taskIndex}}" bindchange="onPlanPriorityChange">
+                  <view class="plan-picker-value">{{task.priorityLabel}}</view>
+                </picker>
+              </view>
+              <view class="plan-field">
+                <text class="plan-label">计划日期</text>
+                <picker mode="date" value="{{task.scheduledDate}}" data-item-index="{{itemIndex}}" data-task-index="{{taskIndex}}" data-field="scheduledDate" bindchange="onPlanDateChange">
+                  <view class="plan-picker-value">{{task.scheduledDate ? task.scheduledDate : '选择日期'}}</view>
+                </picker>
+              </view>
+              <view class="plan-field">
+                <text class="plan-label">截止日期</text>
+                <picker mode="date" value="{{task.dueDate}}" data-item-index="{{itemIndex}}" data-task-index="{{taskIndex}}" data-field="dueDate" bindchange="onPlanDateChange">
+                  <view class="plan-picker-value">{{task.dueDate ? task.dueDate : '选择日期'}}</view>
+                </picker>
+              </view>
+            </view>
+          </view>
+
+          <view class="plan-reason" wx:if="{{pending.reason}}">
+            <text class="plan-reason-icon">✦</text>
+            <text>{{pending.reason}}</text>
+          </view>
+          <view class="pending-confirm {{submittingPlanId ? 'pending-confirm-disabled' : ''}}" data-item-index="{{itemIndex}}" bindtap="onConfirmPlan">
+            {{submittingPlanId === pending.id ? '正在生成...' : '生成任务'}}
+          </view>
         </view>
       </view>
     </view>

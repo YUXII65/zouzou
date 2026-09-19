@@ -334,3 +334,31 @@
 .task-row { display: flex; align-items: center; gap: 18rpx; padding: 22rpx 26rpx; border-bottom: 1rpx solid #eef3f9; }
 .task-copy { flex: 1; min-width: 0; }
 .task-action { flex-shrink: 0; padding: 10rpx 16rpx; border-radius: 12rpx; background: #e8f0ff; color: #1e45b4; font-size: 22rpx; font-weight: 600; }
+
+/* AI 计划编辑：与网页端 InboxPlanEditor 对齐 */
+.pending-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16rpx; }
+.pending-head .pending-content { flex: 1; min-width: 0; padding: 0; border: 0; background: transparent; font-size: 26rpx; line-height: 1.6; }
+.pending-head .pending-action { flex-shrink: 0; margin-top: 2rpx; }
+.pending-clarify { margin-top: 18rpx; }
+.clarify-dimension + .clarify-dimension { margin-top: 18rpx; }
+.clarify-question { color: #182238; font-size: 25rpx; font-weight: 600; line-height: 1.55; }
+.clarify-supplement { width: 100%; min-height: 126rpx; margin-top: 18rpx; padding: 16rpx; box-sizing: border-box; border: 1rpx solid #dce8f7; border-radius: 14rpx; background: #ffffff; color: #182238; font-size: 24rpx; line-height: 1.55; }
+.pending-option-selected { border-color: #2f63e6; background: #2f63e6; color: #ffffff; }
+.pending-confirm { display: block; text-align: center; }
+.pending-confirm-disabled { opacity: 0.55; }
+.plan-project { margin-top: 16rpx; padding: 18rpx; border: 1rpx solid rgba(47, 99, 230, 0.16); border-radius: 16rpx; background: rgba(232, 240, 255, 0.62); }
+.plan-task { margin-top: 18rpx; padding: 18rpx; border: 1rpx solid #e3ecf7; border-radius: 18rpx; background: rgba(255, 255, 255, 0.92); box-shadow: 0 10rpx 26rpx rgba(52, 92, 160, 0.05); }
+.plan-task-head { display: flex; align-items: center; gap: 10rpx; }
+.plan-task-number { display: flex; width: 36rpx; height: 36rpx; align-items: center; justify-content: center; border-radius: 10rpx; background: #2f63e6; color: #ffffff; font-size: 21rpx; line-height: 1; }
+.plan-task-title { color: #182238; font-size: 25rpx; font-weight: 700; }
+.plan-task-hint { margin-left: auto; color: #8296b0; font-size: 21rpx; }
+.plan-field { margin-top: 14rpx; min-width: 0; }
+.plan-label { display: block; margin-bottom: 8rpx; color: #4d6d94; font-size: 21rpx; font-weight: 600; }
+.plan-input, .plan-textarea, .plan-picker-value { width: 100%; box-sizing: border-box; padding: 13rpx 15rpx; border: 1rpx solid #dce8f7; border-radius: 12rpx; background: #ffffff; color: #182238; font-size: 24rpx; line-height: 1.5; }
+.plan-input { min-height: 70rpx; }
+.plan-textarea { min-height: 104rpx; }
+.plan-picker-value { min-height: 70rpx; }
+.plan-grid { display: flex; gap: 12rpx; margin-top: 2rpx; }
+.plan-grid .plan-field { flex: 1; min-width: 0; }
+.plan-reason { display: flex; align-items: flex-start; gap: 10rpx; margin-top: 18rpx; padding: 18rpx; border-radius: 14rpx; background: rgba(232, 240, 255, 0.66); color: #4d6d94; font-size: 23rpx; line-height: 1.65; }
+.plan-reason-icon { flex-shrink: 0; color: #2f63e6; }

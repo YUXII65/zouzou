@@ -3,14 +3,52 @@ import { getMiniProgramUser } from "@/lib/miniprogram-auth";
 import { prisma } from "@/lib/prisma";
 import { recordAiFeedback } from "@/lib/feedback";
 import { recordUsageEvent } from "@/lib/usage";
-import type { InboxPlan } from "@/lib/ai";
+import type { InboxPlan, InboxPlanTask } from "@/lib/ai";
 
 export const dynamic = "force-dynamic";
 
-function parseDate(value: string | null | undefined) {
-  if (!value || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return null;
-  const [year, month, day] = value.split("-").map(Number);
-  return new Date(year, month - 1, day);
+type Priority = InboxPlanTask["priority"];
+type ConfirmTaskInput = Partial<
+  Pick<
+    InboxPlanTask,
+    | "title"
+    | "shortTitle"
+    | "notes"
+    | "priority"
+    | "scheduledDate"
+    | "dueDate"
+  >
+>;
+
+type ConfirmBody = {
+  itemId?: string;
+  projectName?: string | null;
+  projectObjective?: string | null;
+  projectMilestone?: string | null;
+  tasks?: ConfirmTaskInput[];
+};
+
+const priorities: Priority[] = ["low", "medium", "high", "urgent"];
+
+function cleanText(value: unknown, maxLength = 4000) {
+  if (typeof value !== "string") return null;
+  const text = value.trim();
+  return text ? text.slice(0, maxLength) : null;
+}
+
+function normalizePriority(value: unknown, fallback: Priority): Priority {
+  return typeof value === "string" && priorities.includes(value as Priority)
+    ? (value as Priority)
+    : fallback;
+}
+
+function parseDate(value: unknown) {
+  if (typeof value !== "string") return null;
+  const text = value.trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(text)) return null;
+  const [year, month, day] = text.split("-").map(Number);
+  const date = new Date(year, month - 1, day);
+  return Number.isNaN(date.getTime()) ? null : date;
 }
 
 function parsePlan(value: string | null): InboxPlan | null {
@@ -22,15 +60,48 @@ function parsePlan(value: string | null): InboxPlan | null {
   }
 }
 
+function dateKey(value: Date | null) {
+  if (!value) return null;
+  const year = value.getFullYear();
+  const month = String(value.getMonth() + 1).padStart(2, "0");
+  const day = String(value.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function samePlanTasks(
+  tasks: Array<{
+    title: string;
+    shortTitle: string;
+    notes: string | null;
+    priority: Priority;
+    scheduledDate: Date | null;
+    dueDate: Date | null;
+  }>,
+  plannedTasks: InboxPlanTask[],
+) {
+  if (tasks.length !== plannedTasks.length) return false;
+  return tasks.every((task, index) => {
+    const planned = plannedTasks[index];
+    return (
+      task.title === planned.title &&
+      task.shortTitle === planned.shortTitle &&
+      task.notes === planned.notes &&
+      task.priority === planned.priority &&
+      dateKey(task.scheduledDate) === planned.scheduledDate &&
+      dateKey(task.dueDate) === planned.dueDate
+    );
+  });
+}
+
 export async function POST(request: Request) {
   const user = await getMiniProgramUser(request);
   if (!user) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
 
-  let body: { itemId?: string };
+  let body: ConfirmBody;
   try {
-    body = (await request.json()) as typeof body;
+    body = (await request.json()) as ConfirmBody;
   } catch {
     return NextResponse.json({ error: "invalid_json" }, { status: 400 });
   }
@@ -52,45 +123,66 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "plan_not_ready" }, { status: 409 });
   }
 
-  const tasks = plan.tasks.map((task) => ({
-    title: task.title,
-    shortTitle: task.shortTitle,
-    notes: task.notes,
-    priority: ["low", "medium", "high", "urgent"].includes(task.priority)
-      ? task.priority
-      : "medium",
-    scheduledDate: parseDate(task.scheduledDate),
-    dueDate: parseDate(task.dueDate),
-    executionMode: task.executionMode,
-    doneWhen: task.doneWhen,
-    maxTurns: task.maxTurns,
-    toolPolicy: task.toolPolicy,
-  }));
+  const taskInputs = Array.isArray(body.tasks) ? body.tasks : [];
+  const projectName = cleanText(body.projectName, 120) ?? plan.projectName;
+  const projectObjective =
+    cleanText(body.projectObjective, 500) ?? plan.projectObjective;
+  const projectMilestone =
+    cleanText(body.projectMilestone, 500) ?? plan.projectMilestone;
+
+  const tasks = plan.tasks.map((plannedTask, index) => {
+    const input = taskInputs[index] ?? {};
+    return {
+      title: cleanText(input.title, 300) ?? plannedTask.title,
+      shortTitle: cleanText(input.shortTitle, 120) ?? plannedTask.shortTitle,
+      notes: cleanText(input.notes, 4000) ?? plannedTask.notes,
+      priority: normalizePriority(input.priority, plannedTask.priority),
+      scheduledDate: parseDate(input.scheduledDate) ?? parseDate(plannedTask.scheduledDate),
+      dueDate: parseDate(input.dueDate) ?? parseDate(plannedTask.dueDate),
+      executionMode: plannedTask.executionMode,
+      doneWhen: plannedTask.doneWhen,
+      maxTurns: plannedTask.maxTurns,
+      toolPolicy: plannedTask.toolPolicy,
+    };
+  });
+
+  const edited = !samePlanTasks(tasks, plan.tasks);
+  const confirmedTasksJson = JSON.stringify(
+    tasks.map((task) => ({
+      title: task.title,
+      shortTitle: task.shortTitle,
+      notes: task.notes,
+      priority: task.priority,
+      scheduledDate: dateKey(task.scheduledDate),
+      dueDate: dateKey(task.dueDate),
+    })),
+  );
 
   let confirmedProjectId: string | null = item.projectId;
   await prisma.$transaction(async (tx) => {
     let projectId = item.projectId;
 
-    if (plan.action === "create_project" && plan.projectName) {
+    if (plan.action === "create_project" && projectName) {
       const project = await tx.project.create({
         data: {
           userId: user.id,
-          name: plan.projectName,
-          objective: plan.projectObjective ?? "由收件箱想法创建的项目",
-          currentMilestone: plan.projectMilestone,
+          name: projectName,
+          objective: projectObjective ?? "由收件箱想法创建的项目",
+          currentMilestone: projectMilestone,
           createdFromInboxItemId: item.id,
           notes: item.content,
         },
       });
       projectId = project.id;
-    } else if (plan.action === "existing_project" && plan.projectName) {
+    } else if (plan.action === "existing_project" && projectName) {
       const project = await tx.project.findFirst({
-        where: { name: plan.projectName, userId: user.id },
+        where: { name: projectName, userId: user.id },
         select: { id: true },
       });
       projectId = project?.id ?? projectId;
     }
 
+    const firstTask = tasks[0];
     for (const [index, task] of tasks.entries()) {
       await tx.task.create({
         data: {
@@ -99,7 +191,7 @@ export async function POST(request: Request) {
           shortTitle: task.shortTitle,
           notes: task.notes,
           projectId,
-          priority: task.priority as "low" | "medium" | "high" | "urgent",
+          priority: task.priority,
           scheduledDate: task.scheduledDate,
           dueDate: task.dueDate,
           planOrder: index,
@@ -117,10 +209,10 @@ export async function POST(request: Request) {
       data: {
         status: "processed",
         category: "task",
-        title: tasks[0].title,
+        title: firstTask.title,
         projectId,
-        priority: tasks[0].priority as "low" | "medium" | "high" | "urgent",
-        dueDate: tasks[0].dueDate,
+        priority: firstTask.priority,
+        dueDate: firstTask.dueDate,
         confirmedAt: new Date(),
         processedAt: new Date(),
       },
@@ -140,22 +232,23 @@ export async function POST(request: Request) {
   await recordAiFeedback({
     userId: user.id,
     source: "inbox_plan",
-    action: "plan_accepted",
+    action: edited ? "plan_edited" : "plan_accepted",
     inboxItemId: item.id,
     projectId: confirmedProjectId,
     beforeJson: item.aiPlanJson,
-    afterJson: JSON.stringify(tasks),
-    detail: "小程序用户直接确认 AI 计划",
+    afterJson: confirmedTasksJson,
+    detail: edited ? "小程序用户编辑 AI 计划后确认" : "小程序用户直接确认 AI 计划",
   });
   await recordUsageEvent({
     userId: user.id,
     event: "task_created",
     page: "miniprogram",
-    detail: "inbox_plan_confirm",
+    detail: "inbox_plan",
   });
 
   return NextResponse.json({
     projectId: confirmedProjectId,
     taskCount: tasks.length,
+    edited,
   });
 }

@@ -108,10 +108,12 @@ function planInbox(data) {
   });
 }
 
-function confirmPlan(itemId) {
+
+function confirmPlan(data) {
+  const payload = typeof data === "string" ? { itemId: data } : data;
   return request("/api/miniprogram/inbox/confirm", {
     method: "POST",
-    data: { itemId }
+    data: payload
   });
 }
 

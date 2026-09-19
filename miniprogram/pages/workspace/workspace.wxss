@@ -193,3 +193,13 @@
 .task-title { flex: 1; color: #182238; font-size: 25rpx; }
 .task-status { color: #8296b0; font-size: 21rpx; }
 .delete-project { margin: 24rpx 26rpx 30rpx; padding: 16rpx; border-radius: 14rpx; background: rgba(217, 80, 80, 0.1); color: #d95050; font-size: 24rpx; font-weight: 600; text-align: center; }
+
+/* 未关联任务与任务行：与网页端 WorkspaceProjectBrowser / TaskRow 对齐 */
+.project-item-unassigned { margin-top: 8rpx; border-top: 1rpx dashed #dce8f7; }
+.project-unassigned-copy { display: flex; min-width: 0; align-items: center; gap: 10rpx; }
+.project-unassigned-icon { flex-shrink: 0; color: #8296b0; font-size: 26rpx; }
+.task-copy { flex: 1; min-width: 0; }
+.task-meta-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8rpx; margin-top: 8rpx; }
+.task-priority, .task-status { padding: 4rpx 10rpx; border-radius: 999rpx; background: #e8f0ff; color: #1e45b4; font-size: 20rpx; line-height: 1.3; }
+.task-status { background: #f1f5fa; color: #4d6d94; }
+.task-action { flex-shrink: 0; padding: 10rpx 16rpx; border-radius: 12rpx; background: #e8f0ff; color: #1e45b4; font-size: 22rpx; font-weight: 600; }

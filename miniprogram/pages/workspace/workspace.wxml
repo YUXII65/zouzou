@@ -25,16 +25,51 @@
         <input class="form-input" placeholder="当前里程碑（可选）" value="{{projectMilestone}}" bindinput="onProjectMilestoneInput" />
         <view class="form-button" bindtap="onCreateProject">创建项目</view>
       </view>
+
       <view class="project-list" wx:if="{{projects.length}}">
-        <view class="project-item {{item.id === activeProjectId ? 'project-item-active' : ''}}" wx:for="{{projects}}" wx:key="id" data-id="{{item.id}}" bindtap="onProjectTap">
+        <view class="project-item {{item.id === activeProjectId && !showUnassigned ? 'project-item-active' : ''}}" wx:for="{{projects}}" wx:key="id" data-id="{{item.id}}" bindtap="onProjectTap">
           <text class="project-name">{{item.name}}</text>
           <text class="project-count">{{item.tasks.length}} 个任务</text>
         </view>
       </view>
       <view class="empty-state compact" wx:else><view class="empty-icon">▣</view><view class="empty-text">还没有项目</view></view>
+
+      <view class="project-item project-item-unassigned {{showUnassigned ? 'project-item-active' : ''}}" wx:if="{{unassociatedTasks.length}}" bindtap="onUnassignedTap">
+        <view class="project-unassigned-copy">
+          <text class="project-unassigned-icon">▤</text>
+          <text class="project-name">未关联任务</text>
+        </view>
+        <text class="project-count">{{unassociatedTasks.length}}</text>
+      </view>
     </view>
 
-    <view class="panel detail-panel" wx:if="{{activeProject}}">
+    <view class="panel detail-panel" wx:if="{{showUnassigned}}">
+      <view class="panel-header">
+        <text class="panel-title">未关联任务</text>
+        <text class="panel-count">{{unassociatedTasks.length}} 条</text>
+      </view>
+      <view class="new-project" bindtap="onToggleCreateTask">＋ 新增任务</view>
+      <view class="create-form" wx:if="{{showCreateTask}}">
+        <input class="form-input" placeholder="任务标题" value="{{taskTitle}}" bindinput="onTaskTitleInput" />
+        <input class="form-input" placeholder="具体说明（可选）" value="{{taskNotes}}" bindinput="onTaskNotesInput" />
+        <view class="form-button" bindtap="onCreateTask">添加任务</view>
+      </view>
+      <view class="task-list" wx:if="{{unassociatedTasks.length}}">
+        <view class="task-row" wx:for="{{unassociatedTasks}}" wx:key="id">
+          <view class="task-copy">
+            <view class="task-title" data-id="{{item.id}}" bindtap="onTaskEditTap">{{item.displayTitle}}</view>
+            <view class="task-meta-row">
+              <text class="task-priority">{{item.priorityLabel}}</text>
+              <text class="task-status">{{item.statusLabel}}</text>
+            </view>
+          </view>
+          <view class="task-action" data-id="{{item.id}}" data-status="{{item.nextStatus}}" bindtap="onTaskStatusTap">{{item.actionLabel}}</view>
+        </view>
+      </view>
+      <view class="empty-state compact" wx:else><view class="empty-icon">▤</view><view class="empty-text">没有未关联任务</view></view>
+    </view>
+
+    <view class="panel detail-panel" wx:elif="{{activeProject}}">
       <view class="panel-header">
         <text class="panel-title">{{activeProject.name}}</text>
         <text class="panel-count">{{activeProject.tasks.length}} 个任务</text>
@@ -58,8 +93,14 @@
       </view>
       <view class="task-list" wx:if="{{activeProject.tasks.length}}">
         <view class="task-row" wx:for="{{activeProject.tasks}}" wx:key="id">
-          <text class="task-title" data-id="{{item.id}}" bindtap="onTaskEditTap">{{item.shortTitle || item.title}}</text>
-          <text class="task-status">{{item.status}}</text>
+          <view class="task-copy">
+            <view class="task-title" data-id="{{item.id}}" bindtap="onTaskEditTap">{{item.displayTitle}}</view>
+            <view class="task-meta-row">
+              <text class="task-priority">{{item.priorityLabel}}</text>
+              <text class="task-status">{{item.statusLabel}}</text>
+            </view>
+          </view>
+          <view class="task-action" data-id="{{item.id}}" data-status="{{item.nextStatus}}" bindtap="onTaskStatusTap">{{item.actionLabel}}</view>
         </view>
       </view>
       <view class="empty-state compact" wx:else><view class="empty-icon">▤</view><view class="empty-text">项目下还没有任务</view></view>

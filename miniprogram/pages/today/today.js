@@ -1,3 +1,42 @@
+const PRIORITY_OPTIONS = [
+  { value: "low", label: "低" },
+  { value: "medium", label: "中" },
+  { value: "high", label: "高" },
+  { value: "urgent", label: "紧急" }
+];
+
+function parseJson(value) {
+  if (!value) return null;
+  try {
+    return JSON.parse(value);
+  } catch (error) {
+    return null;
+  }
+}
+
+function priorityIndex(priority) {
+  const index = PRIORITY_OPTIONS.findIndex((item) => item.value === priority);
+  return index >= 0 ? index : 1;
+}
+
+function normalizeDimensions(clarification) {
+  if (!clarification) return [];
+  const raw = Array.isArray(clarification.dimensions)
+    ? clarification.dimensions
+    : clarification.question && Array.isArray(clarification.options)
+      ? [{ key: "direction", question: clarification.question, options: clarification.options }]
+      : [];
+
+  return raw.map((dimension, index) => ({
+    key: dimension.key || `dimension_${index}`,
+    question: dimension.question || "先定一个方向",
+    multi: Boolean(dimension.multi),
+    options: (Array.isArray(dimension.options) ? dimension.options : [])
+      .filter((option) => typeof option === "string" && option.trim())
+      .map((option) => ({ label: option.trim(), selected: false }))
+  })).filter((dimension) => dimension.options.length > 0);
+}
+
 Page({
   data: {
     dateText: "",
@@ -13,8 +52,11 @@ Page({
       "这周把项目复盘写出来",
       "想清楚要不要继续做这个方向"
     ],
+    priorityLabels: PRIORITY_OPTIONS.map((item) => item.label),
     pendingItems: [],
-    tasks: []
+    tasks: [],
+    submittingPlanId: "",
+    submittingClarifyId: ""
   },
 
   onLoad() {
@@ -41,36 +83,19 @@ Page({
           streak: result.streak || 0,
           weekDone: result.weekDone || 0,
           pendingItems: (result.pendingItems || []).map((item) => {
-            let plan = null;
-            let clarification = null;
-            try {
-              plan = item.aiPlanJson ? JSON.parse(item.aiPlanJson) : null;
-            } catch {
-              plan = null;
-            }
-            try {
-              clarification = item.aiSuggestionJson
-                ? JSON.parse(item.aiSuggestionJson)
-                : null;
-            } catch {
-              clarification = null;
-            }
-
-            const dimensions = clarification && Array.isArray(clarification.dimensions)
-              ? clarification.dimensions
-              : [];
-            const options = dimensions[0] && Array.isArray(dimensions[0].options)
-              ? dimensions[0].options
-              : [];
+            const plan = parseJson(item.aiPlanJson);
+            const clarification = parseJson(item.aiSuggestionJson);
+            const dimensions = normalizeDimensions(clarification);
             const actionLabels = {
               create_project: "新建项目",
               existing_project: "归入项目",
               single_task: "创建任务",
               ignore: "建议忽略"
             };
-            const action = plan
+            const hasPlan = Boolean(plan && plan.action !== "ignore" && Array.isArray(plan.tasks) && plan.tasks.length);
+            const action = hasPlan
               ? (actionLabels[plan.action] || "已整理")
-              : options.length
+              : dimensions.length
                 ? "需要补充"
                 : "正在梳理...";
 
@@ -78,8 +103,31 @@ Page({
               id: item.id,
               content: item.content,
               action,
-              options,
-              planTasks: plan && Array.isArray(plan.tasks) ? plan.tasks : []
+              reason: plan && plan.reason ? plan.reason : "",
+              showProjectFields: Boolean(plan && (plan.action !== "single_task" || plan.projectName)),
+              projectName: plan && plan.projectName ? plan.projectName : "",
+              projectObjective: plan && plan.projectObjective ? plan.projectObjective : "",
+              projectMilestone: plan && plan.projectMilestone ? plan.projectMilestone : "",
+              planTasks: hasPlan
+                ? plan.tasks.map((task) => {
+                    const index = priorityIndex(task.priority);
+                    return {
+                      title: task.title || "",
+                      shortTitle: task.shortTitle || "",
+                      notes: task.notes || "",
+                      priority: PRIORITY_OPTIONS[index].value,
+                      priorityIndex: index,
+                      priorityLabel: PRIORITY_OPTIONS[index].label,
+                      scheduledDate: task.scheduledDate || "",
+                      dueDate: task.dueDate || ""
+                    };
+                  })
+                : [],
+              dimensions,
+              supplement: "",
+              supplementPlaceholder: clarification && clarification.supplementPlaceholder
+                ? clarification.supplementPlaceholder
+                : "如果这些选项都不准确，可以补充两句。"
             };
           }),
           tasks: (result.tasks || []).map((task) => ({
@@ -143,12 +191,12 @@ Page({
     }
 
     const { clarifyIdea } = require("../../utils/api");
-    wx.showLoading({ title: "正在收下..." });
+    wx.showLoading({ title: "正在读你的原话..." });
     clarifyIdea(content)
       .then(() => {
         this.setData({ content: "" });
         wx.hideLoading();
-        wx.showToast({ title: "正在整理，已收进收件箱", icon: "none" });
+        wx.showToast({ title: "已收进收件箱", icon: "none" });
         this.loadToday();
       })
       .catch((error) => {
@@ -162,20 +210,67 @@ Page({
   },
 
   onClarifyOptionTap(event) {
-    const itemId = event.currentTarget.dataset.id;
-    const option = event.currentTarget.dataset.option;
-    if (!itemId || !option) return;
+    const itemIndex = Number(event.currentTarget.dataset.itemIndex);
+    const dimensionIndex = Number(event.currentTarget.dataset.dimensionIndex);
+    const optionIndex = Number(event.currentTarget.dataset.optionIndex);
+    const item = this.data.pendingItems[itemIndex];
+    if (!item || !item.dimensions[dimensionIndex]) return;
 
+    const dimensions = item.dimensions.map((dimension, currentDimensionIndex) => {
+      if (currentDimensionIndex !== dimensionIndex) return dimension;
+      return {
+        ...dimension,
+        options: dimension.options.map((option, currentOptionIndex) => ({
+          ...option,
+          selected: dimension.multi
+            ? currentOptionIndex === optionIndex
+              ? !option.selected
+              : option.selected
+            : currentOptionIndex === optionIndex
+        }))
+      };
+    });
+
+    this.setData({ [`pendingItems[${itemIndex}].dimensions`]: dimensions });
+  },
+
+  onClarifySupplementInput(event) {
+    const itemIndex = Number(event.currentTarget.dataset.itemIndex);
+    if (Number.isNaN(itemIndex)) return;
+    this.setData({ [`pendingItems[${itemIndex}].supplement`]: event.detail.value });
+  },
+
+  onClarifySubmit(event) {
+    const itemIndex = Number(event.currentTarget.dataset.itemIndex);
+    const item = this.data.pendingItems[itemIndex];
+    if (!item || this.data.submittingClarifyId) return;
+
+    const dimensionChoices = item.dimensions.map((dimension) =>
+      dimension.options.filter((option) => option.selected).map((option) => option.label).join("、")
+    );
+    if (dimensionChoices.some((choice) => !choice)) {
+      wx.showToast({ title: "先把每个方向选一下", icon: "none" });
+      return;
+    }
+    const option = dimensionChoices.find(Boolean) || "";
     const { planInbox } = require("../../utils/api");
+    this.setData({ submittingClarifyId: item.id });
     wx.showLoading({ title: "正在拆解..." });
-    planInbox({ itemId, option })
+    planInbox({
+      itemId: item.id,
+      option,
+      dimensionChoices,
+      supplement: item.supplement || ""
+    })
       .then(() => {
         wx.hideLoading();
+        this.setData({ submittingClarifyId: "" });
         wx.showToast({ title: "计划已生成", icon: "success" });
         this.loadToday();
       })
       .catch((error) => {
         wx.hideLoading();
+        this.setData({ submittingClarifyId: "" });
         if (error.statusCode === 401) {
           wx.reLaunch({ url: "/pages/login/login" });
           return;
@@ -183,20 +278,74 @@ Page({
         wx.showToast({ title: "这次没拆出来，再试一次", icon: "none" });
       });
   },
+
+  onPlanProjectInput(event) {
+    const itemIndex = Number(event.currentTarget.dataset.itemIndex);
+    const field = event.currentTarget.dataset.field;
+    if (Number.isNaN(itemIndex) || !field) return;
+    this.setData({ [`pendingItems[${itemIndex}].${field}`]: event.detail.value });
+  },
+
+  onPlanTaskInput(event) {
+    const itemIndex = Number(event.currentTarget.dataset.itemIndex);
+    const taskIndex = Number(event.currentTarget.dataset.taskIndex);
+    const field = event.currentTarget.dataset.field;
+    if (Number.isNaN(itemIndex) || Number.isNaN(taskIndex) || !field) return;
+    this.setData({ [`pendingItems[${itemIndex}].planTasks[${taskIndex}].${field}`]: event.detail.value });
+  },
+
+  onPlanPriorityChange(event) {
+    const itemIndex = Number(event.currentTarget.dataset.itemIndex);
+    const taskIndex = Number(event.currentTarget.dataset.taskIndex);
+    const selectedIndex = Number(event.detail.value);
+    const priority = PRIORITY_OPTIONS[selectedIndex] || PRIORITY_OPTIONS[1];
+    if (Number.isNaN(itemIndex) || Number.isNaN(taskIndex)) return;
+    this.setData({
+      [`pendingItems[${itemIndex}].planTasks[${taskIndex}].priority`]: priority.value,
+      [`pendingItems[${itemIndex}].planTasks[${taskIndex}].priorityIndex`]: selectedIndex,
+      [`pendingItems[${itemIndex}].planTasks[${taskIndex}].priorityLabel`]: priority.label
+    });
+  },
+
+  onPlanDateChange(event) {
+    const itemIndex = Number(event.currentTarget.dataset.itemIndex);
+    const taskIndex = Number(event.currentTarget.dataset.taskIndex);
+    const field = event.currentTarget.dataset.field;
+    if (Number.isNaN(itemIndex) || Number.isNaN(taskIndex) || !field) return;
+    this.setData({ [`pendingItems[${itemIndex}].planTasks[${taskIndex}].${field}`]: event.detail.value });
+  },
+
   onConfirmPlan(event) {
-    const itemId = event.currentTarget.dataset.id;
-    if (!itemId) return;
+    const itemIndex = Number(event.currentTarget.dataset.itemIndex);
+    const item = this.data.pendingItems[itemIndex];
+    if (!item || this.data.submittingPlanId) return;
 
     const { confirmPlan } = require("../../utils/api");
-    wx.showLoading({ title: "正在创建..." });
-    confirmPlan(itemId)
+    this.setData({ submittingPlanId: item.id });
+    wx.showLoading({ title: "正在生成..." });
+    confirmPlan({
+      itemId: item.id,
+      projectName: item.projectName,
+      projectObjective: item.projectObjective,
+      projectMilestone: item.projectMilestone,
+      tasks: item.planTasks.map((task) => ({
+        title: task.title,
+        shortTitle: task.shortTitle,
+        notes: task.notes,
+        priority: task.priority,
+        scheduledDate: task.scheduledDate,
+        dueDate: task.dueDate
+      }))
+    })
       .then((result) => {
         wx.hideLoading();
+        this.setData({ submittingPlanId: "" });
         wx.showToast({ title: `已创建 ${result.taskCount} 个任务`, icon: "none" });
         this.loadToday();
       })
       .catch((error) => {
         wx.hideLoading();
+        this.setData({ submittingPlanId: "" });
         if (error.statusCode === 401) {
           wx.reLaunch({ url: "/pages/login/login" });
           return;
@@ -204,6 +353,7 @@ Page({
         wx.showToast({ title: "创建失败，再试一次", icon: "none" });
       });
   },
+
   onTaskStatusTap(event) {
     const taskId = event.currentTarget.dataset.id;
     const status = event.currentTarget.dataset.status;
@@ -225,8 +375,11 @@ Page({
         wx.showToast({ title: "状态没更新成功", icon: "none" });
       });
   },
+
   onTaskEditTap(event) {
-    wx.navigateTo({ url: /pages/task-edit/task-edit?id= });
+    const taskId = event.currentTarget.dataset.id;
+    if (!taskId) return;
+    wx.navigateTo({ url: `/pages/task-edit/task-edit?id=${encodeURIComponent(taskId)}` });
   },
 
   onProfileTap() { wx.navigateTo({ url: "/pages/profile/profile" }); },
