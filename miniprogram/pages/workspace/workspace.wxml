@@ -51,7 +51,7 @@
       </view>
       <view class="task-list" wx:if="{{activeProject.tasks.length}}">
         <view class="task-row" wx:for="{{activeProject.tasks}}" wx:key="id">
-          <text class="task-title">{{item.shortTitle || item.title}}</text>
+          <text class="task-title" data-id="{{item.id}}" bindtap="onTaskEditTap">{{item.shortTitle || item.title}}</text>
           <text class="task-status">{{item.status}}</text>
         </view>
       </view>

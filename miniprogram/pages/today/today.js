@@ -225,6 +225,10 @@ Page({
         wx.showToast({ title: "状态没更新成功", icon: "none" });
       });
   },
+  onTaskEditTap(event) {
+    wx.navigateTo({ url: /pages/task-edit/task-edit?id= });
+  },
+
   onToolsTap() {
     wx.reLaunch({ url: "/pages/tools/tools" });
   },

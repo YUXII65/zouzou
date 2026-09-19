@@ -66,6 +66,10 @@ Page({
       wx.showToast({ title: "任务没添加成功", icon: "none" });
     });
   },
+  onTaskEditTap(event) {
+    wx.navigateTo({ url: /pages/task-edit/task-edit?id= });
+  },
+
   onToolsTap() { wx.reLaunch({ url: "/pages/tools/tools" }); },
   onTabTap(event) {
     const key = event.currentTarget.dataset.key;

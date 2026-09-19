@@ -1,0 +1,16 @@
+<view class="page">
+  <view class="form-card">
+    <text class="label">任务标题</text>
+    <input class="input" value="{{title}}" bindinput="onTitleInput" />
+    <text class="label">具体说明</text>
+    <textarea class="textarea" value="{{notes}}" bindinput="onNotesInput"></textarea>
+    <text class="label">优先级</text>
+    <picker mode="selector" range="{{['低','中','高','紧急']}}" bindchange="onPriorityChange"><view class="picker">{{priority}}</view></picker>
+    <text class="label">计划日期</text>
+    <picker mode="date" value="{{scheduledDate}}" bindchange="onScheduledChange"><view class="picker">{{scheduledDate || '未设置'}}</view></picker>
+    <text class="label">截止日期</text>
+    <picker mode="date" value="{{dueDate}}" bindchange="onDueChange"><view class="picker">{{dueDate || '未设置'}}</view></picker>
+    <view class="save-button" bindtap="onSave">保存任务</view>
+    <view class="delete-button" bindtap="onDelete">删除任务</view>
+  </view>
+</view>

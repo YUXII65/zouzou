@@ -158,6 +158,24 @@ function createTask(data) {
   });
 }
 
+function getTaskDetail(taskId) {
+  return request(`/api/miniprogram/tasks/detail?id=${encodeURIComponent(taskId)}`);
+}
+
+function updateTask(data) {
+  return request("/api/miniprogram/tasks/update", {
+    method: "POST",
+    data
+  });
+}
+
+function deleteTask(taskId) {
+  return request("/api/miniprogram/tasks/delete", {
+    method: "POST",
+    data: { taskId }
+  });
+}
+
 module.exports = {
   request,
   getToken,
@@ -178,4 +196,7 @@ module.exports = {
   getWorkspace,
   createProject,
   createTask,
+  getTaskDetail,
+  updateTask,
+  deleteTask,
 };
