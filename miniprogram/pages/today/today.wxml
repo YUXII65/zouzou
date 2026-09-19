@@ -172,12 +172,18 @@
               <text class="task-tag task-tag-overdue" wx:if="{{item.isOverdue}}">逾期</text>
               <text class="task-tag task-tag-plan" wx:if="{{item.isScheduled}}">计划</text>
             </view>
-            <view class="task-title" data-id="{{item.id}}" bindtap="onTaskEditTap">{{item.title}}</view>
+            <view class="task-title" data-id="{{item.id}}" bindtap="onTaskExpandTap">{{item.displayTitle}}</view>
             <view class="task-meta-row">
               <text class="task-priority">{{item.priorityLabel}}</text>
               <text class="task-meta">{{item.projectName}}</text>
             </view>
             <text class="task-due" wx:if="{{item.dueDateText}}">截止 {{item.dueDateText}}</text>
+            <view class="task-detail" wx:if="{{expandedTaskId === item.id}}">
+              <view class="task-detail-title">{{item.title}}</view>
+              <view class="task-detail-copy" wx:if="{{item.notes && item.notes !== item.title}}">{{item.notes}}</view>
+              <view class="task-detail-standard" wx:if="{{item.doneWhen}}">完成标准：{{item.doneWhen}}</view>
+              <view class="task-detail-edit" data-id="{{item.id}}" catchtap="onTaskEditTap">编辑任务</view>
+            </view>
           </view>
           <view class="task-action" data-id="{{item.id}}" data-status="{{item.nextStatus}}" bindtap="onTaskStatusTap">{{item.actionLabel}}</view>
         </view>

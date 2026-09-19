@@ -14,6 +14,11 @@ function parseJson(value) {
   }
 }
 
+function fallbackTitle(title) {
+  const headline = String(title || "").split(/[，,。；;！？!\n]/)[0].trim() || String(title || "");
+  return headline.length > 18 ? `${headline.slice(0, 17).trim()}…` : headline;
+}
+
 function priorityIndex(priority) {
   const index = PRIORITY_OPTIONS.findIndex((item) => item.value === priority);
   return index >= 0 ? index : 1;
@@ -59,7 +64,8 @@ Page({
     tasks: [],
     submittingPlanId: "",
     submittingClarifyId: "",
-    ignoringInboxId: ""
+    ignoringInboxId: "",
+    expandedTaskId: ""
   },
 
   onLoad() {
@@ -145,6 +151,7 @@ Page({
           }),
           tasks: (result.tasks || []).map((task) => ({
             ...task,
+            displayTitle: task.shortTitle && task.shortTitle.trim() ? task.shortTitle.trim() : fallbackTitle(task.title),
             priorityLabel: (PRIORITY_OPTIONS.find((item) => item.value === task.priority) || PRIORITY_OPTIONS[1]).label,
             actionLabel: task.status === "todo"
               ? "下一步"
@@ -411,6 +418,12 @@ Page({
         }
         wx.showToast({ title: "状态没更新成功", icon: "none" });
       });
+  },
+
+  onTaskExpandTap(event) {
+    const taskId = event.currentTarget.dataset.id;
+    if (!taskId) return;
+    this.setData({ expandedTaskId: this.data.expandedTaskId === taskId ? "" : taskId });
   },
 
   onTaskEditTap(event) {

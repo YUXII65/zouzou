@@ -122,8 +122,11 @@ export async function GET(request: Request) {
   const todayTasks = (todayRelevant.length ? todayRelevant : agenda).slice(0, 3);
   const serializedTasks = todayTasks.map((task) => ({
     id: task.id,
-    title: task.shortTitle || task.title,
+    title: task.title,
+    shortTitle: task.shortTitle,
     notes: task.notes,
+    doneWhen: task.doneWhen,
+    executionMode: task.executionMode,
     status: task.status,
     priority: task.priority,
     projectName: task.project?.name ?? "未关联项目",

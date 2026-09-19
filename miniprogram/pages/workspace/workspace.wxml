@@ -76,10 +76,16 @@
       <view class="task-list" wx:if="{{unassociatedTasks.length}}">
         <view class="task-row" wx:for="{{unassociatedTasks}}" wx:key="id">
           <view class="task-copy">
-            <view class="task-title" data-id="{{item.id}}" bindtap="onTaskEditTap">{{item.displayTitle}}</view>
+            <view class="task-title" data-id="{{item.id}}" bindtap="onTaskExpandTap">{{item.displayTitle}}</view>
             <view class="task-meta-row">
               <text class="task-priority">{{item.priorityLabel}}</text>
               <text class="task-status">{{item.statusLabel}}</text>
+            </view>
+            <view class="task-detail" wx:if="{{expandedTaskId === item.id}}">
+              <view class="task-detail-title">{{item.title}}</view>
+              <view class="task-detail-copy" wx:if="{{item.notes && item.notes !== item.title}}">{{item.notes}}</view>
+              <view class="task-detail-standard" wx:if="{{item.doneWhen}}">完成标准：{{item.doneWhen}}</view>
+              <view class="task-detail-edit" data-id="{{item.id}}" catchtap="onTaskEditTap">编辑任务</view>
             </view>
           </view>
           <view class="task-action" data-id="{{item.id}}" data-status="{{item.nextStatus}}" bindtap="onTaskStatusTap">{{item.actionLabel}}</view>
@@ -132,10 +138,16 @@
       <view class="task-list" wx:if="{{activeProject.tasks.length}}">
         <view class="task-row" wx:for="{{activeProject.tasks}}" wx:key="id">
           <view class="task-copy">
-            <view class="task-title" data-id="{{item.id}}" bindtap="onTaskEditTap">{{item.displayTitle}}</view>
+            <view class="task-title" data-id="{{item.id}}" bindtap="onTaskExpandTap">{{item.displayTitle}}</view>
             <view class="task-meta-row">
               <text class="task-priority">{{item.priorityLabel}}</text>
               <text class="task-status">{{item.statusLabel}}</text>
+            </view>
+            <view class="task-detail" wx:if="{{expandedTaskId === item.id}}">
+              <view class="task-detail-title">{{item.title}}</view>
+              <view class="task-detail-copy" wx:if="{{item.notes && item.notes !== item.title}}">{{item.notes}}</view>
+              <view class="task-detail-standard" wx:if="{{item.doneWhen}}">完成标准：{{item.doneWhen}}</view>
+              <view class="task-detail-edit" data-id="{{item.id}}" catchtap="onTaskEditTap">编辑任务</view>
             </view>
           </view>
           <view class="task-action" data-id="{{item.id}}" data-status="{{item.nextStatus}}" bindtap="onTaskStatusTap">{{item.actionLabel}}</view>

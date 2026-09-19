@@ -15,10 +15,15 @@ const PRIORITY_LABELS = {
 const PROJECT_STATUSES = ["active", "paused", "completed", "archived"];
 const PROJECT_STATUS_LABELS = ["进行中", "已暂停", "已完成", "已归档"];
 
+function fallbackTitle(title) {
+  const headline = String(title || "").split(/[，,。；;！？!\n]/)[0].trim() || String(title || "");
+  return headline.length > 18 ? `${headline.slice(0, 17).trim()}…` : headline;
+}
+
 function decorateTasks(tasks) {
   return (tasks || []).map((task) => ({
     ...task,
-    displayTitle: task.shortTitle || task.title,
+    displayTitle: task.shortTitle && task.shortTitle.trim() ? task.shortTitle.trim() : fallbackTitle(task.title),
     statusLabel: STATUS_LABELS[task.status] || task.status,
     priorityLabel: PRIORITY_LABELS[task.priority] || task.priority,
     actionLabel: task.status === "todo"
@@ -64,6 +69,7 @@ Page({
     taskScheduledDate: "",
     taskDueDate: "",
     taskFocusDate: "",
+    expandedTaskId: "",
     priorityLabels: ["低", "中", "高", "紧急"],
     statusLabels: ["待办", "进行中", "已完成", "已取消"]
   },
@@ -325,6 +331,12 @@ Page({
       }
       wx.showToast({ title: "状态没更新成功", icon: "none" });
     });
+  },
+
+  onTaskExpandTap(event) {
+    const taskId = event.currentTarget.dataset.id;
+    if (!taskId) return;
+    this.setData({ expandedTaskId: this.data.expandedTaskId === taskId ? "" : taskId });
   },
 
   onTaskEditTap(event) {

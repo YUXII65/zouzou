@@ -204,3 +204,8 @@
 .task-status { background: #f1f5fa; color: #4d6d94; }
 .task-action { flex-shrink: 0; padding: 10rpx 16rpx; border-radius: 12rpx; background: #e8f0ff; color: #1e45b4; font-size: 22rpx; font-weight: 600; }
 .picker-display { display: flex; align-items: center; height: 78rpx; padding-top: 0; padding-bottom: 0; line-height: 78rpx; }
+.task-detail { margin-top: 12rpx; padding: 18rpx; border: 1rpx solid #e3ecf7; border-radius: 14rpx; background: #f7faff; }
+.task-detail-title { color: #182238; font-size: 24rpx; line-height: 1.6; white-space: pre-wrap; }
+.task-detail-copy { margin-top: 10rpx; padding-top: 10rpx; border-top: 1rpx solid #e5eefb; color: #4d6d94; font-size: 22rpx; line-height: 1.6; white-space: pre-wrap; }
+.task-detail-standard { margin-top: 10rpx; padding-top: 10rpx; border-top: 1rpx solid #e5eefb; color: #4d6d94; font-size: 22rpx; line-height: 1.6; }
+.task-detail-edit { display: inline-block; margin-top: 12rpx; color: #2f63e6; font-size: 22rpx; font-weight: 600; }
