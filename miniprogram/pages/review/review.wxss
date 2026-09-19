@@ -172,4 +172,12 @@
 }
 
 .nav-item-active { color: #2f63e6; font-weight: 600; }
-.nav-icon { font-size: 32rpx; line-height: 1; }
+.nav-icon { font-size: 32rpx; line-height: 1; }.field-label { display: block; margin-bottom: 10rpx; color: #4d6d94; font-size: 22rpx; }
+.review-textarea { width: 100%; min-height: 240rpx; margin-bottom: 22rpx; padding: 20rpx; box-sizing: border-box; border-radius: 16rpx; background: #edf4fb; color: #182238; font-size: 25rpx; line-height: 1.65; }
+.review-textarea.small { min-height: 160rpx; }
+.save-button { display: flex; align-items: center; justify-content: center; height: 84rpx; border-radius: 16rpx; background: #2f63e6; color: #ffffff; font-size: 26rpx; font-weight: 600; }
+.task-row { display: flex; align-items: center; gap: 12rpx; padding: 20rpx 26rpx; border-bottom: 1rpx solid #eef3f9; }
+.task-state { color: #d4862b; font-size: 28rpx; }
+.task-state-done { color: #1c9d6a; }
+.task-title { flex: 1; min-width: 0; color: #182238; font-size: 25rpx; }
+.task-project { color: #8296b0; font-size: 21rpx; }

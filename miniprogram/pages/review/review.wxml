@@ -20,49 +20,67 @@
     <view class="panel history-panel">
       <view class="panel-header">
         <text class="panel-title">历史复盘</text>
-        <text class="panel-count">0 份</text>
+        <text class="panel-count">{{reviewId ? 1 : 0}} 份</text>
       </view>
-      <view class="today-row">
-        <text>今天</text>
-        <text class="muted">未写</text>
-      </view>
-      <view class="history-empty">还没有历史复盘</view>
+      <picker mode="date" value="{{date}}" bindchange="onDateChange">
+        <view class="today-row">
+          <text>{{date}}</text>
+          <text class="muted">{{reviewStatus === 'final' ? '已保存' : (reviewId ? '草稿' : '未写')}}</text>
+        </view>
+      </picker>
+      <view class="history-empty" wx:if="{{!reviewId}}">还没有历史复盘</view>
     </view>
 
     <view class="panel review-panel">
       <view class="panel-header">
-        <text class="panel-title">写今日复盘</text>
+        <text class="panel-title">{{reviewId ? '当日复盘' : '写今日复盘'}}</text>
       </view>
-      <view class="review-form">
+      <view class="review-form" wx:if="{{!reviewId}}">
         <picker mode="date" value="{{date}}" bindchange="onDateChange">
           <view class="date-field">{{date}}</view>
         </picker>
         <view class="generate-button" bindtap="onGenerate">▦ 生成复盘</view>
       </view>
+      <view class="review-form" wx:else>
+        <text class="field-label">当日总结</text>
+        <textarea class="review-textarea" value="{{summary}}" placeholder="写下今天真正推进了什么，卡在哪里" bindinput="onSummaryInput"></textarea>
+        <text class="field-label">下一步任务（1-3 条）</text>
+        <textarea class="review-textarea small" value="{{nextActions}}" placeholder="每条两行：精简标题 + 具体说明" bindinput="onNextActionsInput"></textarea>
+        <view class="save-button" bindtap="onSave">保存复盘</view>
+      </view>
+    </view>
+
+    <view class="panel task-panel" wx:if="{{reviewId}}">
+      <view class="panel-header">
+        <text class="panel-title">当日任务</text>
+        <text class="panel-count">{{tasks.length}} 条</text>
+      </view>
+      <view class="task-list" wx:if="{{tasks.length}}">
+        <view class="task-row" wx:for="{{tasks}}" wx:key="id">
+          <text class="task-state {{item.status === 'done' ? 'task-state-done' : ''}}">{{item.status === 'done' ? '✓' : '○'}}</text>
+          <text class="task-title">{{item.title}}</text>
+          <text class="task-project" wx:if="{{item.projectName}}">{{item.projectName}}</text>
+        </view>
+      </view>
+      <view class="history-empty" wx:else>当天没有任务记录</view>
     </view>
 
     <view class="panel week-panel">
       <view class="panel-header">
         <text class="panel-title">本周回看</text>
-        <text class="panel-count">0 份每日复盘</text>
+        <text class="panel-count">{{reviewId ? 1 : 0}} 份每日复盘</text>
       </view>
       <view class="week-stats">
-        <view class="week-stat success"><text>本周完成</text><text class="week-number">0</text></view>
-        <view class="week-stat warning"><text>待推进</text><text class="week-number">0</text></view>
+        <view class="week-stat success"><text>本周完成</text><text class="week-number">{{completedCount}}</text></view>
+        <view class="week-stat warning"><text>待推进</text><text class="week-number">{{openCount}}</text></view>
         <view class="week-stat neutral"><text>涉及项目</text><text class="week-number">0</text></view>
       </view>
     </view>
   </view>
 
   <view class="bottom-nav">
-    <view class="nav-item" data-key="today" bindtap="onTabTap">
-      <text class="nav-icon">▦</text><text>日历</text>
-    </view>
-    <view class="nav-item" data-key="desk" bindtap="onTabTap">
-      <text class="nav-icon">▤</text><text>书桌</text>
-    </view>
-    <view class="nav-item nav-item-active" data-key="review" bindtap="onTabTap">
-      <text class="nav-icon">▣</text><text>抽屉</text>
-    </view>
+    <view class="nav-item" data-key="today" bindtap="onTabTap"><text class="nav-icon">▦</text><text>日历</text></view>
+    <view class="nav-item" data-key="desk" bindtap="onTabTap"><text class="nav-icon">▤</text><text>书桌</text></view>
+    <view class="nav-item nav-item-active" data-key="review" bindtap="onTabTap"><text class="nav-icon">▣</text><text>抽屉</text></view>
   </view>
 </view>

@@ -122,6 +122,24 @@ function setTaskStatus(taskId, status) {
   });
 }
 
+function generateReviewDraft(reviewDate) {
+  return request("/api/miniprogram/ai/review/draft", {
+    method: "POST",
+    data: { reviewDate }
+  });
+}
+
+function getReview(date) {
+  return request(`/api/miniprogram/review?date=${encodeURIComponent(date)}`);
+}
+
+function saveReview(data) {
+  return request("/api/miniprogram/review/save", {
+    method: "POST",
+    data
+  });
+}
+
 module.exports = {
   request,
   getToken,
@@ -136,4 +154,7 @@ module.exports = {
   planInbox,
   confirmPlan,
   setTaskStatus,
+  generateReviewDraft,
+  getReview,
+  saveReview,
 };
