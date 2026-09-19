@@ -90,36 +90,55 @@ export async function GET(request: Request) {
     activityDates.add(toDateInputValue(review.reviewDate));
   }
 
-  const agenda = [...openTasks]
-    .sort((a, b) => {
-      function rank(task: (typeof openTasks)[number]) {
-        if (task.focusDate && isSameDay(task.focusDate, now)) return 0;
-        if (task.dueDate && task.dueDate < dayStart) return 1;
-        if (
-          task.scheduledDate &&
-          task.scheduledDate >= dayStart &&
-          task.scheduledDate <= dayEnd
-        ) {
-          return 2;
-        }
-        return 3;
+  const agenda = [...openTasks].sort((a, b) => {
+    function rank(task: (typeof openTasks)[number]) {
+      if (task.focusDate && isSameDay(task.focusDate, now)) return 0;
+      if (task.dueDate && task.dueDate < dayStart) return 1;
+      if (
+        task.scheduledDate &&
+        task.scheduledDate >= dayStart &&
+        task.scheduledDate <= dayEnd
+      ) {
+        return 2;
       }
-      const rankDiff = rank(a) - rank(b);
-      if (rankDiff !== 0) return rankDiff;
-      return (priorityOrder[a.priority] ?? 9) - (priorityOrder[b.priority] ?? 9);
-    })
-    .slice(0, 20)
-    .map((task) => ({
-      id: task.id,
-      title: task.shortTitle || task.title,
-      notes: task.notes,
-      status: task.status,
-      priority: task.priority,
-      projectName: task.project?.name ?? "未关联项目",
-      dueDate: task.dueDate?.toISOString() ?? null,
-      scheduledDate: task.scheduledDate?.toISOString() ?? null,
-      focusDate: task.focusDate?.toISOString() ?? null,
-    }));
+      return 3;
+    }
+    const rankDiff = rank(a) - rank(b);
+    if (rankDiff !== 0) return rankDiff;
+    return (priorityOrder[a.priority] ?? 9) - (priorityOrder[b.priority] ?? 9);
+  });
+  const todayRelevant = agenda.filter((task) => {
+    if (task.focusDate && isSameDay(task.focusDate, now)) return true;
+    if (task.dueDate && task.dueDate < dayStart) return true;
+    if (
+      task.scheduledDate &&
+      task.scheduledDate >= dayStart &&
+      task.scheduledDate <= dayEnd
+    ) {
+      return true;
+    }
+    return false;
+  });
+  const todayTasks = (todayRelevant.length ? todayRelevant : agenda).slice(0, 3);
+  const serializedTasks = todayTasks.map((task) => ({
+    id: task.id,
+    title: task.shortTitle || task.title,
+    notes: task.notes,
+    status: task.status,
+    priority: task.priority,
+    projectName: task.project?.name ?? "未关联项目",
+    dueDate: task.dueDate?.toISOString() ?? null,
+    dueDateText: task.dueDate ? toDateInputValue(task.dueDate) : "",
+    scheduledDate: task.scheduledDate?.toISOString() ?? null,
+    focusDate: task.focusDate?.toISOString() ?? null,
+    isFocused: Boolean(task.focusDate && isSameDay(task.focusDate, now)),
+    isOverdue: Boolean(task.dueDate && task.dueDate < dayStart),
+    isScheduled: Boolean(
+      task.scheduledDate &&
+        task.scheduledDate >= dayStart &&
+        task.scheduledDate <= dayEnd,
+    ),
+  }));
 
   return NextResponse.json({
     user,
@@ -132,6 +151,6 @@ export async function GET(request: Request) {
     reviewCount,
     streak: computeStreak(activityDates, now),
     weekDone,
-    tasks: agenda,
+    tasks: serializedTasks,
   });
 }

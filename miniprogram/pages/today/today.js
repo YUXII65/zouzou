@@ -132,6 +132,7 @@ Page({
           }),
           tasks: (result.tasks || []).map((task) => ({
             ...task,
+            priorityLabel: (PRIORITY_OPTIONS.find((item) => item.value === task.priority) || PRIORITY_OPTIONS[1]).label,
             actionLabel: task.status === "todo"
               ? "下一步"
               : task.status === "in_progress"
