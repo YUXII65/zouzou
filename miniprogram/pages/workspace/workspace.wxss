@@ -192,3 +192,4 @@
 .task-row { display: flex; align-items: center; justify-content: space-between; gap: 12rpx; padding: 20rpx 26rpx; border-top: 1rpx solid #eef3f9; }
 .task-title { flex: 1; color: #182238; font-size: 25rpx; }
 .task-status { color: #8296b0; font-size: 21rpx; }
+.delete-project { margin: 24rpx 26rpx 30rpx; padding: 16rpx; border-radius: 14rpx; background: rgba(217, 80, 80, 0.1); color: #d95050; font-size: 24rpx; font-weight: 600; text-align: center; }

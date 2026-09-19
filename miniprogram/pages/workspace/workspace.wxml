@@ -43,6 +43,13 @@
         <view><text class="meta-label">目标</text><text class="meta-value">{{activeProject.objective}}</text></view>
         <view><text class="meta-label">里程碑</text><text class="meta-value">{{activeProject.currentMilestone || '暂无'}}</text></view>
       </view>
+      <view class="new-project" bindtap="onToggleEditProject">编辑项目</view>
+      <view class="create-form" wx:if="{{showEditProject}}">
+        <input class="form-input" placeholder="项目名称" value="{{editProjectName}}" bindinput="onEditProjectNameInput" />
+        <input class="form-input" placeholder="目标" value="{{editProjectObjective}}" bindinput="onEditProjectObjectiveInput" />
+        <input class="form-input" placeholder="当前里程碑" value="{{editProjectMilestone}}" bindinput="onEditProjectMilestoneInput" />
+        <view class="form-button" bindtap="onSaveProject">保存项目</view>
+      </view>
       <view class="new-project" bindtap="onToggleCreateTask">＋ 新增任务</view>
       <view class="create-form" wx:if="{{showCreateTask}}">
         <input class="form-input" placeholder="任务标题" value="{{taskTitle}}" bindinput="onTaskTitleInput" />
@@ -56,6 +63,7 @@
         </view>
       </view>
       <view class="empty-state compact" wx:else><view class="empty-icon">▤</view><view class="empty-text">项目下还没有任务</view></view>
+      <view class="delete-project" bindtap="onDeleteProject">删除项目</view>
     </view>
 
     <view class="panel detail-panel" wx:else>

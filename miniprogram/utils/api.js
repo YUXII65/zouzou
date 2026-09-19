@@ -151,6 +151,20 @@ function createProject(data) {
   });
 }
 
+function updateProject(data) {
+  return request("/api/miniprogram/projects/update", {
+    method: "POST",
+    data
+  });
+}
+
+function deleteProject(projectId) {
+  return request("/api/miniprogram/projects/delete", {
+    method: "POST",
+    data: { projectId }
+  });
+}
+
 function createTask(data) {
   return request("/api/miniprogram/tasks", {
     method: "POST",
@@ -195,6 +209,8 @@ module.exports = {
   saveReview,
   getWorkspace,
   createProject,
+  updateProject,
+  deleteProject,
   createTask,
   getTaskDetail,
   updateTask,
