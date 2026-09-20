@@ -226,4 +226,5 @@
 .task-sticky-count { position: absolute; top: -8rpx; right: -8rpx; min-width: 28rpx; height: 28rpx; padding: 0 6rpx; box-sizing: border-box; border-radius: 999rpx; background: #0faec8; color: #ffffff; font-size: 18rpx; line-height: 28rpx; text-align: center; }
 .task-settings { padding: 10rpx 6rpx; color: #8296b0; font-size: 28rpx; }
 .task-row { flex-direction: column; align-items: stretch; gap: 12rpx; }
-.task-action { margin-right: auto; }\n.task-actions { align-self: stretch; }
+.task-action { margin-right: auto; }
+.task-actions { align-self: stretch; }
