@@ -1,52 +1,22 @@
 <view class="page">
   <view class="form-card">
-    <text class="label">任务内容</text>
+    <text class="label">标题</text>
     <input class="input" value="{{title}}" placeholder="一个清晰、可执行的动作" bindinput="onTitleInput" />
 
-    <text class="label">精简标题</text>
-    <input class="input" value="{{shortTitle}}" placeholder="例如：验证国内替代方案" bindinput="onShortTitleInput" />
+    <text class="label">内容</text>
+    <textarea class="textarea" value="{{notes}}" placeholder="这件事具体是什么" bindinput="onNotesInput"></textarea>
 
-    <text class="label">具体说明</text>
-    <textarea class="textarea" value="{{notes}}" bindinput="onNotesInput"></textarea>
-
-    <view class="ai-help">
-      <text class="label">AI 修改建议</text>
-      <textarea class="textarea ai-textarea" value="{{aiIdea}}" placeholder="输入一个想法，例如：这个任务应该更聚焦到本周能完成的范围。" bindinput="onAiIdeaInput"></textarea>
-      <view class="ai-button {{aiLoading ? 'ai-button-disabled' : ''}}" bindtap="onAiTaskSuggest">{{aiLoading ? '正在整理...' : '让 AI 给修改建议'}}</view>
-      <view class="ai-suggestion" wx:if="{{aiSuggestion}}">
-        <text class="ai-reason">{{aiSuggestion.reason}}</text>
-        <view class="ai-apply" bindtap="onApplyAiSuggestion">应用建议</view>
-      </view>
-    </view>
-
-    <text class="label">所属项目</text>
-    <picker mode="selector" range="{{projectNames}}" value="{{projectIndex}}" bindchange="onProjectChange">
-      <view class="picker">{{projectNames[projectIndex]}}</view>
-    </picker>
+    <text class="label">执行</text>
+    <textarea class="textarea" value="{{doneWhen}}" placeholder="完成到什么程度算这一步结束" bindinput="onDoneWhenInput"></textarea>
 
     <text class="label">优先级</text>
     <picker mode="selector" range="{{priorityLabels}}" value="{{priorityIndex}}" bindchange="onPriorityChange">
       <view class="picker">{{priorityLabels[priorityIndex]}}</view>
     </picker>
 
-    <text class="label">状态</text>
-    <picker mode="selector" range="{{statusLabels}}" value="{{statusIndex}}" bindchange="onStatusChange">
-      <view class="picker">{{statusLabels[statusIndex]}}</view>
-    </picker>
-
-    <text class="label">计划日期</text>
-    <picker mode="date" value="{{scheduledDate}}" bindchange="onScheduledChange">
-      <view class="picker">{{scheduledDate || '未设置'}}</view>
-    </picker>
-
     <text class="label">截止日期</text>
     <picker mode="date" value="{{dueDate}}" bindchange="onDueChange">
       <view class="picker">{{dueDate || '未设置'}}</view>
-    </picker>
-
-    <text class="label">今日重点日期</text>
-    <picker mode="date" value="{{focusDate}}" bindchange="onFocusChange">
-      <view class="picker">{{focusDate || '未设置'}}</view>
     </picker>
 
     <view class="sticky-section">

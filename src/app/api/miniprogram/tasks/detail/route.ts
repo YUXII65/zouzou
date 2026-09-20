@@ -23,6 +23,7 @@ export async function GET(request: Request) {
       title: true,
       shortTitle: true,
       notes: true,
+      doneWhen: true,
       status: true,
       priority: true,
       scheduledDate: true,

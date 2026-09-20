@@ -1,0 +1,14 @@
+<view class="page">
+  <view class="skip" bindtap="onSkip">跳过</view>
+  <view class="card">
+    <view class="brand-mark"><view class="brand-arrow"></view></view>
+    <view class="kicker">新手引导</view>
+    <view class="title">{{steps[stepIndex].title}}</view>
+    <view class="body">{{steps[stepIndex].body}}</view>
+    <view class="dots">
+      <view class="dot {{index === stepIndex ? 'dot-active' : ''}}" wx:for="{{steps}}" wx:key="step"></view>
+    </view>
+    <view class="next" bindtap="onNext">{{steps[stepIndex].button}}</view>
+    <view class="counter">{{stepIndex + 1}} / {{steps.length}}</view>
+  </view>
+</view>

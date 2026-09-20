@@ -39,6 +39,7 @@ export async function POST(request: Request) {
     dueDate?: string;
     focusDate?: string;
     projectId?: string;
+    doneWhen?: string;
   };
   try {
     body = (await request.json()) as typeof body;
@@ -108,7 +109,7 @@ export async function POST(request: Request) {
             : "user"
           : null,
       executionMode: contract.executionMode,
-      doneWhen: contract.doneWhen,
+      doneWhen: body.doneWhen?.trim().slice(0, 500) || contract.doneWhen,
       maxTurns: contract.maxTurns,
       toolPolicy: contract.toolPolicy,
     },

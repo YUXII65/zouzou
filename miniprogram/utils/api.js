@@ -86,6 +86,17 @@ async function loginOrRegister(username, password) {
   }
 }
 
+function getOnboarding() {
+  return request("/api/miniprogram/onboarding");
+}
+
+function setOnboardingStep(step) {
+  return request("/api/miniprogram/onboarding", {
+    method: "POST",
+    data: { step }
+  });
+}
+
 function getMe() {
   return request("/api/miniprogram/me");
 }
@@ -268,6 +279,8 @@ module.exports = {
   setCachedUser,
   getCachedUser,
   loginOrRegister,
+  getOnboarding,
+  setOnboardingStep,
   getMe,
   getToday,
   getTools,

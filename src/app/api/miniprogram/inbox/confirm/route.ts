@@ -14,6 +14,7 @@ type ConfirmTaskInput = Partial<
     | "title"
     | "shortTitle"
     | "notes"
+    | "doneWhen"
     | "priority"
     | "scheduledDate"
     | "dueDate"
@@ -73,6 +74,7 @@ function samePlanTasks(
     title: string;
     shortTitle: string;
     notes: string | null;
+    doneWhen: string | null;
     priority: Priority;
     scheduledDate: Date | null;
     dueDate: Date | null;
@@ -86,6 +88,7 @@ function samePlanTasks(
       task.title === planned.title &&
       task.shortTitle === planned.shortTitle &&
       task.notes === planned.notes &&
+      task.doneWhen === planned.doneWhen &&
       task.priority === planned.priority &&
       dateKey(task.scheduledDate) === planned.scheduledDate &&
       dateKey(task.dueDate) === planned.dueDate
@@ -136,11 +139,11 @@ export async function POST(request: Request) {
       title: cleanText(input.title, 300) ?? plannedTask.title,
       shortTitle: cleanText(input.shortTitle, 120) ?? plannedTask.shortTitle,
       notes: cleanText(input.notes, 4000) ?? plannedTask.notes,
+      doneWhen: cleanText(input.doneWhen, 500) ?? plannedTask.doneWhen,
       priority: normalizePriority(input.priority, plannedTask.priority),
       scheduledDate: parseDate(input.scheduledDate) ?? parseDate(plannedTask.scheduledDate),
       dueDate: parseDate(input.dueDate) ?? parseDate(plannedTask.dueDate),
       executionMode: plannedTask.executionMode,
-      doneWhen: plannedTask.doneWhen,
       maxTurns: plannedTask.maxTurns,
       toolPolicy: plannedTask.toolPolicy,
     };
@@ -152,6 +155,7 @@ export async function POST(request: Request) {
       title: task.title,
       shortTitle: task.shortTitle,
       notes: task.notes,
+      doneWhen: task.doneWhen,
       priority: task.priority,
       scheduledDate: dateKey(task.scheduledDate),
       dueDate: dateKey(task.dueDate),

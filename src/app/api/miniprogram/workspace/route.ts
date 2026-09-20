@@ -28,6 +28,7 @@ export async function GET(request: Request) {
             dueDate: true,
             scheduledDate: true,
             focusDate: true,
+            _count: { select: { stickyNotes: true } },
           },
         },
       },
@@ -48,9 +49,20 @@ export async function GET(request: Request) {
         dueDate: true,
         scheduledDate: true,
         focusDate: true,
+        _count: { select: { stickyNotes: true } },
       },
     }),
   ]);
+
+  function serializeTask(task: (typeof projects)[number]["tasks"][number]) {
+    return {
+      ...task,
+      stickyCount: task._count.stickyNotes,
+      dueDate: task.dueDate?.toISOString() ?? null,
+      scheduledDate: task.scheduledDate?.toISOString() ?? null,
+      focusDate: task.focusDate?.toISOString() ?? null,
+    };
+  }
 
   return NextResponse.json({
     projects: projects.map((project) => ({
@@ -60,18 +72,8 @@ export async function GET(request: Request) {
       status: project.status,
       currentMilestone: project.currentMilestone,
       notes: project.notes,
-      tasks: project.tasks.map((task) => ({
-        ...task,
-        dueDate: task.dueDate?.toISOString() ?? null,
-        scheduledDate: task.scheduledDate?.toISOString() ?? null,
-        focusDate: task.focusDate?.toISOString() ?? null,
-      })),
+      tasks: project.tasks.map(serializeTask),
     })),
-    unassociatedTasks: unassociatedTasks.map((task) => ({
-      ...task,
-      dueDate: task.dueDate?.toISOString() ?? null,
-      scheduledDate: task.scheduledDate?.toISOString() ?? null,
-      focusDate: task.focusDate?.toISOString() ?? null,
-    })),
+    unassociatedTasks: unassociatedTasks.map(serializeTask),
   });
 }

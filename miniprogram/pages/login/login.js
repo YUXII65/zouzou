@@ -22,14 +22,18 @@ Page({
       return;
     }
 
-    const { loginOrRegister, setToken, setCachedUser } = require("../../utils/api");
+    const { loginOrRegister, setToken, setCachedUser, getOnboarding } = require("../../utils/api");
     wx.showLoading({ title: "正在登录..." });
     loginOrRegister(this.data.username.trim(), this.data.password)
       .then((result) => {
         setToken(result.token);
         setCachedUser(result.user);
         wx.hideLoading();
-        wx.reLaunch({ url: "/pages/today/today" });
+        getOnboarding()
+          .then((state) => {
+            wx.reLaunch({ url: state.isFirstRun && state.tourStep !== "done" ? "/pages/onboarding/onboarding" : "/pages/today/today" });
+          })
+          .catch(() => wx.reLaunch({ url: "/pages/today/today" }));
       })
       .catch((error) => {
         wx.hideLoading();

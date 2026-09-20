@@ -12,6 +12,21 @@ const PRIORITY_LABELS = {
   urgent: "紧急"
 };
 
+const MODE_LABELS = {
+  quick: "直接完成",
+  tool: "查资料",
+  produce: "做产物",
+  explore: "做验证",
+  project: "长期推进"
+};
+
+function formatDate(value) {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  return `${date.getMonth() + 1}月${date.getDate()}日`;
+}
+
 const PROJECT_STATUSES = ["active", "paused", "completed", "archived"];
 const PROJECT_STATUS_LABELS = ["进行中", "已暂停", "已完成", "已归档"];
 
@@ -24,6 +39,11 @@ function decorateTasks(tasks) {
   return (tasks || []).map((task) => ({
     ...task,
     displayTitle: task.shortTitle && task.shortTitle.trim() ? task.shortTitle.trim() : fallbackTitle(task.title),
+    executionModeLabel: MODE_LABELS[task.executionMode] || "直接完成",
+    scheduledDateText: formatDate(task.scheduledDate),
+    dueDateText: formatDate(task.dueDate),
+    stickyCount: task.stickyCount || 0,
+    canChangeStatus: task.status !== "done" && task.status !== "cancelled",
     statusLabel: STATUS_LABELS[task.status] || task.status,
     priorityLabel: PRIORITY_LABELS[task.priority] || task.priority,
     actionLabel: task.status === "todo"
@@ -66,12 +86,9 @@ Page({
     showCreateTask: false,
     taskTitle: "",
     taskNotes: "",
-    taskShortTitle: "",
+    taskDoneWhen: "",
     taskPriorityIndex: 1,
-    taskStatusIndex: 0,
-    taskScheduledDate: "",
     taskDueDate: "",
-    taskFocusDate: "",
     expandedTaskId: "",
     priorityLabels: ["低", "中", "高", "紧急"],
     statusLabels: ["待办", "进行中", "已完成", "已取消"]
@@ -89,6 +106,19 @@ Page({
   onShow() {
     this.loadWorkspace();
     this.syncUserHeader();
+    this.ensureOnboarding();
+  },
+
+  ensureOnboarding() {
+    const { getToken, getOnboarding } = require("../../utils/api");
+    if (!getToken()) return;
+    getOnboarding()
+      .then((state) => {
+        if (state.isFirstRun && state.tourStep !== "done") {
+          wx.reLaunch({ url: "/pages/onboarding/onboarding" });
+        }
+      })
+      .catch(() => {});
   },
 
   loadWorkspace() {
@@ -322,13 +352,10 @@ Page({
   },
 
   onTaskTitleInput(event) { this.setData({ taskTitle: event.detail.value }); },
-  onTaskShortTitleInput(event) { this.setData({ taskShortTitle: event.detail.value }); },
   onTaskNotesInput(event) { this.setData({ taskNotes: event.detail.value }); },
+  onTaskDoneWhenInput(event) { this.setData({ taskDoneWhen: event.detail.value }); },
   onTaskPriorityChange(event) { this.setData({ taskPriorityIndex: Number(event.detail.value) }); },
-  onTaskStatusChange(event) { this.setData({ taskStatusIndex: Number(event.detail.value) }); },
-  onTaskScheduledChange(event) { this.setData({ taskScheduledDate: event.detail.value }); },
   onTaskDueChange(event) { this.setData({ taskDueDate: event.detail.value }); },
-  onTaskFocusChange(event) { this.setData({ taskFocusDate: event.detail.value }); },
 
   onCreateTask() {
     const { createTask } = require("../../utils/api");
@@ -343,17 +370,14 @@ Page({
     wx.showLoading({ title: "正在添加..." });
     createTask({
       title: this.data.taskTitle,
-      shortTitle: this.data.taskShortTitle,
       notes: this.data.taskNotes,
+      doneWhen: this.data.taskDoneWhen,
       projectId: this.data.showUnassigned ? "" : this.data.activeProjectId,
       priority: ["low", "medium", "high", "urgent"][this.data.taskPriorityIndex] || "medium",
-      status: ["todo", "in_progress", "done", "cancelled"][this.data.taskStatusIndex] || "todo",
-      scheduledDate: this.data.taskScheduledDate,
-      dueDate: this.data.taskDueDate,
-      focusDate: this.data.taskFocusDate
+      dueDate: this.data.taskDueDate
     }).then(() => {
       wx.hideLoading();
-      this.setData({ showCreateTask: false, taskTitle: "", taskShortTitle: "", taskNotes: "", taskPriorityIndex: 1, taskStatusIndex: 0, taskScheduledDate: "", taskDueDate: "", taskFocusDate: "" });
+      this.setData({ showCreateTask: false, taskTitle: "", taskNotes: "", taskDoneWhen: "", taskPriorityIndex: 1, taskDueDate: "" });
       this.loadWorkspace();
     }).catch(() => {
       wx.hideLoading();
@@ -383,6 +407,12 @@ Page({
     const taskId = event.currentTarget.dataset.id;
     if (!taskId) return;
     this.setData({ expandedTaskId: this.data.expandedTaskId === taskId ? "" : taskId });
+  },
+
+  onTaskStickyTap(event) {
+    const taskId = event.currentTarget.dataset.id;
+    if (!taskId) return;
+    wx.navigateTo({ url: `/pages/task-edit/task-edit?id=${encodeURIComponent(taskId)}&focus=sticky` });
   },
 
   onTaskEditTap(event) {

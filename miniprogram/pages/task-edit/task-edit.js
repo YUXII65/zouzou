@@ -1,32 +1,22 @@
 const PRIORITIES = ["low", "medium", "high", "urgent"];
 const PRIORITY_LABELS = ["低", "中", "高", "紧急"];
-const STATUSES = ["todo", "in_progress", "done", "cancelled"];
-const STATUS_LABELS = ["待办", "进行中", "已完成", "已取消"];
 
 Page({
   data: {
     taskId: "",
     title: "",
-    shortTitle: "",
     notes: "",
+    doneWhen: "",
     priority: "medium",
     priorityIndex: 1,
-    status: "todo",
-    statusIndex: 0,
-    scheduledDate: "",
     dueDate: "",
-    focusDate: "",
+    status: "todo",
     projectId: "",
-    projectIndex: 0,
-    projectNames: ["未关联项目"],
-    projectIds: [""],
+    scheduledDate: "",
+    focusDate: "",
     priorityLabels: PRIORITY_LABELS,
-    statusLabels: STATUS_LABELS,
     stickyNotes: [],
-    stickyMessage: "",
-    aiIdea: "",
-    aiSuggestion: null,
-    aiLoading: false
+    stickyMessage: ""
   },
 
   onLoad(options) {
@@ -36,36 +26,26 @@ Page({
   },
 
   loadTask() {
-    const { getToken, getTaskDetail, getWorkspace } = require("../../utils/api");
+    const { getToken, getTaskDetail } = require("../../utils/api");
     if (!getToken()) {
       wx.reLaunch({ url: "/pages/login/login" });
       return;
     }
-
-    Promise.all([getTaskDetail(this.data.taskId), getWorkspace()])
-      .then((results) => {
-        const task = results[0].task;
-        const projects = results[1].projects || [];
-        const projectNames = ["未关联项目"].concat(projects.map((project) => project.name));
-        const projectIds = [""].concat(projects.map((project) => project.id));
+    getTaskDetail(this.data.taskId)
+      .then((result) => {
+        const task = result.task;
         const priorityIndex = Math.max(PRIORITIES.indexOf(task.priority), 0);
-        const statusIndex = Math.max(STATUSES.indexOf(task.status), 0);
-        const projectIndex = Math.max(projectIds.indexOf(task.projectId), 0);
         this.setData({
           title: task.title || "",
-          shortTitle: task.shortTitle || "",
           notes: task.notes || "",
+          doneWhen: task.doneWhen || "",
           priority: PRIORITIES[priorityIndex],
           priorityIndex,
-          status: STATUSES[statusIndex],
-          statusIndex,
-          scheduledDate: task.scheduledDate || "",
           dueDate: task.dueDate || "",
-          focusDate: task.focusDate || "",
+          status: task.status || "todo",
           projectId: task.projectId || "",
-          projectIndex,
-          projectNames,
-          projectIds
+          scheduledDate: task.scheduledDate || "",
+          focusDate: task.focusDate || ""
         });
       })
       .catch(() => wx.showToast({ title: "任务没加载出来", icon: "none" }));
@@ -79,23 +59,13 @@ Page({
   },
 
   onTitleInput(event) { this.setData({ title: event.detail.value }); },
-  onShortTitleInput(event) { this.setData({ shortTitle: event.detail.value }); },
   onNotesInput(event) { this.setData({ notes: event.detail.value }); },
+  onDoneWhenInput(event) { this.setData({ doneWhen: event.detail.value }); },
   onPriorityChange(event) {
     const index = Number(event.detail.value);
     this.setData({ priorityIndex: index, priority: PRIORITIES[index] || "medium" });
   },
-  onStatusChange(event) {
-    const index = Number(event.detail.value);
-    this.setData({ statusIndex: index, status: STATUSES[index] || "todo" });
-  },
-  onProjectChange(event) {
-    const index = Number(event.detail.value);
-    this.setData({ projectIndex: index, projectId: this.data.projectIds[index] || "" });
-  },
-  onScheduledChange(event) { this.setData({ scheduledDate: event.detail.value }); },
   onDueChange(event) { this.setData({ dueDate: event.detail.value }); },
-  onFocusChange(event) { this.setData({ focusDate: event.detail.value }); },
   onStickyInput(event) { this.setData({ stickyMessage: event.detail.value }); },
 
   onGenerateSticky() {
@@ -128,78 +98,24 @@ Page({
     });
   },
 
-  onAiIdeaInput(event) { this.setData({ aiIdea: event.detail.value }); },
-
-  onAiTaskSuggest() {
-    const idea = this.data.aiIdea.trim();
-    if (!idea) {
-      wx.showToast({ title: "先写下你想怎么改", icon: "none" });
-      return;
-    }
-    if (this.data.aiLoading) return;
-    const { getTaskEditSuggestion } = require("../../utils/api");
-    this.setData({ aiLoading: true });
-    wx.showLoading({ title: "正在判断怎么改..." });
-    getTaskEditSuggestion({
-      taskId: this.data.taskId,
-      title: this.data.title,
-      shortTitle: this.data.shortTitle,
-      notes: this.data.notes,
-      priority: this.data.priority,
-      scheduledDate: this.data.scheduledDate,
-      dueDate: this.data.dueDate,
-      focusDate: this.data.focusDate,
-      idea
-    })
-      .then((result) => {
-        wx.hideLoading();
-        this.setData({ aiLoading: false, aiSuggestion: result.suggestion });
-      })
-      .catch(() => {
-        wx.hideLoading();
-        this.setData({ aiLoading: false });
-        wx.showToast({ title: "这次没整理出来", icon: "none" });
-      });
-  },
-
-  onApplyAiSuggestion() {
-    const suggestion = this.data.aiSuggestion;
-    if (!suggestion) return;
-    const nextPriority = suggestion.priority && PRIORITIES.includes(suggestion.priority)
-      ? suggestion.priority
-      : this.data.priority;
-    const priorityIndex = Math.max(PRIORITIES.indexOf(nextPriority), 0);
-    this.setData({
-      title: suggestion.title || this.data.title,
-      shortTitle: suggestion.shortTitle || this.data.shortTitle,
-      notes: suggestion.notes === undefined ? this.data.notes : (suggestion.notes || ""),
-      priority: nextPriority,
-      priorityIndex,
-      scheduledDate: suggestion.scheduledDate === undefined ? this.data.scheduledDate : (suggestion.scheduledDate || ""),
-      dueDate: suggestion.dueDate === undefined ? this.data.dueDate : (suggestion.dueDate || ""),
-      focusDate: suggestion.focusDate === undefined ? this.data.focusDate : (suggestion.focusDate || "")
-    });
-    wx.showToast({ title: "已应用建议", icon: "success" });
-  },
-
   onSave() {
     const { updateTask } = require("../../utils/api");
     if (!this.data.title.trim()) {
-      wx.showToast({ title: "先写任务内容", icon: "none" });
+      wx.showToast({ title: "先写标题", icon: "none" });
       return;
     }
     wx.showLoading({ title: "正在保存..." });
     updateTask({
       taskId: this.data.taskId,
       title: this.data.title,
-      shortTitle: this.data.shortTitle,
       notes: this.data.notes,
+      doneWhen: this.data.doneWhen,
       priority: this.data.priority,
-      status: this.data.status,
-      scheduledDate: this.data.scheduledDate,
       dueDate: this.data.dueDate,
-      focusDate: this.data.focusDate,
-      projectId: this.data.projectId
+      status: this.data.status,
+      projectId: this.data.projectId,
+      scheduledDate: this.data.scheduledDate,
+      focusDate: this.data.focusDate
     })
       .then(() => {
         wx.hideLoading();

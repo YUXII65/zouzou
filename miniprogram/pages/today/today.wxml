@@ -108,12 +108,12 @@
               <input class="plan-input" value="{{task.title}}" data-item-index="{{itemIndex}}" data-task-index="{{taskIndex}}" data-field="title" bindinput="onPlanTaskInput" />
             </view>
             <view class="plan-field">
-              <text class="plan-label">精简标题</text>
-              <input class="plan-input" value="{{task.shortTitle}}" placeholder="列表展示时使用的短标题" data-item-index="{{itemIndex}}" data-task-index="{{taskIndex}}" data-field="shortTitle" bindinput="onPlanTaskInput" />
+              <text class="plan-label">内容</text>
+              <textarea class="plan-textarea" value="{{task.notes}}" data-item-index="{{itemIndex}}" data-task-index="{{taskIndex}}" data-field="notes" bindinput="onPlanTaskInput"></textarea>
             </view>
             <view class="plan-field">
-              <text class="plan-label">执行说明</text>
-              <textarea class="plan-textarea" value="{{task.notes}}" data-item-index="{{itemIndex}}" data-task-index="{{taskIndex}}" data-field="notes" bindinput="onPlanTaskInput"></textarea>
+              <text class="plan-label">执行</text>
+              <textarea class="plan-textarea" value="{{task.doneWhen}}" data-item-index="{{itemIndex}}" data-task-index="{{taskIndex}}" data-field="doneWhen" bindinput="onPlanTaskInput"></textarea>
             </view>
 
             <view class="plan-grid">
@@ -121,12 +121,6 @@
                 <text class="plan-label">优先级</text>
                 <picker mode="selector" range="{{priorityLabels}}" value="{{task.priorityIndex}}" data-item-index="{{itemIndex}}" data-task-index="{{taskIndex}}" bindchange="onPlanPriorityChange">
                   <view class="plan-picker-value">{{task.priorityLabel}}</view>
-                </picker>
-              </view>
-              <view class="plan-field">
-                <text class="plan-label">计划日期</text>
-                <picker mode="date" value="{{task.scheduledDate}}" data-item-index="{{itemIndex}}" data-task-index="{{taskIndex}}" data-field="scheduledDate" bindchange="onPlanDateChange">
-                  <view class="plan-picker-value">{{task.scheduledDate ? task.scheduledDate : '选择日期'}}</view>
                 </picker>
               </view>
               <view class="plan-field">

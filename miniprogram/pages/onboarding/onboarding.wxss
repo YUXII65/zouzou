@@ -1,0 +1,13 @@
+.page { position: relative; display: flex; min-height: 100vh; align-items: center; justify-content: center; padding: 48rpx; box-sizing: border-box; background: linear-gradient(160deg, #e9f3ff 0%, #f6faff 50%, #eaf8fa 100%); }
+.skip { position: absolute; top: 44rpx; right: 40rpx; color: #8296b0; font-size: 24rpx; }
+.card { width: 100%; padding: 48rpx 36rpx 36rpx; box-sizing: border-box; border: 1rpx solid rgba(255,255,255,0.9); border-radius: 30rpx; background: rgba(255,255,255,0.9); box-shadow: 0 24rpx 70rpx rgba(52,92,160,0.14); text-align: center; }
+.brand-mark { display: flex; width: 72rpx; height: 72rpx; margin: 0 auto; align-items: center; justify-content: center; border-radius: 20rpx; background: #2f63e6; }
+.brand-arrow { width: 22rpx; height: 22rpx; border-top: 6rpx solid #ffffff; border-right: 6rpx solid #ffffff; transform: rotate(45deg) translate(-3rpx, 3rpx); }
+.kicker { margin-top: 24rpx; color: #2f63e6; font-size: 23rpx; font-weight: 600; letter-spacing: 2rpx; }
+.title { margin-top: 18rpx; color: #182238; font-size: 42rpx; font-weight: 700; }
+.body { margin-top: 22rpx; color: #4d6d94; font-size: 27rpx; line-height: 1.8; text-align: left; }
+.dots { display: flex; justify-content: center; gap: 12rpx; margin-top: 36rpx; }
+.dot { width: 14rpx; height: 14rpx; border-radius: 50%; background: #dce8f7; }
+.dot-active { width: 34rpx; border-radius: 999rpx; background: #2f63e6; }
+.next { display: flex; align-items: center; justify-content: center; height: 86rpx; margin-top: 34rpx; border-radius: 16rpx; background: #2f63e6; color: #ffffff; font-size: 27rpx; font-weight: 600; box-shadow: 0 14rpx 28rpx rgba(47,99,230,0.2); }
+.counter { margin-top: 16rpx; color: #8296b0; font-size: 22rpx; }

@@ -53,42 +53,40 @@
       </view>
       <view class="new-project" bindtap="onToggleCreateTask">＋ 新增任务</view>
       <view class="create-form" wx:if="{{showCreateTask}}">
-        <input class="form-input" placeholder="任务内容" value="{{taskTitle}}" bindinput="onTaskTitleInput" />
-        <input class="form-input" placeholder="具体说明（可选）" value="{{taskNotes}}" bindinput="onTaskNotesInput" />
-        <input class="form-input" placeholder="精简标题（可选）" value="{{taskShortTitle}}" bindinput="onTaskShortTitleInput" />
+        <input class="form-input" placeholder="标题" value="{{taskTitle}}" bindinput="onTaskTitleInput" />
+        <input class="form-input" placeholder="内容" value="{{taskNotes}}" bindinput="onTaskNotesInput" />
+        <input class="form-input" placeholder="执行" value="{{taskDoneWhen}}" bindinput="onTaskDoneWhenInput" />
         <picker mode="selector" range="{{priorityLabels}}" value="{{taskPriorityIndex}}" bindchange="onTaskPriorityChange">
           <view class="form-input picker-display">{{priorityLabels[taskPriorityIndex]}}</view>
         </picker>
-        <picker mode="selector" range="{{statusLabels}}" value="{{taskStatusIndex}}" bindchange="onTaskStatusChange">
-          <view class="form-input picker-display">{{statusLabels[taskStatusIndex]}}</view>
-        </picker>
-        <picker mode="date" value="{{taskScheduledDate}}" bindchange="onTaskScheduledChange">
-          <view class="form-input picker-display">{{taskScheduledDate || '计划日期'}}</view>
-        </picker>
         <picker mode="date" value="{{taskDueDate}}" bindchange="onTaskDueChange">
           <view class="form-input picker-display">{{taskDueDate || '截止日期'}}</view>
-        </picker>
-        <picker mode="date" value="{{taskFocusDate}}" bindchange="onTaskFocusChange">
-          <view class="form-input picker-display">{{taskFocusDate || '今日重点日期'}}</view>
         </picker>
         <view class="form-button" bindtap="onCreateTask">添加任务</view>
       </view>
       <view class="task-list" wx:if="{{unassociatedTasks.length}}">
         <view class="task-row" wx:for="{{unassociatedTasks}}" wx:key="id">
-          <view class="task-copy">
+          <view class="task-main">
             <view class="task-title" data-id="{{item.id}}" bindtap="onTaskExpandTap">{{item.displayTitle}}</view>
             <view class="task-meta-row">
+              <text class="task-mode">{{item.executionModeLabel}}</text>
               <text class="task-priority">{{item.priorityLabel}}</text>
               <text class="task-status">{{item.statusLabel}}</text>
+              <text class="task-date" wx:if="{{item.scheduledDateText}}">计划 {{item.scheduledDateText}}</text>
+              <text class="task-due" wx:if="{{item.dueDateText}}">截止 {{item.dueDateText}}</text>
             </view>
             <view class="task-detail" wx:if="{{expandedTaskId === item.id}}">
               <view class="task-detail-title">{{item.title}}</view>
               <view class="task-detail-copy" wx:if="{{item.notes && item.notes !== item.title}}">{{item.notes}}</view>
-              <view class="task-detail-standard" wx:if="{{item.doneWhen}}">完成标准：{{item.doneWhen}}</view>
+              <view class="task-detail-standard" wx:if="{{item.doneWhen}}">执行：{{item.doneWhen}}</view>
               <view class="task-detail-edit" data-id="{{item.id}}" catchtap="onTaskEditTap">编辑任务</view>
             </view>
           </view>
-          <view class="task-action" data-id="{{item.id}}" data-status="{{item.nextStatus}}" bindtap="onTaskStatusTap">{{item.actionLabel}}</view>
+          <view class="task-actions">
+            <view class="task-action" wx:if="{{item.canChangeStatus}}" data-id="{{item.id}}" data-status="{{item.nextStatus}}" bindtap="onTaskStatusTap">{{item.actionLabel}}</view>
+            <view class="task-sticky" data-id="{{item.id}}" catchtap="onTaskStickyTap">▣<text class="task-sticky-count" wx:if="{{item.stickyCount}}">{{item.stickyCount}}</text></view>
+            <view class="task-settings" data-id="{{item.id}}" catchtap="onTaskEditTap">⚙</view>
+          </view>
         </view>
       </view>
       <view class="empty-state compact" wx:else><view class="empty-icon">▤</view><view class="empty-text">没有未关联任务</view></view>
@@ -124,42 +122,40 @@
       </view>
       <view class="new-project" bindtap="onToggleCreateTask">＋ 新增任务</view>
       <view class="create-form" wx:if="{{showCreateTask}}">
-        <input class="form-input" placeholder="任务内容" value="{{taskTitle}}" bindinput="onTaskTitleInput" />
-        <input class="form-input" placeholder="具体说明（可选）" value="{{taskNotes}}" bindinput="onTaskNotesInput" />
-        <input class="form-input" placeholder="精简标题（可选）" value="{{taskShortTitle}}" bindinput="onTaskShortTitleInput" />
+        <input class="form-input" placeholder="标题" value="{{taskTitle}}" bindinput="onTaskTitleInput" />
+        <input class="form-input" placeholder="内容" value="{{taskNotes}}" bindinput="onTaskNotesInput" />
+        <input class="form-input" placeholder="执行" value="{{taskDoneWhen}}" bindinput="onTaskDoneWhenInput" />
         <picker mode="selector" range="{{priorityLabels}}" value="{{taskPriorityIndex}}" bindchange="onTaskPriorityChange">
           <view class="form-input picker-display">{{priorityLabels[taskPriorityIndex]}}</view>
         </picker>
-        <picker mode="selector" range="{{statusLabels}}" value="{{taskStatusIndex}}" bindchange="onTaskStatusChange">
-          <view class="form-input picker-display">{{statusLabels[taskStatusIndex]}}</view>
-        </picker>
-        <picker mode="date" value="{{taskScheduledDate}}" bindchange="onTaskScheduledChange">
-          <view class="form-input picker-display">{{taskScheduledDate || '计划日期'}}</view>
-        </picker>
         <picker mode="date" value="{{taskDueDate}}" bindchange="onTaskDueChange">
           <view class="form-input picker-display">{{taskDueDate || '截止日期'}}</view>
-        </picker>
-        <picker mode="date" value="{{taskFocusDate}}" bindchange="onTaskFocusChange">
-          <view class="form-input picker-display">{{taskFocusDate || '今日重点日期'}}</view>
         </picker>
         <view class="form-button" bindtap="onCreateTask">添加任务</view>
       </view>
       <view class="task-list" wx:if="{{activeProject.tasks.length}}">
         <view class="task-row" wx:for="{{activeProject.tasks}}" wx:key="id">
-          <view class="task-copy">
+          <view class="task-main">
             <view class="task-title" data-id="{{item.id}}" bindtap="onTaskExpandTap">{{item.displayTitle}}</view>
             <view class="task-meta-row">
+              <text class="task-mode">{{item.executionModeLabel}}</text>
               <text class="task-priority">{{item.priorityLabel}}</text>
               <text class="task-status">{{item.statusLabel}}</text>
+              <text class="task-date" wx:if="{{item.scheduledDateText}}">计划 {{item.scheduledDateText}}</text>
+              <text class="task-due" wx:if="{{item.dueDateText}}">截止 {{item.dueDateText}}</text>
             </view>
             <view class="task-detail" wx:if="{{expandedTaskId === item.id}}">
               <view class="task-detail-title">{{item.title}}</view>
               <view class="task-detail-copy" wx:if="{{item.notes && item.notes !== item.title}}">{{item.notes}}</view>
-              <view class="task-detail-standard" wx:if="{{item.doneWhen}}">完成标准：{{item.doneWhen}}</view>
+              <view class="task-detail-standard" wx:if="{{item.doneWhen}}">执行：{{item.doneWhen}}</view>
               <view class="task-detail-edit" data-id="{{item.id}}" catchtap="onTaskEditTap">编辑任务</view>
             </view>
           </view>
-          <view class="task-action" data-id="{{item.id}}" data-status="{{item.nextStatus}}" bindtap="onTaskStatusTap">{{item.actionLabel}}</view>
+          <view class="task-actions">
+            <view class="task-action" wx:if="{{item.canChangeStatus}}" data-id="{{item.id}}" data-status="{{item.nextStatus}}" bindtap="onTaskStatusTap">{{item.actionLabel}}</view>
+            <view class="task-sticky" data-id="{{item.id}}" catchtap="onTaskStickyTap">▣<text class="task-sticky-count" wx:if="{{item.stickyCount}}">{{item.stickyCount}}</text></view>
+            <view class="task-settings" data-id="{{item.id}}" catchtap="onTaskEditTap">⚙</view>
+          </view>
         </view>
       </view>
       <view class="empty-state compact" wx:else><view class="empty-icon">▤</view><view class="empty-text">项目下还没有任务</view></view>

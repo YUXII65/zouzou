@@ -83,6 +83,19 @@ Page({
     this.updateClock();
     this.syncUserHeader();
     this.loadToday();
+    this.ensureOnboarding();
+  },
+
+  ensureOnboarding() {
+    const { getToken, getOnboarding } = require("../../utils/api");
+    if (!getToken()) return;
+    getOnboarding()
+      .then((state) => {
+        if (state.isFirstRun && state.tourStep !== "done") {
+          wx.reLaunch({ url: "/pages/onboarding/onboarding" });
+        }
+      })
+      .catch(() => {});
   },
 
   loadToday() {
@@ -132,6 +145,7 @@ Page({
                       title: task.title || "",
                       shortTitle: task.shortTitle || "",
                       notes: task.notes || "",
+                      doneWhen: task.doneWhen || "",
                       priority: PRIORITY_OPTIONS[index].value,
                       priorityIndex: index,
                       priorityLabel: PRIORITY_OPTIONS[index].label,
@@ -343,6 +357,7 @@ Page({
         title: task.title,
         shortTitle: task.shortTitle,
         notes: task.notes,
+        doneWhen: task.doneWhen,
         priority: task.priority,
         scheduledDate: task.scheduledDate,
         dueDate: task.dueDate
