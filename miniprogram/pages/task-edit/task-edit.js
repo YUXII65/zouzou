@@ -16,11 +16,12 @@ Page({
     focusDate: "",
     priorityLabels: PRIORITY_LABELS,
     stickyNotes: [],
-    stickyMessage: ""
+    stickyMessage: "",
+    showSticky: false
   },
 
   onLoad(options) {
-    this.setData({ taskId: options.id || "" });
+    this.setData({ taskId: options.id || "", showSticky: options.focus === "sticky" });
     this.loadTask();
     this.loadStickyNotes();
   },
@@ -66,6 +67,8 @@ Page({
     this.setData({ priorityIndex: index, priority: PRIORITIES[index] || "medium" });
   },
   onDueChange(event) { this.setData({ dueDate: event.detail.value }); },
+  onToggleSticky() { this.setData({ showSticky: !this.data.showSticky }); },
+
   onStickyInput(event) { this.setData({ stickyMessage: event.detail.value }); },
 
   onGenerateSticky() {

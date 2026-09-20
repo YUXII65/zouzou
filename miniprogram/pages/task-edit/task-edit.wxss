@@ -22,3 +22,6 @@
 .ai-suggestion { margin-top: 16rpx; padding: 16rpx; border-radius: 14rpx; background: #ffffff; }
 .ai-reason { display: block; color: #4d6d94; font-size: 23rpx; line-height: 1.6; }
 .ai-apply { height: 64rpx; background: #2f63e6; color: #ffffff; }
+.sticky-toggle { display: flex; align-items: center; justify-content: space-between; margin-top: 30rpx; padding: 18rpx 20rpx; border: 1rpx solid #dce8f7; border-radius: 14rpx; background: #ffffff; color: #4d6d94; font-size: 24rpx; font-weight: 600; }
+.sticky-section { margin-top: 14rpx; padding-top: 0; border-top: 0; }
+.sticky-empty { margin-bottom: 16rpx; color: #8296b0; font-size: 23rpx; line-height: 1.6; }

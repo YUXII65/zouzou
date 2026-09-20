@@ -19,8 +19,12 @@
       <view class="picker">{{dueDate || '未设置'}}</view>
     </picker>
 
-    <view class="sticky-section">
-      <text class="label">便利贴（最多 10 张）</text>
+    <view class="sticky-toggle" bindtap="onToggleSticky">
+      <text>便利贴（{{stickyNotes.length}} / 10）</text>
+      <text>{{showSticky ? '收起' : '展开'}}</text>
+    </view>
+
+    <view class="sticky-section" wx:if="{{showSticky}}">
       <view class="sticky-card" wx:for="{{stickyNotes}}" wx:key="id">
         <view class="sticky-head">
           <text class="sticky-title">{{item.title}}</text>
@@ -30,6 +34,7 @@
         <view class="sticky-step" wx:for="{{item.steps}}" wx:key="*this" wx:for-item="step">• {{step}}</view>
         <view class="sticky-next">现在可以做：{{item.nextStep}}</view>
       </view>
+      <view class="sticky-empty" wx:if="{{stickyNotes.length === 0}}">还没有便利贴。写下你的想法后，AI 会生成详细执行步骤。</view>
       <input class="input" placeholder="你有什么想法补充" value="{{stickyMessage}}" bindinput="onStickyInput" />
       <view class="sticky-button" bindtap="onGenerateSticky">生成便利贴</view>
     </view>
