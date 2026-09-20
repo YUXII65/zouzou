@@ -43,7 +43,7 @@ function decorateTasks(tasks) {
     scheduledDateText: formatDate(task.scheduledDate),
     dueDateText: formatDate(task.dueDate),
     stickyCount: task.stickyCount || 0,
-    canChangeStatus: task.status !== "done" && task.status !== "cancelled",
+    canChangeStatus: true,
     statusLabel: STATUS_LABELS[task.status] || task.status,
     priorityLabel: PRIORITY_LABELS[task.priority] || task.priority,
     actionLabel: task.status === "todo"
