@@ -1,3 +1,5 @@
+const { sampleIdeasForDate, pickRandomSampleIdeas } = require("../../utils/sample-ideas");
+
 const PRIORITY_OPTIONS = [
   { value: "low", label: "低" },
   { value: "medium", label: "中" },
@@ -54,11 +56,7 @@ Page({
     streak: 0,
     weekDone: 0,
     content: "",
-    samples: [
-      "把拖了很久的简历重新整理一遍",
-      "这周把项目复盘写出来",
-      "想清楚要不要继续做这个方向"
-    ],
+    samples: sampleIdeasForDate(3),
     priorityLabels: PRIORITY_OPTIONS.map((item) => item.label),
     pendingItems: [],
     tasks: [],
@@ -193,15 +191,7 @@ Page({
   },
 
   onRefreshSamples() {
-    const pool = [
-      "把最近收藏的工具整理成一套流程",
-      "准备一次重要的沟通",
-      "把一个停下来的项目重新推起来",
-      "安排这周真正要完成的三件事"
-    ];
-    const start = Math.floor(Math.random() * pool.length);
-    const samples = [0, 1, 2].map((offset) => pool[(start + offset) % pool.length]);
-    this.setData({ samples });
+    this.setData({ samples: pickRandomSampleIdeas(3) });
   },
 
   onSubmit() {
