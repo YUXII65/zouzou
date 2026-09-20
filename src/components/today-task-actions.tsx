@@ -24,7 +24,7 @@ import { SubmitButton } from "@/components/submit-button";
 import { StatusBadge } from "@/components/status-badge";
 import { ConfirmActionButton } from "@/components/confirm-action-button";
 import { AiTaskSticky } from "@/components/ai-task-sticky";
-import { markFirstTaskGroupDone } from "@/lib/first-run-hints";
+import { markFirstTaskGroupDone, notifyTourStep } from "@/lib/first-run-hints";
 import type { TaskStickyNoteData } from "@/lib/task-sticky";
 import { trackEvent } from "@/lib/track";
 import { useClickOutside } from "@/lib/use-click-outside";
@@ -73,6 +73,7 @@ export function TodayTaskActions({
   notes,
   projectName,
   initialStickyNotes = [],
+  showLabels = false,
 }: {
   taskId: string;
   status: string;
@@ -81,6 +82,7 @@ export function TodayTaskActions({
   notes?: string | null;
   projectName?: string | null;
   initialStickyNotes?: TaskStickyNoteData[];
+  showLabels?: boolean;
 }) {
   const router = useRouter();
   const { ref, open, setOpen } = useClickOutside<HTMLDivElement>();
@@ -101,6 +103,7 @@ export function TodayTaskActions({
     formData.set("status", next);
     setOptimisticStatus(next);
     setUpdating(true);
+    if (next === "in_progress") notifyTourStep("3");
     trackEvent("home_task_status", { status: next });
     try {
       const result = await setTaskStatus(formData);
@@ -119,6 +122,7 @@ export function TodayTaskActions({
       {canChangeStatus ? (
         <button
           type="button"
+          data-tour="task-next"
           onClick={changeStatus}
           disabled={updating}
           className={statusButtonClass(optimisticStatus)}
@@ -138,6 +142,7 @@ export function TodayTaskActions({
         notes={notes}
         projectName={projectName}
         status={status}
+        showLabel={showLabels}
         initialNotes={initialStickyNotes}
       />
 

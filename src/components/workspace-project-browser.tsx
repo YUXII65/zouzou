@@ -32,6 +32,7 @@ type TaskData = {
   priority: string;
   scheduledDate: Date | null;
   dueDate: Date | null;
+  focusDate?: Date | null;
   executionMode?: string | null;
   doneWhen?: string | null;
   stickyNotes?: TaskStickyNoteData[];
@@ -282,6 +283,7 @@ export function WorkspaceProjectBrowser({
                         key={task.id}
                         task={task}
                         projectId={activeProject.id}
+                        projectName={activeProject.name}
                         showLabels={showLabels}
                       />
                     ))}

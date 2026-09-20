@@ -228,6 +228,7 @@ export default async function TodayPage() {
                 task={task}
                 now={now}
                 dayStart={dayStart}
+                showLabels={firstRun.isFirstRun}
               />
             ))}
           </div>
@@ -279,10 +280,12 @@ function AgendaTaskRow({
   task,
   now,
   dayStart,
+  showLabels,
 }: {
   task: AgendaTask;
   now: Date;
   dayStart: Date;
+  showLabels?: boolean;
 }) {
   const isFocused = task.focusDate && isSameDay(task.focusDate, now);
   const isOverdue = task.dueDate && task.dueDate < dayStart;
@@ -341,6 +344,7 @@ function AgendaTaskRow({
           notes={task.notes}
           projectName={task.project?.name ?? null}
           initialStickyNotes={task.stickyNotes.map(serializeTaskStickyNote)}
+          showLabels={showLabels}
         />
       </div>
     </div>

@@ -21,6 +21,7 @@ type AccordionTask = {
   priority: string;
   scheduledDate: Date | null;
   dueDate: Date | null;
+  focusDate?: Date | null;
 };
 
 type AccordionProject = {
@@ -105,6 +106,7 @@ export function ProjectTree({
                       key={task.id}
                       task={task}
                       projectId={project.id}
+                      projectName={project.name}
                     />
                   ))}
                 </div>
