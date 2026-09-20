@@ -334,7 +334,7 @@ function AgendaTaskRow({
           <p className="mt-1 text-xs text-danger">截止 {formatDate(task.dueDate)}</p>
         ) : null}
       </div>
-      <div className="flex flex-wrap items-center gap-2">
+      <div className="flex w-full flex-wrap items-center justify-end gap-2 lg:ml-auto lg:w-auto">
         <StatusBadge status={task.priority} />
         <TodayTaskActions
           taskId={task.id}
