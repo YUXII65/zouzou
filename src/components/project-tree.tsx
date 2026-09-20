@@ -43,13 +43,11 @@ const priorityOrder: Record<string, number> = {
 export function ProjectTree({
   projects,
   unassociatedTasks,
-  projectOptions,
   defaultOpenProjectId,
   sortMode = "order",
 }: {
   projects: AccordionProject[];
   unassociatedTasks: AccordionTask[];
-  projectOptions: Array<{ id: string; name: string }>;
   defaultOpenProjectId?: string;
   sortMode?: "order" | "priority";
 }) {
@@ -124,7 +122,6 @@ export function ProjectTree({
                 <div className="border-t border-border p-3">
                   <TaskForm
                     action={createTask}
-                    projects={projectOptions}
                     defaultProjectId={project.id}
                     returnTo={`/workspace?project=${project.id}`}
                     submitLabel="创建任务"

@@ -1,5 +1,6 @@
 {
   "pages": [
+    "pages/webview/webview",
     "pages/index/index",
     "pages/login/login",
     "pages/onboarding/onboarding",

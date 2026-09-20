@@ -427,6 +427,12 @@ function heuristicPlan(content: string, projectNames: string[]): InboxPlan {
 
   const first = firstLine(content);
   const short = first.length > 24 ? `${first.slice(0, 24)}…` : first;
+  const generatedProjectName =
+    first
+      .replace(/^(?:今天|明天|这周|本周|先|请|帮我|需要|想要?|把)\s*/u, "")
+      .replace(/[，,。；;！？!?]/g, " ")
+      .trim()
+      .slice(0, 20) || "第一个项目";
   const taskTitle = /卡|难|累|焦虑|压力|害怕|不确定|迷茫|拖延|没时间/.test(
     lower,
   )
@@ -442,7 +448,7 @@ function heuristicPlan(content: string, projectNames: string[]): InboxPlan {
 
   return {
     action: projectName ? "existing_project" : "single_task",
-    projectName,
+    projectName: projectName ?? generatedProjectName,
     projectObjective: null,
     projectMilestone: null,
     tasks: [

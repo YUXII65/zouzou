@@ -33,6 +33,7 @@ import {
 } from "@/lib/first-run";
 import { serializeTaskStickyNote } from "@/lib/task-sticky";
 import { buildTaskContract } from "@/lib/task-contract";
+import { repairUnassignedInboxProjects } from "@/lib/inbox-project";
 
 export const dynamic = "force-dynamic";
 
@@ -60,6 +61,7 @@ export default async function ProjectsPage({
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const user = await requireUser();
+  await repairUnassignedInboxProjects(user.id);
   const firstRun = await getFirstRunState(user.id, user.createdAt);
   const params = await searchParams;
   const projectParam =
@@ -128,10 +130,6 @@ export default async function ProjectsPage({
       }),
     );
   }
-  const projectOptions = projects.map((project) => ({
-    id: project.id,
-    name: project.name,
-  }));
   const editReturnTo = editingTask?.projectId
     ? `/workspace?project=${editingTask.projectId}`
     : "/workspace";
@@ -172,7 +170,6 @@ export default async function ProjectsPage({
       <WorkspaceProjectBrowser
         projects={browserProjects}
         unassociatedTasks={browserUnassociatedTasks}
-        projectOptions={projectOptions}
         initialProjectId={showUnassigned ? null : (selectedProject?.id ?? null)}
         initialShowUnassigned={showUnassigned}
         sortMode={sortParam}
@@ -194,7 +191,6 @@ export default async function ProjectsPage({
               />
               <TaskForm
                 action={updateTask}
-                projects={projectOptions}
                 task={editingTask}
                 returnTo={editReturnTo}
                 submitLabel="保存任务"

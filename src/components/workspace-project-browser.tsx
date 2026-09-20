@@ -65,7 +65,6 @@ function sortTasks(tasks: TaskData[], sortMode: "order" | "priority") {
 export function WorkspaceProjectBrowser({
   projects,
   unassociatedTasks,
-  projectOptions,
   initialProjectId,
   initialShowUnassigned = false,
   sortMode = "order",
@@ -74,7 +73,6 @@ export function WorkspaceProjectBrowser({
 }: {
   projects: ProjectData[];
   unassociatedTasks: TaskData[];
-  projectOptions: Array<{ id: string; name: string }>;
   initialProjectId: string | null;
   initialShowUnassigned?: boolean;
   sortMode?: "order" | "priority";
@@ -197,7 +195,6 @@ export function WorkspaceProjectBrowser({
                 <div className="border-t border-border p-3">
                   <TaskForm
                     action={createTask}
-                    projects={projectOptions}
                     defaultProjectId={undefined}
                     returnTo="/workspace?view=unassigned"
                     submitLabel="创建任务"
@@ -271,7 +268,6 @@ export function WorkspaceProjectBrowser({
                     <div className="border-t border-border p-3">
                       <TaskForm
                         action={createTask}
-                        projects={projectOptions}
                         defaultProjectId={activeProject.id}
                         returnTo={`/workspace?project=${activeProject.id}`}
                         submitLabel="创建任务"

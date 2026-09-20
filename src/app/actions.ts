@@ -41,6 +41,7 @@ import {
   type TaskStickyNoteData,
 } from "@/lib/task-sticky";
 import { buildTaskContract } from "@/lib/task-contract";
+import { ensureInboxProject } from "@/lib/inbox-project";
 import {
   clarifyInbox,
   generateFirstRunPlan,
@@ -79,6 +80,11 @@ const priorities: Priority[] = ["low", "medium", "high", "urgent"];
 function text(formData: FormData, key: string) {
   const value = String(formData.get(key) ?? "").trim();
   return value || null;
+}
+
+function shortTitleFromTitle(title: string) {
+  const first = title.split(/[，,。；;！？!?\n]/)[0]?.trim() || title.trim();
+  return first.length > 18 ? `${first.slice(0, 17).trim()}…` : first;
 }
 
 function clientAiOverrides(formData: FormData) {
@@ -1139,11 +1145,19 @@ export async function confirmInboxPlan(formData: FormData) {
       dateInput(formData, `tasks[${index}].dueDate`) ??
       dateString(plannedTask.dueDate),
   }));
+  const firstTask = tasks[0];
+  const [existingProjectCount, existingTaskCount] = await Promise.all([
+    prisma.project.count({ where: { userId: user.id } }),
+    prisma.task.count({ where: { userId: user.id } }),
+  ]);
+  const showProjectHint =
+    existingProjectCount === 0 || existingTaskCount === 0;
   const confirmedTasksJson = JSON.stringify(
     tasks.map((task) => ({
       title: task.title,
       shortTitle: task.shortTitle,
       notes: task.notes,
+      executionMode: task.executionMode,
       priority: task.priority,
       scheduledDate: task.scheduledDate
         ? toDateInputValue(task.scheduledDate)
@@ -1155,29 +1169,19 @@ export async function confirmInboxPlan(formData: FormData) {
   let confirmedProjectId: string | null = item.projectId;
 
   await prisma.$transaction(async (tx) => {
-    let projectId = item.projectId;
+    const projectId = await ensureInboxProject(tx, {
+      userId: user.id,
+      inboxItemId: item.id,
+      content: item.content,
+      projectId: item.projectId,
+      projectName,
+      projectObjective,
+      projectMilestone,
+      fallbackTaskTitle: firstTask.title,
+      fallbackTaskShortTitle: firstTask.shortTitle,
+      fallbackDoneWhen: firstTask.doneWhen,
+    });
 
-    if (plan.action === "create_project" && projectName) {
-      const project = await tx.project.create({
-        data: {
-          userId: user.id,
-          name: projectName,
-          objective: projectObjective ?? "由收件箱想法创建的项目",
-          currentMilestone: projectMilestone,
-          createdFromInboxItemId: item.id,
-          notes: item.content,
-        },
-      });
-      projectId = project.id;
-    } else if (plan.action === "existing_project" && projectName) {
-      const project = await tx.project.findFirst({
-        where: { name: projectName, userId: user.id },
-        select: { id: true },
-      });
-      projectId = project?.id ?? projectId;
-    }
-
-    const firstTask = tasks[0];
     for (const [index, plannedTask] of tasks.entries()) {
       await tx.task.create({
         data: {
@@ -1244,6 +1248,11 @@ export async function confirmInboxPlan(formData: FormData) {
     detail: "inbox_plan",
   });
 
+  return {
+    ok: true as const,
+    projectId: confirmedProjectId,
+    showProjectHint,
+  };
 }
 
 export async function generateTodaySuggestion(
@@ -1521,12 +1530,12 @@ export async function deleteProject(formData: FormData) {
 export async function createTask(formData: FormData) {
   const user = await requireUser();
   const title = text(formData, "title");
-  const shortTitle = text(formData, "shortTitle");
-
   if (!title) return;
 
   const status = taskStatus(String(formData.get("status") ?? "todo"));
   const notes = text(formData, "notes");
+  const shortTitle =
+    text(formData, "shortTitle") ?? shortTitleFromTitle(title);
 
   await prisma.task.create({
     data: {
@@ -1563,7 +1572,7 @@ export async function updateTask(formData: FormData) {
   const user = await requireUser();
   const id = text(formData, "id");
   const title = text(formData, "title");
-  const shortTitle = text(formData, "shortTitle");
+  const notes = text(formData, "notes");
 
   if (!id || !title) return;
 
@@ -1571,6 +1580,7 @@ export async function updateTask(formData: FormData) {
     where: { id, userId: user.id },
     select: {
       title: true,
+      shortTitle: true,
       status: true,
       priority: true,
       scheduledDate: true,
@@ -1589,6 +1599,10 @@ export async function updateTask(formData: FormData) {
   const scheduledDate = dateInput(formData, "scheduledDate");
   const dueDate = dateInput(formData, "dueDate");
   const focusDate = dateInput(formData, "focusDate");
+  const shortTitle =
+    title === existing.title
+      ? existing.shortTitle ?? shortTitleFromTitle(title)
+      : shortTitleFromTitle(title);
   const completedAt =
     status === "done"
       ? new Date()
@@ -1601,7 +1615,7 @@ export async function updateTask(formData: FormData) {
     data: {
       title,
       shortTitle,
-      notes: text(formData, "notes"),
+      notes,
       projectId,
       status,
       priority: priorityValue,
@@ -1609,16 +1623,14 @@ export async function updateTask(formData: FormData) {
       dueDate,
       focusDate,
       completedAt,
-      ...(title === existing.title
-        ? {}
-        : taskContractData({
-            title,
-            notes: text(formData, "notes"),
-            executionMode: formData.get("executionMode"),
-            doneWhen: formData.get("doneWhen"),
-            maxTurns: formData.get("maxTurns"),
-            toolPolicy: formData.get("toolPolicy"),
-          })),
+      ...taskContractData({
+        title,
+        notes,
+        executionMode: formData.get("executionMode"),
+        doneWhen: formData.get("doneWhen"),
+        maxTurns: formData.get("maxTurns"),
+        toolPolicy: formData.get("toolPolicy"),
+      }),
       completedBy:
         status === "done"
           ? existing.status === "done"

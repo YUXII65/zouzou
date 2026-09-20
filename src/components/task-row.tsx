@@ -124,10 +124,6 @@ export function TaskRow({
             {taskModeLabel(task.executionMode)}
           </span>
           <StatusBadge status={task.priority} />
-          <StatusBadge status={optimisticStatus} />
-          {task.scheduledDate ? (
-            <span>计划 {formatDate(task.scheduledDate)}</span>
-          ) : null}
           {task.dueDate ? (
             <span className="text-danger">截止 {formatDate(task.dueDate)}</span>
           ) : null}

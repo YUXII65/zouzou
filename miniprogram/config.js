@@ -1,3 +1,6 @@
+const apiBase = "https://nextstep9.work";
+
 module.exports = {
-  apiBase: "https://nextstep9.work"
+  apiBase,
+  webUrl: `${apiBase}/`
 };

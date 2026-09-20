@@ -5,29 +5,35 @@ import { toDateInputValue } from "@/lib/date";
 const inputClass =
   "zouzou-input w-full rounded-lg px-3 py-2 text-sm text-ink";
 
+const executionModeOptions = [
+  { value: "quick", label: "直接完成" },
+  { value: "tool", label: "查资料" },
+  { value: "produce", label: "做产物" },
+  { value: "explore", label: "做验证" },
+  { value: "project", label: "长期推进" },
+];
+
 type TaskFormTask = {
   id: string;
   title: string;
-  shortTitle: string | null;
   notes: string | null;
   projectId: string | null;
   status: string;
   priority: string;
-  scheduledDate: Date | null;
   dueDate: Date | null;
+  scheduledDate: Date | null;
   focusDate: Date | null;
+  executionMode?: string | null;
 };
 
 export function TaskForm({
   action,
-  projects,
   task,
   defaultProjectId,
   returnTo,
   submitLabel,
 }: {
   action: (formData: FormData) => Promise<void>;
-  projects: Array<{ id: string; name: string }>;
   task?: TaskFormTask;
   defaultProjectId?: string;
   returnTo?: string;
@@ -43,9 +49,19 @@ export function TaskForm({
       ) : null}
       <input
         type="hidden"
-        name="notes"
-        id={`task-notes-${id}`}
-        defaultValue={task?.notes ?? ""}
+        name="projectId"
+        value={task?.projectId ?? defaultProjectId ?? ""}
+      />
+      <input type="hidden" name="status" value={task?.status ?? "todo"} />
+      <input
+        type="hidden"
+        name="scheduledDate"
+        value={task?.scheduledDate ? toDateInputValue(task.scheduledDate) : ""}
+      />
+      <input
+        type="hidden"
+        name="focusDate"
+        value={task?.focusDate ? toDateInputValue(task.focusDate) : ""}
       />
 
       <div className="grid gap-4 sm:grid-cols-2">
@@ -54,31 +70,32 @@ export function TaskForm({
             htmlFor={`task-title-${id}`}
             className="mb-1.5 block text-xs font-medium text-ink-secondary"
           >
-            任务内容
+            标题
           </label>
           <input
             id={`task-title-${id}`}
             name="title"
             required
             defaultValue={task?.title}
-            placeholder="一个清晰、可执行的动作"
+            placeholder="写清今天要推进的具体动作"
             className={inputClass}
           />
         </div>
 
         <div className="sm:col-span-2">
           <label
-            htmlFor={`task-short-title-${id}`}
+            htmlFor={`task-notes-${id}`}
             className="mb-1.5 block text-xs font-medium text-ink-secondary"
           >
-            精简标题
+            内容
           </label>
-          <input
-            id={`task-short-title-${id}`}
-            name="shortTitle"
-            defaultValue={task?.shortTitle ?? ""}
-            placeholder="例如：验证国内替代方案"
-            className={inputClass}
+          <textarea
+            id={`task-notes-${id}`}
+            name="notes"
+            defaultValue={task?.notes ?? ""}
+            rows={3}
+            placeholder="补充背景、对象或你现在的想法"
+            className={`${inputClass} resize-y`}
           />
         </div>
 
@@ -97,21 +114,20 @@ export function TaskForm({
 
         <div>
           <label
-            htmlFor={`task-project-${id}`}
+            htmlFor={`task-execution-${id}`}
             className="mb-1.5 block text-xs font-medium text-ink-secondary"
           >
-            所属项目
+            执行
           </label>
           <select
-            id={`task-project-${id}`}
-            name="projectId"
-            defaultValue={task?.projectId ?? defaultProjectId ?? ""}
+            id={`task-execution-${id}`}
+            name="executionMode"
+            defaultValue={task?.executionMode ?? "quick"}
             className={inputClass}
           >
-            <option value="">未关联项目</option>
-            {projects.map((project) => (
-              <option key={project.id} value={project.id}>
-                {project.name}
+            {executionModeOptions.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
               </option>
             ))}
           </select>
@@ -139,46 +155,6 @@ export function TaskForm({
 
         <div>
           <label
-            htmlFor={`task-status-${id}`}
-            className="mb-1.5 block text-xs font-medium text-ink-secondary"
-          >
-            状态
-          </label>
-          <select
-            id={`task-status-${id}`}
-            name="status"
-            defaultValue={task?.status ?? "todo"}
-            className={inputClass}
-          >
-            <option value="todo">待办</option>
-            <option value="in_progress">进行中</option>
-            <option value="done">已完成</option>
-            <option value="cancelled">已取消</option>
-          </select>
-        </div>
-
-        <div>
-          <label
-            htmlFor={`task-scheduled-${id}`}
-            className="mb-1.5 block text-xs font-medium text-ink-secondary"
-          >
-            计划日期
-          </label>
-          <input
-            id={`task-scheduled-${id}`}
-            name="scheduledDate"
-            type="date"
-            defaultValue={
-              task?.scheduledDate
-                ? toDateInputValue(task.scheduledDate)
-                : undefined
-            }
-            className={inputClass}
-          />
-        </div>
-
-        <div>
-          <label
             htmlFor={`task-due-${id}`}
             className="mb-1.5 block text-xs font-medium text-ink-secondary"
           >
@@ -190,24 +166,6 @@ export function TaskForm({
             type="date"
             defaultValue={
               task?.dueDate ? toDateInputValue(task.dueDate) : undefined
-            }
-            className={inputClass}
-          />
-        </div>
-
-        <div>
-          <label
-            htmlFor={`task-focus-${id}`}
-            className="mb-1.5 block text-xs font-medium text-ink-secondary"
-          >
-            今日重点日期
-          </label>
-          <input
-            id={`task-focus-${id}`}
-            name="focusDate"
-            type="date"
-            defaultValue={
-              task?.focusDate ? toDateInputValue(task.focusDate) : undefined
             }
             className={inputClass}
           />

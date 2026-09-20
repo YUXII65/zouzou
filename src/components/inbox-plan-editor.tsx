@@ -1,14 +1,29 @@
 "use client";
 
 import { useState, type FormEvent } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { CheckCircle2, Loader2, Sparkles } from "lucide-react";
+import { ArrowRight, CheckCircle2, Loader2, Sparkles } from "lucide-react";
 import { confirmInboxPlan } from "@/app/actions";
 import { TypewriterText } from "@/components/typewriter-text";
 import type { InboxPlan } from "@/lib/ai";
 
 const inputClass =
   "zouzou-input w-full rounded-lg px-3 py-2 text-sm leading-6 text-ink";
+
+const executionModeOptions = [
+  { value: "quick", label: "直接完成" },
+  { value: "tool", label: "查资料" },
+  { value: "produce", label: "做产物" },
+  { value: "explore", label: "做验证" },
+  { value: "project", label: "长期推进" },
+];
+
+type ConfirmResult = {
+  ok: true;
+  projectId: string | null;
+  showProjectHint: boolean;
+};
 
 export function InboxPlanEditor({
   itemId,
@@ -19,9 +34,8 @@ export function InboxPlanEditor({
 }) {
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState("");
+  const [confirmResult, setConfirmResult] = useState<ConfirmResult | null>(null);
   const router = useRouter();
-  const showProjectFields =
-    plan.action !== "single_task" || Boolean(plan.projectName);
 
   async function submitPlan(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -29,7 +43,13 @@ export function InboxPlanEditor({
     setSubmitting(true);
     setSubmitError("");
     try {
-      await confirmInboxPlan(new FormData(event.currentTarget));
+      const result = (await confirmInboxPlan(
+        new FormData(event.currentTarget),
+      )) as ConfirmResult | undefined;
+      if (result?.showProjectHint) {
+        setConfirmResult(result);
+        return;
+      }
       router.refresh();
     } catch {
       setSubmitError("没生成成功，再试一次");
@@ -38,38 +58,30 @@ export function InboxPlanEditor({
     }
   }
 
+  if (confirmResult) {
+    return (
+      <div className="rounded-xl border border-success/25 bg-success/10 p-4">
+        <p className="text-sm font-semibold text-success">
+          项目已整理，去书桌页查看并推进
+        </p>
+        <Link
+          href={
+            confirmResult.projectId
+              ? `/workspace?project=${confirmResult.projectId}`
+              : "/workspace"
+          }
+          className="zouzou-primary-button mt-3 inline-flex h-9 items-center gap-2 rounded-lg bg-accent px-4 text-sm font-medium text-white transition-colors hover:bg-accent-strong"
+        >
+          去书桌页
+          <ArrowRight className="size-4" />
+        </Link>
+      </div>
+    );
+  }
+
   return (
     <form onSubmit={submitPlan} className="mt-3 space-y-3">
       <input type="hidden" name="id" value={itemId} />
-
-      {showProjectFields ? (
-        <div className="rounded-lg border border-accent/20 bg-accent-soft/50 p-3">
-          <div className="grid gap-3 sm:grid-cols-3">
-            <label className="block sm:col-span-1">
-              <span className="mb-1.5 block text-xs font-medium text-accent-strong">
-                项目名称
-              </span>
-              <input
-                name="projectName"
-                defaultValue={plan.projectName ?? ""}
-                placeholder="项目名称"
-                className={inputClass}
-              />
-            </label>
-            <label className="block sm:col-span-2">
-              <span className="mb-1.5 block text-xs font-medium text-accent-strong">
-                项目目标
-              </span>
-              <input
-                name="projectObjective"
-                defaultValue={plan.projectObjective ?? ""}
-                placeholder="希望达到什么结果"
-                className={inputClass}
-              />
-            </label>
-          </div>
-        </div>
-      ) : null}
 
       <div className="space-y-3">
         {plan.tasks.map((task, index) => (
@@ -86,8 +98,18 @@ export function InboxPlanEditor({
                   任务 {index + 1}
                 </span>
               </div>
-              <span className="text-xs text-ink-muted">可执行步骤</span>
             </div>
+
+            <input
+              type="hidden"
+              name={`tasks[${index}].shortTitle`}
+              value={task.shortTitle}
+            />
+            <input
+              type="hidden"
+              name={`tasks[${index}].scheduledDate`}
+              value={task.scheduledDate ?? ""}
+            />
 
             <label className="mt-3 block">
               <span className="mb-1.5 block text-xs font-medium text-ink-secondary">
@@ -102,19 +124,7 @@ export function InboxPlanEditor({
 
             <label className="mt-3 block">
               <span className="mb-1.5 block text-xs font-medium text-ink-secondary">
-                精简标题
-              </span>
-              <input
-                name={`tasks[${index}].shortTitle`}
-                defaultValue={task.shortTitle}
-                placeholder="列表展示时使用的短标题"
-                className={inputClass}
-              />
-            </label>
-
-            <label className="mt-3 block">
-              <span className="mb-1.5 block text-xs font-medium text-ink-secondary">
-                执行说明
+                内容
               </span>
               <textarea
                 name={`tasks[${index}].notes`}
@@ -125,6 +135,22 @@ export function InboxPlanEditor({
             </label>
 
             <div className="mt-3 grid gap-3 sm:grid-cols-3">
+              <label className="block">
+                <span className="mb-1.5 block text-xs font-medium text-ink-secondary">
+                  执行
+                </span>
+                <select
+                  name={`tasks[${index}].executionMode`}
+                  defaultValue={task.executionMode}
+                  className={inputClass}
+                >
+                  {executionModeOptions.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
               <label className="block">
                 <span className="mb-1.5 block text-xs font-medium text-ink-secondary">
                   优先级
@@ -139,17 +165,6 @@ export function InboxPlanEditor({
                   <option value="high">高</option>
                   <option value="urgent">紧急</option>
                 </select>
-              </label>
-              <label className="block">
-                <span className="mb-1.5 block text-xs font-medium text-ink-secondary">
-                  计划日期
-                </span>
-                <input
-                  name={`tasks[${index}].scheduledDate`}
-                  type="date"
-                  defaultValue={task.scheduledDate ?? ""}
-                  className={inputClass}
-                />
               </label>
               <label className="block">
                 <span className="mb-1.5 block text-xs font-medium text-ink-secondary">

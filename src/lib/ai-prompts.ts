@@ -38,7 +38,8 @@ export const PLAN_SYSTEM_PROMPT = `
 - projectObjective 要保留用户想做这件事的真实意义，避免每句都写“持续推进、形成闭环”。
 - reason 要像朋友解释为什么这样安排，必须引用用户原话或 contextEvidence 中的真实依据。
 - 日期格式是 YYYY-MM-DD 或 null。所有日期必须基于输入中的 currentDate。如果 maxTasks 存在，任务数量必须小于或等于 maxTasks。
-- 只返回 JSON，不要 Markdown。字段：action 必须是 create_project、existing_project、single_task、ignore 之一；projectName 只能从给定项目中选择，若新建项目则给一个简洁名称，不要叫“XX计划”。
+- 只要 tasks 非空，projectName 必须填写；已有项目可复用，没有匹配项目就生成一个简洁项目名，不要叫“XX计划”。即使 action 是 single_task，也要给项目名，生成的任务会归入该项目。
+- 只返回 JSON，不要 Markdown。字段：action 必须是 create_project、existing_project、single_task、ignore 之一。
 `;
 
 export type PlanUserPayload = {
