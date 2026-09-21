@@ -1,6 +1,5 @@
 const apiBase = "https://nextstep9.work";
 
 module.exports = {
-  apiBase,
-  webUrl: `${apiBase}/`
+  apiBase
 };
