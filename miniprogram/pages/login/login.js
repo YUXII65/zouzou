@@ -63,7 +63,7 @@ Page({
         if (error.code === "network_failed") {
           wx.showModal({
             title: "连接失败",
-            content: error.errMsg || "无法连接服务器，请检查小程序后台的 request 合法域名。",
+            content: error.errMsg || "无法连接服务器。request 合法域名需要 ICP 备案，未备案请改用云函数代理或已备案域名。",
             showCancel: false
           });
           return;
