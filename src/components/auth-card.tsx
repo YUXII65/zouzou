@@ -34,17 +34,29 @@ function AuthSubmitButton({
   );
 }
 
-function authError(error: string, mode: "login" | "register") {
+function authError(error: string) {
   if (error === "system") {
     return "服务暂时不可用，请稍后重试。";
   }
 
-  if (mode === "login" && error === "login") {
-    return "用户名或密码不对。";
+  if (error === "invalid_username") {
+    return "用户名需 2-20 位。";
   }
 
-  if (mode === "register" && error === "register") {
-    return "用户名或密码不正确，或该账号已存在。";
+  if (error === "password_required") {
+    return "请输入密码。";
+  }
+
+  if (error === "register_short_password") {
+    return "新账号密码至少 6 位。";
+  }
+
+  if (
+    error === "invalid_password" ||
+    error === "login" ||
+    error === "register"
+  ) {
+    return "该用户名已注册，请输入第一次设置的密码。";
   }
 
   return null;
@@ -69,7 +81,7 @@ export function AuthCard({
   );
   const registerFormRef = useRef<HTMLFormElement>(null);
   const allowSubmitRef = useRef(false);
-  const errorText = authError(error, mode);
+  const errorText = authError(error);
 
   function handleRegisterSubmit(event: FormEvent<HTMLFormElement>) {
     if (allowSubmitRef.current) {
@@ -103,6 +115,9 @@ export function AuthCard({
         >
           <input type="hidden" name="next" value={next} />
           <h2 className="text-sm font-semibold text-ink">注册 / 登录</h2>
+          <p className="mt-2 text-xs leading-5 text-ink-muted">
+            新用户名会自动注册，老用户名直接登录。
+          </p>
           <input
             name="username"
             required

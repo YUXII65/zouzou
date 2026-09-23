@@ -312,3 +312,42 @@ details > summary::-webkit-details-marker {
     scroll-behavior: auto !important;
   }
 }
+
+.zouzou-spiral-stage {
+  animation: zouzou-spiral-drift 40s linear infinite;
+  transform-origin: center center;
+  will-change: transform;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .zouzou-spiral-stage {
+    animation-duration: 40s !important;
+    animation-iteration-count: infinite !important;
+  }
+}
+
+@keyframes zouzou-swipe-hint-left {
+  0%,
+  100% {
+    opacity: 0.2;
+    transform: translateX(0);
+  }
+
+  50% {
+    opacity: 0.5;
+    transform: translateX(-5px);
+  }
+}
+
+@keyframes zouzou-swipe-hint-right {
+  0%,
+  100% {
+    opacity: 0.2;
+    transform: translateX(0);
+  }
+
+  50% {
+    opacity: 0.5;
+    transform: translateX(5px);
+  }
+}

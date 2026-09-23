@@ -175,7 +175,7 @@ export function HalftoneSpiral() {
       aria-hidden
       className="pointer-events-none fixed inset-0 z-0 overflow-hidden"
     >
-      <div className="absolute origin-center animate-[zouzou-spiral-drift_40s_linear_infinite]">
+      <div className="zouzou-spiral-stage absolute origin-center">
         <canvas ref={canvasRef} className="block" />
       </div>
     </div>

@@ -16,6 +16,12 @@ type AuthFields = {
   next: string;
 };
 
+type FindOrCreateResult =
+  | { kind: "created"; user: { id: string } }
+  | { kind: "existing"; user: { id: string } }
+  | { kind: "short_password" }
+  | { kind: "invalid_password" };
+
 function isUniqueConstraintError(error: unknown) {
   return Boolean(
     error &&
@@ -88,18 +94,36 @@ async function findUser(username: string) {
   });
 }
 
-async function createUser(username: string, password: string) {
-  if (password.length < 6) return null;
+async function findOrCreateUser(
+  username: string,
+  password: string,
+): Promise<FindOrCreateResult> {
+  const existing = await findUser(username);
+  if (existing) {
+    if (!verifyPassword(password, existing.passwordHash)) {
+      return { kind: "invalid_password" };
+    }
+    return { kind: "existing", user: { id: existing.id } };
+  }
 
-  const passwordHash = hashPassword(password);
+  if (password.length < 6) {
+    return { kind: "short_password" };
+  }
+
   try {
-    return await prisma.user.create({
-      data: { username, passwordHash },
+    const user = await prisma.user.create({
+      data: { username, passwordHash: hashPassword(password) },
       select: { id: true },
     });
+    return { kind: "created", user };
   } catch (error) {
     if (!isUniqueConstraintError(error)) throw error;
-    return findUser(username);
+
+    const raced = await findUser(username);
+    if (raced && verifyPassword(password, raced.passwordHash)) {
+      return { kind: "existing", user: { id: raced.id } };
+    }
+    return { kind: "invalid_password" };
   }
 }
 
@@ -110,36 +134,41 @@ export async function handleWebAuth(request: Request, mode: WebAuthMode) {
   }
 
   const { username, password, next } = fields;
-  if (!validUsername(username) || !password) {
-    return redirectTo(authErrorPath(mode, next));
+  if (!validUsername(username)) {
+    return redirectTo(authErrorPath(mode, next, "invalid_username"));
+  }
+  if (!password) {
+    return redirectTo(authErrorPath(mode, next, "password_required"));
   }
 
   try {
-    const existing = await findUser(username);
-    if (existing) {
-      if (!verifyPassword(password, existing.passwordHash)) {
-        return redirectTo(authErrorPath(mode, next));
-      }
+    const result = await findOrCreateUser(username, password);
 
-      try {
-        await recordUsageEvent({ userId: existing.id, event: "login" });
-      } catch {
-        // 登录不让统计失败阻塞。
-      }
-      return redirectWithSession(next, existing.id);
+    if (result.kind === "short_password") {
+      return redirectTo(
+        authErrorPath(mode, next, "register_short_password"),
+      );
     }
-
-    const created = await createUser(username, password);
-    if (!created) {
-      return redirectTo(authErrorPath(mode, next));
+    if (result.kind === "invalid_password") {
+      return redirectTo(authErrorPath(mode, next, "invalid_password"));
     }
 
     try {
-      await recordUsageEvent({ userId: created.id, event: "register" });
+      await recordUsageEvent({
+        userId: result.user.id,
+        event: result.kind === "created" ? "register" : "login",
+      });
     } catch {
-      // 注册不让统计失败阻塞。
+      // 统计失败不阻塞登录注册。
     }
-    return redirectWithSession("/welcome?signup=register", created.id);
+
+    if (result.kind === "created") {
+      return redirectWithSession(
+        "/welcome?signup=register",
+        result.user.id,
+      );
+    }
+    return redirectWithSession(next, result.user.id);
   } catch (error) {
     console.error(`[web-auth:${mode}]`, error);
     return redirectTo(authErrorPath(mode, next, "system"));

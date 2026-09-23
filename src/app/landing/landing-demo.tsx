@@ -1,8 +1,11 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import type { PointerEvent as ReactPointerEvent } from "react";
 import {
   Check,
+  ChevronLeft,
+  ChevronRight,
   ListTodo,
   NotebookPen,
   RefreshCw,
@@ -236,6 +239,9 @@ export function LandingDemo() {
   const [stage, setStage] = useState(0);
   const [playing, setPlaying] = useState(true);
   const scenario = DEMO_SCENARIOS[scenarioIndex];
+  const [hasInteracted, setHasInteracted] = useState(false);
+  const swipeStartRef = useRef<{ x: number; y: number } | null>(null);
+  const didSwipeRef = useRef(false);
 
   useEffect(() => {
     setScenarioIndex(Math.floor(Math.random() * DEMO_SCENARIOS.length));
@@ -259,12 +265,49 @@ export function LandingDemo() {
     setScenarioIndex(next);
     setStage(0);
     setPlaying(true);
+    setHasInteracted(true);
+  }
+
+  function goToScenario(direction: 1 | -1) {
+    setScenarioIndex(
+      (current) =>
+        (current + direction + DEMO_SCENARIOS.length) % DEMO_SCENARIOS.length,
+    );
+    setStage(0);
+    setPlaying(true);
+    setHasInteracted(true);
+  }
+
+  function handlePointerDown(event: ReactPointerEvent<HTMLDivElement>) {
+    if ((event.target as HTMLElement).closest("button")) return;
+    swipeStartRef.current = { x: event.clientX, y: event.clientY };
+  }
+
+  function handlePointerUp(event: ReactPointerEvent<HTMLDivElement>) {
+    const start = swipeStartRef.current;
+    swipeStartRef.current = null;
+    if (!start) return;
+
+    const dx = event.clientX - start.x;
+    const dy = event.clientY - start.y;
+    if (Math.abs(dx) < 56 || Math.abs(dx) < Math.abs(dy) * 1.15) return;
+
+    didSwipeRef.current = true;
+    window.setTimeout(() => {
+      didSwipeRef.current = false;
+    }, 320);
+    goToScenario(dx < 0 ? 1 : -1);
+  }
+
+  function handlePointerCancel() {
+    swipeStartRef.current = null;
   }
 
   return (
     <div
       className="mt-6"
       onClick={() => {
+        if (didSwipeRef.current) return;
         if (!playing) setPlaying(true);
       }}
     >
@@ -297,7 +340,31 @@ export function LandingDemo() {
         })}
       </div>
 
-      <div className="zouzou-panel relative min-h-[300px] rounded-xl bg-surface p-4 pb-16 sm:p-5 sm:pb-16">
+      <div
+          className="zouzou-panel relative min-h-[300px] rounded-xl bg-surface p-4 pb-16 sm:p-5 sm:pb-16 touch-pan-y select-none"
+          onPointerDown={handlePointerDown}
+          onPointerUp={handlePointerUp}
+          onPointerCancel={handlePointerCancel}
+          aria-label="演示支持左右滑动切换"
+        >
+          <span
+            aria-hidden
+            className={`pointer-events-none absolute left-1 top-1/2 z-10 -translate-y-1/2 text-accent/45 transition-opacity duration-500 sm:left-2 ${hasInteracted ? "opacity-0" : "opacity-100"}`}
+          >
+            <ChevronLeft className="size-5 animate-[zouzou-swipe-hint-left_2.8s_ease-in-out_infinite]" />
+          </span>
+          <span
+            aria-hidden
+            className={`pointer-events-none absolute right-1 top-1/2 z-10 -translate-y-1/2 text-accent/45 transition-opacity duration-500 sm:right-2 ${hasInteracted ? "opacity-0" : "opacity-100"}`}
+          >
+            <ChevronRight className="size-5 animate-[zouzou-swipe-hint-right_2.8s_ease-in-out_infinite]" />
+          </span>
+          <span
+            aria-hidden
+            className={`pointer-events-none absolute bottom-4 left-1/2 z-10 -translate-x-1/2 animate-[zouzou-soft-pulse_2.8s_ease-in-out_infinite] text-[11px] text-ink-muted transition-opacity duration-500 ${hasInteracted ? "opacity-0" : "opacity-60"}`}
+          >
+            左右滑动切换
+          </span>
         {stage === 0 ? (
           <div
             key={`clarify-${scenario.id}`}

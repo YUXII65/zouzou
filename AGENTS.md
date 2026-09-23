@@ -41,6 +41,7 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 - 首页首屏的快速记录是招牌入口，输入区要保持大、醒目，CTA 统一叫「下一步」；面板不再重复显示「今日推进伙伴」标题。
 - 落地页演示保留 5 个不同处境（工具过载 / 关系沟通 / 创作选择 / 时间诊断 / 复杂活动），首次进入随机选一版；不展示场景标签，只在右下角提供「换一个演示」。演示输入用自然两行展示，计划页不显示「当前里程碑 / 这次先不做」。自动播放中点击步骤会暂停，暂停后点击演示区域任意位置恢复播放。不要再把演示收成单一故事，也不要重新加回「它是怎么运转的」或「看 30 秒演示」。
 - 「换一个演示」必须锚定在演示面板右下角（面板 `relative`，按钮 `absolute`），不能改成 `fixed` 跟到视口右下角。
+- landing 演示要支持左右滑动切换场景；首次进入显示低对比左右箭头和「左右滑动切换」轻提示，用户交互后淡出。
 - 小程序首页同理：`.refresh-demo` 必须放进 `.demo-panel` 内并保持 `absolute`，不能用 `fixed`。
 - 打卡信息（连续天数、近 7 天完成数）放在顶部日期面板里，不再单独保留「你的推进闭环」卡。
 - 工具页的状态统计卡要使用对应色系：待整理偏警示色、未完成偏主色、已完成偏成功色、复盘偏 AI 色。
@@ -55,6 +56,7 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 - 这个背景的动态**只能靠 CSS rotate 实现**（`@keyframes zouzou-spiral-drift`），因为两组螺旋相位都含 θ 项，整体旋转等价于同时推移两个相位，视觉上和逐帧重算完全一致。纹理只在挂载时画一次，之后 0 主线程开销、GPU 合成器跑，实测 8 秒内 main-thread 任务约 15ms（≈0% 单核）。**不要改回逐帧重绘 canvas**，那样会回到 8-10% 单核占用。
 - 画布必须按视口放大（`ZOOM = 1.45`）并居中，否则旋转到 45° 时四角会露出底色。不要再往登录页加别的背景图或铺底渐变，也不要把它换成静态图片。
 - 登录页背景的当前参数（用户逐条确认过）：`TWIST_A = 3.6`、`TWIST_B = -2.8`、`FREQ_A = 36`、`FREQ_B = 20`（弧度密度越大、扭转越强，螺纹越密），旋转周期 `40s`。
+- 登录页螺旋动画必须挂 `.zouzou-spiral-stage`，保持 40s CSS rotate；全局 `prefers-reduced-motion` 不能把这段背景动画直接关掉。
 - 中心光晕（veil）的半径必须取画布对角线的 0.575 倍、且最外层颜色 stop 为完全透明。之前半径只取画布一半，渐变在画布内部就被截断，旋转时会看到一圈突兀的硬"接头"。同样原因，`/login` 容器底色要用 `bg-background`，不能硬编码近似色。
 
 - 页面底部保留「走走 v2.5 · Coded by 氵」署名；用户当前已完成任务数 ≥ 3 时，在署名旁显示「有改进意见？十分感谢！」入口。反馈写入 `usage_events` 的 `product_feedback` 事件，不新增数据库表。
@@ -73,6 +75,7 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 - 正式线上域名：`https://nextstep9.work`（EdgeOne Pages，响应头 `server: edgeone makers`）。给用户分享/验收一律用这个域名，不要用 trycloudflare 临时隧道地址。
 - 部署方式：提交后必须同时把 `codex/edgeone-deploy` 和 `main` 推到同一提交。EdgeOne 实际跟随 `main`；只推 `codex/edgeone-deploy` 可能不会触发发布。EdgeOne 自动跑 `npm run build:edgeone`（= prisma generate && prisma migrate deploy && next build）。仓库：`YUXII65/zouzou`。
 - Web 端登录/注册不能依赖 Next Server Action：EdgeOne 在无 JS/静态降级 POST 时会返回 500。统一走 `/api/auth/login`、`/api/auth/register` 的 Route Handler，并保留原生 `method="post"` 表单兜底。
+- Web 登录页是合并入口：新用户名（密码不少于 6 位）自动注册；同名账号只校验密码。密码错误时明确提示「该用户名已注册，请输入第一次设置的密码」，不要再显示笼统的「用户名或密码不正确」。
 - 小程序登录/注册同样走合并入口：`/api/miniprogram/auth/login` 已存在则校验登录（允许旧账号短密码），不存在且密码不少于 6 位则自动注册；客户端不要看到 401 就再调 register，否则密码错误会被误报成用户名已存在。
 - 生产部署只使用 EdgeOne Pages，仓库不保留 Vercel 配置。GitHub Deployments 里若仍出现 Vercel Preview，来自已安装的 Vercel GitHub App，需要在 GitHub/Vercel 侧断开集成。
 - 部署期间会短暂出现「新 HTML 已生效、`/_next/static/*` 还没就绪」的无样式窗口（页面只剩裸 HTML + 巨大的 BrandMark SVG）。这是部署中间态，不是代码或浏览器问题；刷新即可恢复。
