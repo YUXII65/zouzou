@@ -1,18 +1,54 @@
 "use client";
 
 import { useRef, useState } from "react";
-import type { FormEvent } from "react";
-import { loginUser, registerUser } from "@/app/actions";
-import { SubmitButton } from "@/components/submit-button";
+import type { FormEvent, ReactNode } from "react";
+import { Loader2 } from "lucide-react";
 
 const firstInputClass =
   "zouzou-input mt-4 w-full rounded-lg px-3 py-2 text-sm text-ink";
 const inputClass =
   "zouzou-input mt-3 w-full rounded-lg px-3 py-2 text-sm text-ink";
 const submitClass =
-  "zouzou-primary-button mt-5 inline-flex h-10 w-full items-center justify-center rounded-lg bg-accent px-4 text-sm font-medium text-white transition-colors hover:bg-accent-strong";
-const switchClass =
-  "zouzou-secondary-button mt-2 inline-flex h-10 w-full items-center justify-center rounded-lg border border-border bg-surface px-4 text-sm font-medium text-accent transition-colors hover:bg-surface-hover";
+  "zouzou-primary-button mt-5 inline-flex h-10 w-full items-center justify-center gap-2 rounded-lg bg-accent px-4 text-sm font-medium text-white transition-colors hover:bg-accent-strong";
+function AuthSubmitButton({
+  pending,
+  pendingText,
+  children,
+  className,
+}: {
+  pending: boolean;
+  pendingText: string;
+  children: ReactNode;
+  className: string;
+}) {
+  return (
+    <button
+      type="submit"
+      disabled={pending}
+      aria-busy={pending}
+      className={className}
+    >
+      {pending ? <Loader2 className="size-3.5 animate-spin" /> : null}
+      {pending ? pendingText : children}
+    </button>
+  );
+}
+
+function authError(error: string, mode: "login" | "register") {
+  if (error === "system") {
+    return "服务暂时不可用，请稍后重试。";
+  }
+
+  if (mode === "login" && error === "login") {
+    return "用户名或密码不对。";
+  }
+
+  if (mode === "register" && error === "register") {
+    return "用户名或密码不正确，或该账号已存在。";
+  }
+
+  return null;
+}
 
 export function AuthCard({
   next,
@@ -23,17 +59,22 @@ export function AuthCard({
   error: string;
   initialMode?: "login" | "register";
 }) {
-  const [mode, setMode] = useState<"login" | "register">(
+  const [mode] = useState<"login" | "register">(
     initialMode ?? (error === "register" ? "register" : "login"),
   );
   const [confirming, setConfirming] = useState(false);
   const [pendingUsername, setPendingUsername] = useState("");
+  const [submitting, setSubmitting] = useState<"login" | "register" | null>(
+    null,
+  );
   const registerFormRef = useRef<HTMLFormElement>(null);
   const allowSubmitRef = useRef(false);
+  const errorText = authError(error, mode);
 
   function handleRegisterSubmit(event: FormEvent<HTMLFormElement>) {
     if (allowSubmitRef.current) {
       allowSubmitRef.current = false;
+      setSubmitting("register");
       return;
     }
 
@@ -55,7 +96,9 @@ export function AuthCard({
     <>
       {mode === "login" ? (
         <form
-          action={loginUser}
+          action="/api/auth/login"
+          method="post"
+          onSubmit={() => setSubmitting("login")}
           className="zouzou-panel rounded-xl p-6 sm:p-7"
         >
           <input type="hidden" name="next" value={next} />
@@ -77,17 +120,22 @@ export function AuthCard({
             placeholder="密码"
             className={inputClass}
           />
-          {error === "login" ? (
-            <p className="mt-3 text-sm text-danger">用户名或密码不对。</p>
+          {errorText ? (
+            <p className="mt-3 text-sm text-danger">{errorText}</p>
           ) : null}
-          <SubmitButton pendingText="正在登录..." className={submitClass}>
+          <AuthSubmitButton
+            pending={submitting === "login"}
+            pendingText="正在登录..."
+            className={submitClass}
+          >
             确认
-          </SubmitButton>
+          </AuthSubmitButton>
         </form>
       ) : (
         <form
           ref={registerFormRef}
-          action={registerUser}
+          action="/api/auth/register"
+          method="post"
           onSubmit={handleRegisterSubmit}
           className="zouzou-panel rounded-xl p-6 sm:p-7"
         >
@@ -111,14 +159,16 @@ export function AuthCard({
             placeholder="密码（至少 6 位）"
             className={inputClass}
           />
-          {error === "register" ? (
-            <p className="mt-3 text-sm text-danger">
-              用户名或密码不正确，或该账号已存在。
-            </p>
+          {errorText ? (
+            <p className="mt-3 text-sm text-danger">{errorText}</p>
           ) : null}
-          <SubmitButton pendingText="正在注册..." className={submitClass}>
+          <AuthSubmitButton
+            pending={submitting === "register"}
+            pendingText="正在注册..."
+            className={submitClass}
+          >
             确认
-          </SubmitButton>
+          </AuthSubmitButton>
         </form>
       )}
 

@@ -297,13 +297,13 @@ export function LandingDemo() {
         })}
       </div>
 
-      <div className="zouzou-panel min-h-[300px] rounded-xl bg-surface p-4 sm:p-5">
+      <div className="zouzou-panel relative min-h-[300px] rounded-xl bg-surface p-4 pb-16 sm:p-5 sm:pb-16">
         {stage === 0 ? (
           <div
             key={`clarify-${scenario.id}`}
             className="animate-[zouzou-fade-in_400ms_ease-out]"
           >
-            <div className="space-y-4 pb-14">
+            <div className="space-y-4">
               <div className="flex justify-end">
                 <div className="max-w-[78%] rounded-xl rounded-tr-sm bg-surface-muted px-3 py-2.5 text-sm leading-6 text-ink">
                   {splitDemoInput(scenario.idea).map((line) => (
@@ -450,18 +450,18 @@ export function LandingDemo() {
             </div>
           </div>
         ) : null}
-      </div>
 
-      <button
-        type="button"
-        onClick={refreshDemo}
-        aria-label="随机换一个演示"
-        title="随机换一个演示"
-        className="fixed bottom-6 right-6 z-50 inline-flex h-11 items-center gap-2 rounded-full border border-accent/20 bg-surface px-4 text-sm font-medium text-accent-strong shadow-pop transition-colors hover:bg-accent-soft"
-      >
-        <RefreshCw className="size-4" />
-        <span className="hidden sm:inline">换一个演示</span>
-      </button>
+        <button
+          type="button"
+          onClick={refreshDemo}
+          aria-label="随机换一个演示"
+          title="随机换一个演示"
+          className="absolute bottom-2 right-2 z-10 inline-flex h-11 items-center gap-2 rounded-full border border-accent/20 bg-surface px-4 text-sm font-medium text-accent-strong shadow-pop transition-colors hover:bg-accent-soft sm:bottom-3 sm:right-3"
+        >
+          <RefreshCw className="size-4" />
+          <span className="hidden sm:inline">换一个演示</span>
+        </button>
+      </div>
     </div>
   );
 }
