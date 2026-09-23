@@ -704,3 +704,71 @@
   box-sizing: border-box !important;
   text-align: center !important;
 }
+
+.swipe-hint-left,
+.swipe-hint-right {
+  position: absolute;
+  top: 50%;
+  z-index: 3;
+  color: rgba(47, 99, 230, 0.45);
+  font-size: 42rpx;
+  line-height: 1;
+  pointer-events: none;
+}
+
+.swipe-hint-left {
+  left: 14rpx;
+  animation: zouzou-mini-swipe-left 2.8s ease-in-out infinite;
+}
+
+.swipe-hint-right {
+  right: 14rpx;
+  animation: zouzou-mini-swipe-right 2.8s ease-in-out infinite;
+}
+
+.swipe-hint-text {
+  position: absolute;
+  bottom: 42rpx;
+  left: 50%;
+  z-index: 3;
+  color: #8aa0bc;
+  font-size: 20rpx;
+  line-height: 1.4;
+  pointer-events: none;
+  transform: translateX(-50%);
+  animation: zouzou-mini-swipe-text 2.8s ease-in-out infinite;
+}
+
+@keyframes zouzou-mini-swipe-left {
+  0%, 100% {
+    opacity: 0.2;
+    transform: translateX(0);
+  }
+
+  50% {
+    opacity: 0.55;
+    transform: translateX(-6rpx);
+  }
+}
+
+@keyframes zouzou-mini-swipe-right {
+  0%, 100% {
+    opacity: 0.2;
+    transform: translateX(0);
+  }
+
+  50% {
+    opacity: 0.55;
+    transform: translateX(6rpx);
+  }
+}
+
+@keyframes zouzou-mini-swipe-text {
+  0%, 100% {
+    opacity: 0.55;
+  }
+
+  50% {
+    opacity: 1;
+  }
+}

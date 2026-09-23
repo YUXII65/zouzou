@@ -40,7 +40,7 @@ export async function POST(request: Request) {
     if (existing) {
       if (!verifyPassword(password, existing.passwordHash)) {
         return NextResponse.json(
-          { error: "invalid_credentials" },
+          { error: "invalid_password" },
           { status: 401 },
         );
       }

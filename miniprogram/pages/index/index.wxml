@@ -24,7 +24,10 @@
       </view>
     </view>
 
-    <view class="panel demo-panel" bindtap="onDemoTap">
+    <view class="panel demo-panel" bindtap="onDemoTap" bindtouchstart="onDemoTouchStart" bindtouchend="onDemoTouchEnd">
+      <view class="swipe-hint-left" wx:if="{{!hasInteracted}}">‹</view>
+      <view class="swipe-hint-right" wx:if="{{!hasInteracted}}">›</view>
+      <view class="swipe-hint-text" wx:if="{{!hasInteracted}}">左右滑动切换</view>
       <view class="section-title">看看它怎么把你的一堆想法，走成今天的下一步。</view>
 
       <view class="step-tabs">
@@ -34,6 +37,7 @@
           wx:key="*this"
           data-index="{{index}}"
           catchtap="onStepTap"
+          data-no-swipe="true"
         >
           <text class="step-number">{{index + 1}}.</text>
           <text>{{item}}</text>
@@ -109,7 +113,7 @@
         </view>
         <view class="loop-cta">◎ 有想法，当然可以实现。</view>
       </view>
-      <view class="refresh-demo" catchtap="refreshDemo">↻ 换一个演示</view>
+      <view class="refresh-demo" data-no-swipe="true" catchtap="refreshDemo">↻ 换一个演示</view>
     </view>
 
     <view class="panel comparison-panel">

@@ -62,6 +62,7 @@ Page({
     steps: ["先聊清楚", "拆出计划", "推进与复盘"],
     activeStep: 0,
     playing: true,
+    hasInteracted: false,
     scenarioIndex: 0,
     demo: decorateScenario(DEMO_SCENARIOS[0]),
     comparisons: [
@@ -80,6 +81,7 @@ Page({
   },
 
   timerId: null,
+  touchStart: null,
 
   onLoad() {
     const scenarioIndex = Math.floor(Math.random() * DEMO_SCENARIOS.length);
@@ -87,7 +89,8 @@ Page({
       scenarioIndex,
       demo: decorateScenario(DEMO_SCENARIOS[scenarioIndex]),
       activeStep: 0,
-      playing: true
+      playing: true,
+      hasInteracted: false
     });
     this.startAutoplay();
   },
@@ -115,12 +118,12 @@ Page({
   onStepTap(event) {
     const index = Number(event.currentTarget.dataset.index) || 0;
     this.clearAutoplay();
-    this.setData({ activeStep: index, playing: false });
+    this.setData({ activeStep: index, playing: false, hasInteracted: true });
   },
 
   onDemoTap() {
     if (this.data.playing) return;
-    this.setData({ playing: true });
+    this.setData({ playing: true, hasInteracted: true });
     this.startAutoplay();
   },
 
@@ -133,7 +136,39 @@ Page({
       scenarioIndex: next,
       demo: decorateScenario(DEMO_SCENARIOS[next]),
       activeStep: 0,
-      playing: true
+      playing: true,
+      hasInteracted: true
+    });
+    this.startAutoplay();
+  },
+
+  onDemoTouchStart(event) {
+    const touch = event.touches && event.touches[0];
+    if (!touch || (event.target && event.target.dataset.noSwipe)) return;
+    this.touchStart = { x: touch.clientX, y: touch.clientY };
+  },
+
+  onDemoTouchEnd(event) {
+    const start = this.touchStart;
+    const touch = event.changedTouches && event.changedTouches[0];
+    this.touchStart = null;
+    if (!start || !touch) return;
+
+    const dx = touch.clientX - start.x;
+    const dy = touch.clientY - start.y;
+    if (Math.abs(dx) < 50 || Math.abs(dx) < Math.abs(dy) * 1.15) return;
+
+    this.goToScenario(dx < 0 ? 1 : -1);
+  },
+
+  goToScenario(direction) {
+    const next = (this.data.scenarioIndex + direction + DEMO_SCENARIOS.length) % DEMO_SCENARIOS.length;
+    this.setData({
+      scenarioIndex: next,
+      demo: decorateScenario(DEMO_SCENARIOS[next]),
+      activeStep: 0,
+      playing: true,
+      hasInteracted: true
     });
     this.startAutoplay();
   },

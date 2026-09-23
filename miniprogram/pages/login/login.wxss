@@ -8,9 +8,20 @@
 
 .page-bg {
   position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
+  display: block;
+  transform-origin: center center;
+  animation: zouzou-mini-spiral-drift 40s linear infinite;
+  will-change: transform;
+}
+
+@keyframes zouzou-mini-spiral-drift {
+  from {
+    transform: rotate(0deg);
+  }
+
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .content {
@@ -75,10 +86,17 @@
 }
 
 .card-title {
-  margin-bottom: 30rpx;
   color: #182238;
   font-size: 30rpx;
   font-weight: 700;
+}
+
+.auth-hint {
+  margin-top: 10rpx;
+  margin-bottom: 30rpx;
+  color: #7188a6;
+  font-size: 22rpx;
+  line-height: 1.5;
 }
 
 .auth-input {

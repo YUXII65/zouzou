@@ -1,5 +1,5 @@
 <view class="page">
-  <image class="page-bg" src="./login-bg.png" mode="aspectFill"></image>
+  <image class="page-bg" style="{{bgStyle}}" src="./login-bg.png" mode="aspectFill"></image>
   <view class="content">
     <view class="brand-block">
       <view class="brand-mark"><view class="brand-arrow"></view></view>
@@ -9,6 +9,7 @@
 
     <view class="auth-card">
       <view class="card-title">注册 / 登录</view>
+      <view class="auth-hint">新用户名会自动注册，老用户名直接登录。</view>
       <input
         class="auth-input first-input"
         value="{{username}}"

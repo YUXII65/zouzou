@@ -1,11 +1,33 @@
 Page({
   data: {
     username: "",
-    password: ""
+    password: "",
+    bgStyle: ""
+  },
+
+  onLoad() {
+    this.updateBackground();
   },
 
   onReady() {
     wx.pageScrollTo({ scrollTop: 0, duration: 0 });
+    this.updateBackground();
+  },
+
+  onResize() {
+    this.updateBackground();
+  },
+
+  updateBackground() {
+    const info = wx.getWindowInfo ? wx.getWindowInfo() : wx.getSystemInfoSync();
+    const width = info.windowWidth || 375;
+    const height = info.windowHeight || 667;
+    const size = Math.max(width, height) * 1.45;
+    const left = (width - size) / 2;
+    const top = (height - size) / 2;
+    this.setData({
+      bgStyle: `width:${size}px;height:${size}px;left:${left}px;top:${top}px;`
+    });
   },
 
   onUsernameInput(event) {
@@ -43,9 +65,11 @@ Page({
             ? "用户名需 2-20 位"
             : error.code === "password_too_short"
               ? "新账号密码至少 6 位"
-              : error.code === "username_exists"
-                ? "用户名已存在，请换一个用户名"
-                : "用户名或密码不对";
+              : error.code === "invalid_password"
+                ? "该用户名已注册，请输入第一次设置的密码"
+                : error.code === "username_exists"
+                  ? "用户名已存在，请换一个用户名"
+                  : "用户名或密码不对";
         wx.showToast({ title: message, icon: "none" });
       });
   },
