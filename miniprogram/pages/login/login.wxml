@@ -1,5 +1,5 @@
-<view class="page">
-  <image class="page-bg" style="{{bgStyle}}" src="./login-bg.png" mode="aspectFill"></image>
+﻿<view class="page">
+  <image class="page-bg" style="{{bgStyle}}" src="./login-bg.jpg" mode="aspectFill"></image>
   <view class="content">
     <view class="brand-block">
       <view class="brand-mark"><view class="brand-arrow"></view></view>
