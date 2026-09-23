@@ -21,7 +21,7 @@
         class="auth-input"
         value="{{password}}"
         password
-        placeholder="密码"
+        placeholder="密码（新账号至少 6 位）"
         placeholder-class="input-placeholder"
         bindinput="onPasswordInput"
       />

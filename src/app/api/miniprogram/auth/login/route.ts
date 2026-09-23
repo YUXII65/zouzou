@@ -17,7 +17,11 @@ export async function POST(request: Request) {
   const username = String(body.username ?? "").trim();
   const password = String(body.password ?? "");
 
-  if (username.length < 2 || username.length > 20 || !password) {
+  if (username.length < 2 || username.length > 20) {
+    return NextResponse.json({ error: "invalid_username" }, { status: 400 });
+  }
+
+  if (!password) {
     return NextResponse.json({ error: "invalid_credentials" }, { status: 401 });
   }
 
@@ -64,8 +68,8 @@ export async function POST(request: Request) {
 
     if (password.length < 6) {
       return NextResponse.json(
-        { error: "invalid_credentials" },
-        { status: 401 },
+        { error: "password_too_short" },
+        { status: 400 },
       );
     }
 

@@ -39,9 +39,13 @@ Page({
         wx.hideLoading();
         const message = error.code === "service_unavailable"
           ? "服务暂时不可用，请稍后重试"
-          : error.code === "username_exists"
-            ? "用户名已存在，请换一个用户名"
-            : "用户名或密码不对";
+          : error.code === "invalid_username"
+            ? "用户名需 2-20 位"
+            : error.code === "password_too_short"
+              ? "新账号密码至少 6 位"
+              : error.code === "username_exists"
+                ? "用户名已存在，请换一个用户名"
+                : "用户名或密码不对";
         wx.showToast({ title: message, icon: "none" });
       });
   },
