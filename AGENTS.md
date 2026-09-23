@@ -41,6 +41,7 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 - 首页首屏的快速记录是招牌入口，输入区要保持大、醒目，CTA 统一叫「下一步」；面板不再重复显示「今日推进伙伴」标题。
 - 落地页演示保留 5 个不同处境（工具过载 / 关系沟通 / 创作选择 / 时间诊断 / 复杂活动），首次进入随机选一版；不展示场景标签，只在右下角提供「换一个演示」。演示输入用自然两行展示，计划页不显示「当前里程碑 / 这次先不做」。自动播放中点击步骤会暂停，暂停后点击演示区域任意位置恢复播放。不要再把演示收成单一故事，也不要重新加回「它是怎么运转的」或「看 30 秒演示」。
 - 「换一个演示」必须锚定在演示面板右下角（面板 `relative`，按钮 `absolute`），不能改成 `fixed` 跟到视口右下角。
+- 小程序首页同理：`.refresh-demo` 必须放进 `.demo-panel` 内并保持 `absolute`，不能用 `fixed`。
 - 打卡信息（连续天数、近 7 天完成数）放在顶部日期面板里，不再单独保留「你的推进闭环」卡。
 - 工具页的状态统计卡要使用对应色系：待整理偏警示色、未完成偏主色、已完成偏成功色、复盘偏 AI 色。
 - 注册优先，游客是兜底体验：主 CTA 默认引导注册；创建游客账号前必须二次确认并说明「只在本机保存」。游客转正后回到应用，不重复跑一遍 onboarding。
@@ -72,6 +73,7 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 - 正式线上域名：`https://nextstep9.work`（EdgeOne Pages，响应头 `server: edgeone makers`）。给用户分享/验收一律用这个域名，不要用 trycloudflare 临时隧道地址。
 - 部署方式：提交后必须同时把 `codex/edgeone-deploy` 和 `main` 推到同一提交。EdgeOne 实际跟随 `main`；只推 `codex/edgeone-deploy` 可能不会触发发布。EdgeOne 自动跑 `npm run build:edgeone`（= prisma generate && prisma migrate deploy && next build）。仓库：`YUXII65/zouzou`。
 - Web 端登录/注册不能依赖 Next Server Action：EdgeOne 在无 JS/静态降级 POST 时会返回 500。统一走 `/api/auth/login`、`/api/auth/register` 的 Route Handler，并保留原生 `method="post"` 表单兜底。
+- 小程序登录/注册同样走合并入口：`/api/miniprogram/auth/login` 已存在则校验登录（允许旧账号短密码），不存在且密码不少于 6 位则自动注册；客户端不要看到 401 就再调 register，否则密码错误会被误报成用户名已存在。
 - 生产部署只使用 EdgeOne Pages，仓库不保留 Vercel 配置。GitHub Deployments 里若仍出现 Vercel Preview，来自已安装的 Vercel GitHub App，需要在 GitHub/Vercel 侧断开集成。
 - 部署期间会短暂出现「新 HTML 已生效、`/_next/static/*` 还没就绪」的无样式窗口（页面只剩裸 HTML + 巨大的 BrandMark SVG）。这是部署中间态，不是代码或浏览器问题；刷新即可恢复。
 - 判断是否仍处于中间态：抓页面 HTML 里 `href` 的 CSS 地址，再请求它，看是否 `200 + text/css`；同时用 `匹配关键文案` 确认线上是否已是新版。

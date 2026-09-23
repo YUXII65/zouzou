@@ -37,9 +37,11 @@ Page({
       })
       .catch((error) => {
         wx.hideLoading();
-        const message = error.code === "username_exists"
-          ? "用户名已存在，请输入正确密码"
-          : "用户名或密码不对";
+        const message = error.code === "service_unavailable"
+          ? "服务暂时不可用，请稍后重试"
+          : error.code === "username_exists"
+            ? "用户名已存在，请换一个用户名"
+            : "用户名或密码不对";
         wx.showToast({ title: message, icon: "none" });
       });
   },

@@ -166,7 +166,8 @@
 }
 
 .demo-panel {
-  padding-bottom: 34rpx;
+  position: relative;
+  padding-bottom: 104rpx;
 }
 
 .step-tabs {
@@ -682,10 +683,10 @@
 }
 
 .refresh-demo {
-  position: fixed;
-  right: 28rpx;
-  bottom: 38rpx;
-  z-index: 20;
+  position: absolute;
+  right: 24rpx;
+  bottom: 24rpx;
+  z-index: 2;
   padding: 18rpx 24rpx;
   border: 1rpx solid rgba(47, 99, 230, 0.2);
   border-radius: 999rpx;

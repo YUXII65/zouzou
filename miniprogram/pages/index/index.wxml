@@ -109,9 +109,9 @@
         </view>
         <view class="loop-cta">◎ 有想法，当然可以实现。</view>
       </view>
+      <view class="refresh-demo" catchtap="refreshDemo">↻ 换一个演示</view>
     </view>
 
-    <view class="refresh-demo" catchtap="refreshDemo">↻ 换一个演示</view>
     <view class="panel comparison-panel">
       <view class="section-title section-title-small">为什么选择我们</view>
       <view class="comparison-row" wx:for="{{comparisons}}" wx:key="name">

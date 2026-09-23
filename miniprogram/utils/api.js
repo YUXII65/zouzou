@@ -76,14 +76,9 @@ function register(username, password) {
 }
 
 async function loginOrRegister(username, password) {
-  try {
-    return await login(username, password);
-  } catch (error) {
-    if (error.code === "invalid_credentials" || error.statusCode === 401) {
-      return register(username, password);
-    }
-    throw error;
-  }
+  // 登录接口会同时处理“已存在则登录、不存在则注册”，
+  // 不要在这里看到 401 就再注册，否则密码错误会被误报成用户名已存在。
+  return login(username, password);
 }
 
 function getOnboarding() {
