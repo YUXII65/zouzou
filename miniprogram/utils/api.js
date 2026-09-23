@@ -1,4 +1,4 @@
-const { apiBase } = require("../config");
+const { apiBase, cloudEnv } = require("../config");
 
 const TOKEN_KEY = "next_step_miniprogram_token";
 const USER_KEY = "next_step_miniprogram_user";
@@ -25,8 +25,48 @@ function getCachedUser() {
   return wx.getStorageSync(USER_KEY) || null;
 }
 
-function request(path, options = {}) {
-  const token = getToken();
+function networkError(error, fallback) {
+  const errMsg = error && error.errMsg ? error.errMsg : fallback;
+  const wrapped = new Error(errMsg);
+  wrapped.code = "network_failed";
+  wrapped.errMsg = errMsg;
+  return wrapped;
+}
+
+function cloudRequest(path, options, token) {
+  return new Promise((resolve, reject) => {
+    wx.cloud.callFunction({
+      name: "apiProxy",
+      data: {
+        path,
+        method: options.method || "GET",
+        data: options.data,
+        token,
+      },
+      success(response) {
+        const result = response.result || {};
+        const status = Number(result.statusCode) || 500;
+        if (status >= 200 && status < 300) {
+          resolve(result.data);
+          return;
+        }
+
+        const body =
+          result.data && typeof result.data === "object" ? result.data : {};
+        const error = new Error(body.error || `HTTP ${status}`);
+        error.statusCode = status;
+        error.code = body.error || "";
+        if (status === 401) clearToken();
+        reject(error);
+      },
+      fail(error) {
+        reject(networkError(error, "云函数调用失败"));
+      },
+    });
+  });
+}
+
+function wxRequest(path, options, token) {
   const header = Object.assign(
     { "Content-Type": "application/json" },
     options.header || {},
@@ -55,14 +95,18 @@ function request(path, options = {}) {
         reject(error);
       },
       fail(error) {
-        const errMsg = error && error.errMsg ? error.errMsg : "网络请求失败";
-        const wrapped = new Error(errMsg);
-        wrapped.code = "network_failed";
-        wrapped.errMsg = errMsg;
-        reject(wrapped);
+        reject(networkError(error, "网络请求失败"));
       },
     });
   });
+}
+
+function request(path, options = {}) {
+  const token = getToken();
+  if (cloudEnv && wx.cloud) {
+    return cloudRequest(path, options, token);
+  }
+  return wxRequest(path, options, token);
 }
 
 function login(username, password) {

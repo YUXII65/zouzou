@@ -1,0 +1,6 @@
+{
+  "name": "apiProxy",
+  "version": "1.0.0",
+  "description": "Proxy miniprogram API requests to nextstep9.work",
+  "main": "index.js"
+}

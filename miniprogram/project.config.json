@@ -29,6 +29,7 @@
     }
   },
   "compileType": "miniprogram",
+  "cloudfunctionRoot": "cloudfunctions/",
   "appid": "wxf11cefe50a48be32",
   "projectname": "zouzou-miniprogram",
   "condition": {},
