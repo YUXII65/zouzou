@@ -59,6 +59,15 @@ Page({
       })
       .catch((error) => {
         wx.hideLoading();
+        console.error("[miniprogram login]", error);
+        if (error.code === "network_failed") {
+          wx.showModal({
+            title: "连接失败",
+            content: error.errMsg || "无法连接服务器，请检查小程序后台的 request 合法域名。",
+            showCancel: false
+          });
+          return;
+        }
         const message = error.code === "service_unavailable"
           ? "服务暂时不可用，请稍后重试"
           : error.code === "invalid_username"

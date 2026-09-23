@@ -55,7 +55,11 @@ function request(path, options = {}) {
         reject(error);
       },
       fail(error) {
-        reject(error);
+        const errMsg = error && error.errMsg ? error.errMsg : "网络请求失败";
+        const wrapped = new Error(errMsg);
+        wrapped.code = "network_failed";
+        wrapped.errMsg = errMsg;
+        reject(wrapped);
       },
     });
   });
