@@ -34,14 +34,27 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "not_found" }, { status: 404 });
   }
 
-  await prisma.task.update({
-    where: { id: task.id, userId: user.id },
-    data: {
-      status,
-      completedAt: status === "done" ? new Date() : null,
-      completedBy: status === "done" ? "user" : null,
-    },
-  });
+  const reviewNextStatus =
+    status === "done"
+      ? "done"
+      : status === "cancelled"
+        ? "cancelled"
+        : "pending";
+
+  await prisma.$transaction([
+    prisma.task.update({
+      where: { id: task.id, userId: user.id },
+      data: {
+        status,
+        completedAt: status === "done" ? new Date() : null,
+        completedBy: status === "done" ? "user" : null,
+      },
+    }),
+    prisma.reviewNextAction.updateMany({
+      where: { taskId: task.id, userId: user.id },
+      data: { status: reviewNextStatus },
+    }),
+  ]);
 
   return NextResponse.json({ ok: true, status });
 }

@@ -44,7 +44,7 @@ async function retryConnection<T>(
       }
 
       await new Promise((resolve) =>
-        setTimeout(resolve, 120 * 2 ** (attempt - 1)),
+        setTimeout(resolve, 350 * 2 ** (attempt - 1)),
       );
     }
   }
@@ -78,7 +78,7 @@ function createPrismaClient() {
   }).$extends({
     query: {
       async $allOperations({ operation, args, query }) {
-        const maxAttempts = isReadOperation(operation) ? 3 : 2;
+        const maxAttempts = isReadOperation(operation) ? 5 : 3;
         return retryConnection(() => query(args), maxAttempts);
       },
     },

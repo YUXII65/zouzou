@@ -4,22 +4,9 @@ import { prisma } from "@/lib/prisma";
 import { syncReviewRelations } from "@/lib/review-relations";
 import { recordUsageEvent } from "@/lib/usage";
 import { toDateInputValue } from "@/lib/date";
+import { formatReviewNextActions, parseReviewNextActions, shouldSyncReviewActions } from "@/lib/task-flow";
 
 export const dynamic = "force-dynamic";
-
-function parseNextActions(raw: string) {
-  const lines = raw
-    .split(/\r?\n/)
-    .map((line) => line.replace(/^[-*]\s*/, "").replace(/^\d+[.、)]\s*/, "").trim())
-    .filter(Boolean);
-  const actions: Array<{ title: string; shortTitle: string }> = [];
-  for (let index = 0; index < lines.length && actions.length < 3; index += 2) {
-    const shortTitle = lines[index].trim().slice(0, 80);
-    const detail = (lines[index + 1] ?? shortTitle).trim().slice(0, 200);
-    if (shortTitle) actions.push({ title: detail, shortTitle });
-  }
-  return actions;
-}
 
 export async function POST(request: Request) {
   const user = await getMiniProgramUser(request);
@@ -42,25 +29,32 @@ export async function POST(request: Request) {
 
   const existing = await prisma.review.findFirst({
     where: { id: reviewId, userId: user.id },
-    select: { id: true, reviewDate: true },
+    select: { id: true, reviewDate: true, status: true, nextActions: true },
   });
   if (!existing) {
     return NextResponse.json({ error: "not_found" }, { status: 404 });
   }
 
-  const nextActions = parseNextActions(body.nextActions ?? "");
+  const nextActions = parseReviewNextActions(body.nextActions ?? "");
+  const nextActionsText = formatReviewNextActions(nextActions);
+  const shouldSyncActions = shouldSyncReviewActions(
+    existing.status,
+    existing.nextActions,
+    nextActionsText,
+  );
+
   const review = await prisma.review.update({
     where: { id: existing.id, userId: user.id },
     data: {
       summary,
-      nextActions: nextActions
-        .map((action) => action.shortTitle !== action.title ? `${action.shortTitle}\n${action.title}` : action.shortTitle)
-        .join("\n"),
+      nextActions: nextActionsText,
       status: "final",
     },
   });
 
-  await syncReviewRelations(review, nextActions, user.id);
+  if (shouldSyncActions) {
+    await syncReviewRelations(review, nextActions, user.id);
+  }
   await recordUsageEvent({ userId: user.id, event: "review_saved", page: "miniprogram" });
 
   return NextResponse.json({ ok: true, date: toDateInputValue(review.reviewDate) });

@@ -366,7 +366,7 @@ Page({
       .then((result) => {
         wx.hideLoading();
         this.setData({ submittingPlanId: "" });
-        wx.showToast({ title: `已创建 ${result.taskCount} 个任务`, icon: "none" });
+        wx.showToast({ title: result.attachedTaskId ? "已接到当前任务" : `已创建 ${result.taskCount} 个任务`, icon: "none" });
         this.loadToday();
       })
       .catch((error) => {

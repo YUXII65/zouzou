@@ -4,8 +4,10 @@ import { withAiQuota } from "@/lib/ai-quota";
 import { prisma } from "@/lib/prisma";
 import {
   clarifyInbox,
+  generateSocraticClarification,
   planInbox,
   type InboxClarification,
+  type InboxClarificationHistoryItem,
   type InboxPlan,
 } from "@/lib/ai";
 
@@ -20,6 +22,17 @@ export type ClarifyInboxResult = {
   content: string;
   clarification: InboxClarification;
 };
+
+function parseSocraticState(value: string | null): InboxClarification | null {
+  if (!value) return null;
+  try {
+    const raw = JSON.parse(value) as Record<string, unknown>;
+    if (raw.mode !== "socratic" || !Array.isArray(raw.history)) return null;
+    return raw as InboxClarification;
+  } catch {
+    return null;
+  }
+}
 
 export async function createInboxClarification(input: {
   userId: string;
@@ -36,20 +49,6 @@ export async function createInboxClarification(input: {
     },
   });
 
-  const projects = await prisma.project.findMany({
-    where: { userId: input.userId },
-    select: {
-      name: true,
-      objective: true,
-      currentMilestone: true,
-    },
-    orderBy: { name: "asc" },
-  });
-  const projectContext = projects.map((project) => ({
-    name: project.name,
-    objective: project.objective,
-    currentMilestone: project.currentMilestone,
-  }));
   const aiContext = await buildAiContext({
     kind: "inbox_plan",
     inboxItemId: item.id,
@@ -59,11 +58,11 @@ export async function createInboxClarification(input: {
   const clarification = await withAiQuota("inbox_clarify", () =>
     clarifyInbox(
       content,
-      projects.map((project) => project.name),
+      aiContext.projectFacts.map((project) => project.name),
       input.overrides?.apiKey,
       input.overrides?.model,
       input.overrides?.baseUrl,
-      projectContext,
+      aiContext.projectFacts,
       aiContext.summary,
       aiContext.evidence,
       input.onDelta,
@@ -83,6 +82,102 @@ export async function createInboxClarification(input: {
   return { itemId: item.id, content, clarification };
 }
 
+export async function createSocraticInboxClarification(input: {
+  userId: string;
+  content: string;
+  overrides?: AiOverrides;
+  onDelta?: (delta: string) => void;
+}): Promise<ClarifyInboxResult> {
+  const content = input.content.trim();
+  const item = await prisma.inboxItem.create({
+    data: { userId: input.userId, content, source: "manual" },
+  });
+  const aiContext = await buildAiContext({
+    kind: "inbox_plan",
+    inboxItemId: item.id,
+    userId: input.userId,
+  });
+  const clarification = await withAiQuota("inbox_clarify", () =>
+    generateSocraticClarification({
+      content,
+      history: [],
+      apiKey: input.overrides?.apiKey,
+      model: input.overrides?.model,
+      baseUrl: input.overrides?.baseUrl,
+      projectContext: aiContext.projectFacts,
+      memorySummary: aiContext.summary,
+      evidence: aiContext.evidence,
+      maxQuestions: 3,
+      onDelta: input.onDelta,
+    }),
+  );
+  await prisma.inboxItem.update({
+    where: { id: item.id, userId: input.userId },
+    data: {
+      aiSuggestionJson: JSON.stringify(clarification),
+      aiAnalyzedAt: new Date(),
+    },
+  });
+  revalidatePath("/");
+  revalidatePath("/workspace");
+  return { itemId: item.id, content, clarification };
+}
+
+export async function advanceSocraticInboxClarification(input: {
+  userId: string;
+  itemId: string;
+  answer: string[];
+  overrides?: AiOverrides;
+  onDelta?: (delta: string) => void;
+}): Promise<ClarifyInboxResult | null> {
+  const item = await prisma.inboxItem.findUnique({
+    where: { id: input.itemId, userId: input.userId },
+    select: { id: true, content: true, status: true, aiSuggestionJson: true },
+  });
+  if (!item || item.status !== "inbox") return null;
+  const current = parseSocraticState(item.aiSuggestionJson);
+  if (!current || current.status !== "asking" || !current.history?.length) return null;
+  const unansweredIndex = current.history.findIndex((entry) => entry.answer.length === 0);
+  if (unansweredIndex < 0) return null;
+  const answer = input.answer
+    .map((entry) => String(entry).trim().slice(0, 120))
+    .filter(Boolean)
+    .slice(0, 3);
+  if (!answer.length) return null;
+  const history: InboxClarificationHistoryItem[] = current.history.map(
+    (entry, index) => index === unansweredIndex ? { ...entry, answer } : entry,
+  );
+  const aiContext = await buildAiContext({
+    kind: "inbox_plan",
+    inboxItemId: item.id,
+    userId: input.userId,
+  });
+  const clarification = await withAiQuota("inbox_clarify", () =>
+    generateSocraticClarification({
+      content: item.content,
+      history,
+      apiKey: input.overrides?.apiKey,
+      model: input.overrides?.model,
+      baseUrl: input.overrides?.baseUrl,
+      projectContext: aiContext.projectFacts,
+      memorySummary: aiContext.summary,
+      evidence: aiContext.evidence,
+      maxQuestions: current.maxQuestions ?? 3,
+      onDelta: input.onDelta,
+    }),
+  );
+  await prisma.inboxItem.update({
+    where: { id: item.id, userId: input.userId },
+    data: {
+      aiSuggestionJson: JSON.stringify(clarification),
+      aiAnalyzedAt: new Date(),
+    },
+  });
+  revalidatePath("/");
+  revalidatePath("/workspace");
+  return { itemId: item.id, content: item.content, clarification };
+}
+
 export async function createInboxPlan(input: {
   userId: string;
   itemId: string;
@@ -94,20 +189,12 @@ export async function createInboxPlan(input: {
 }): Promise<InboxPlan | null> {
   const item = await prisma.inboxItem.findUnique({
     where: { id: input.itemId, userId: input.userId },
-    select: { id: true, content: true, status: true },
+    select: { id: true, content: true, status: true, aiSuggestionJson: true },
   });
 
   if (!item || item.status !== "inbox") return null;
 
-  const projects = await prisma.project.findMany({
-    where: { userId: input.userId },
-    select: {
-      name: true,
-      objective: true,
-      currentMilestone: true,
-    },
-    orderBy: { name: "asc" },
-  });
+  const clarificationState = parseSocraticState(item.aiSuggestionJson);
   const aiContext = await buildAiContext({
     kind: "inbox_plan",
     inboxItemId: item.id,
@@ -116,22 +203,20 @@ export async function createInboxPlan(input: {
   const plan = await withAiQuota("inbox_plan", () =>
     planInbox(
       item.content,
-      projects.map((project) => project.name),
+      aiContext.projectFacts.map((project) => project.name),
       input.overrides?.apiKey,
       input.overrides?.model,
       input.overrides?.baseUrl,
       input.option,
       input.supplement,
-      projects.map((project) => ({
-        name: project.name,
-        objective: project.objective,
-        currentMilestone: project.currentMilestone,
-      })),
+      aiContext.projectFacts,
       aiContext.summary,
       input.dimensionChoices,
       aiContext.evidence,
       aiContext.maxPlanTasks,
       input.onDelta,
+      clarificationState?.history,
+      clarificationState?.summary,
     ),
   );
 

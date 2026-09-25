@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {
   OUTPUT_QUALITY_RULES,
   PLAN_SYSTEM_PROMPT,
+  SOCRATIC_CLARIFY_SYSTEM_PROMPT,
   buildPlanUserPayload,
 } from "@/lib/ai-prompts";
 
@@ -28,6 +29,11 @@ test("计划提示词写清了执行合同的取值约束", () => {
       `计划提示词里缺少执行合同关键词：${token}`,
     );
   }
+});
+
+test("计划提示词限制任务粒度并禁止无限拆分", () => {
+  assert.ok(PLAN_SYSTEM_PROMPT.includes("不设固定 1 条或 2 条"));
+  assert.ok(PLAN_SYSTEM_PROMPT.includes("内部顺序步骤写在 notes"));
 });
 
 test("计划提示词要求只返回 JSON", () => {
@@ -81,4 +87,41 @@ test("user 消息保留显式传入的可选字段", () => {
   assert.deepEqual(payload.dimensionChoices, ["先看反馈"]);
   assert.deepEqual(payload.contextEvidence, ["项目 P 已 5 天没推进"]);
   assert.equal(payload.maxTasks, 2);
+});
+
+test("苏格拉底澄清提示词一次只问一个并允许提前停止", () => {
+  assert.ok(SOCRATIC_CLARIFY_SYSTEM_PROMPT.includes("每次只能问一个问题"));
+  assert.ok(SOCRATIC_CLARIFY_SYSTEM_PROMPT.includes("不能提前给出一整套问卷"));
+  assert.ok(SOCRATIC_CLARIFY_SYSTEM_PROMPT.includes("信息已经足够"));
+  assert.ok(SOCRATIC_CLARIFY_SYSTEM_PROMPT.includes("reflection"));
+});
+
+test("计划 user 消息保留结构化澄清历史", () => {
+  const payload = JSON.parse(
+    buildPlanUserPayload({
+      currentDate: "2026-09-25",
+      content: "想把访谈整理成方向",
+      projectNames: [],
+      projects: [],
+      clarificationHistory: [
+        {
+          key: "constraint",
+          question: "这次最不想牺牲什么？",
+          answers: ["先拿到真实反馈"],
+          reflection: null,
+        },
+      ],
+      clarificationSummary: { realProblem: "先验证需求" },
+    }),
+  );
+
+  assert.deepEqual(payload.clarificationHistory, [
+    {
+      key: "constraint",
+      question: "这次最不想牺牲什么？",
+      answers: ["先拿到真实反馈"],
+      reflection: null,
+    },
+  ]);
+  assert.deepEqual(payload.clarificationSummary, { realProblem: "先验证需求" });
 });

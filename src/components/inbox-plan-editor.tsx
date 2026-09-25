@@ -5,7 +5,6 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ArrowRight, CheckCircle2, Loader2, Sparkles } from "lucide-react";
 import { confirmInboxPlan } from "@/app/actions";
-import { TypewriterText } from "@/components/typewriter-text";
 import type { InboxPlan } from "@/lib/ai";
 
 const inputClass =
@@ -22,6 +21,7 @@ const executionModeOptions = [
 type ConfirmResult = {
   ok: true;
   projectId: string | null;
+  attachedTaskId: string | null;
   showProjectHint: boolean;
 };
 
@@ -46,7 +46,7 @@ export function InboxPlanEditor({
       const result = (await confirmInboxPlan(
         new FormData(event.currentTarget),
       )) as ConfirmResult | undefined;
-      if (result?.showProjectHint) {
+      if (result?.showProjectHint || result?.attachedTaskId) {
         setConfirmResult(result);
         return;
       }
@@ -62,19 +62,25 @@ export function InboxPlanEditor({
     return (
       <div className="rounded-xl border border-success/25 bg-success/10 p-4">
         <p className="text-sm font-semibold text-success">
-          项目已整理，去书桌页查看并推进
+          {confirmResult.attachedTaskId
+            ? "已接到当前任务，不再新增同级任务"
+            : "项目已整理，去书桌页查看并推进"}
         </p>
-        <Link
-          href={
-            confirmResult.projectId
-              ? `/workspace?project=${confirmResult.projectId}`
-              : "/workspace"
-          }
-          className="zouzou-primary-button mt-3 inline-flex h-9 items-center gap-2 rounded-lg bg-accent px-4 text-sm font-medium text-white transition-colors hover:bg-accent-strong"
-        >
-          去书桌页
-          <ArrowRight className="size-4" />
-        </Link>
+        <div className="mt-3 flex justify-end">
+          <Link
+            href={
+              confirmResult.attachedTaskId
+                ? `/workspace?edit=${confirmResult.attachedTaskId}`
+                : confirmResult.projectId
+                  ? `/workspace?project=${confirmResult.projectId}`
+                  : "/workspace"
+            }
+            className="zouzou-primary-button inline-flex h-9 items-center gap-2 rounded-lg bg-accent px-4 text-sm font-medium text-white transition-colors hover:bg-accent-strong"
+          >
+            去书桌页
+            <ArrowRight className="size-4" />
+          </Link>
+        </div>
       </div>
     );
   }
@@ -173,6 +179,7 @@ export function InboxPlanEditor({
                 <input
                   name={`tasks[${index}].dueDate`}
                   type="date"
+                  required
                   defaultValue={task.dueDate ?? ""}
                   className={inputClass}
                 />
@@ -185,7 +192,7 @@ export function InboxPlanEditor({
       <div className="rounded-lg bg-accent-soft/60 p-3 text-sm leading-6 text-ink-secondary">
         <div className="flex items-start gap-2">
           <Sparkles className="mt-1 size-4 shrink-0 text-accent" />
-          <TypewriterText text={plan.reason} />
+          <span className="whitespace-pre-wrap">{plan.reason}</span>
         </div>
       </div>
 

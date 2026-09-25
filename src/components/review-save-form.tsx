@@ -72,17 +72,17 @@ export function ReviewSaveForm({
       </label>
       <label className="block">
         <span className="mb-2 block text-xs font-medium text-ink-secondary">
-          下一步任务（1-3 条）
+          复盘调整（可选，最多 1 条）
         </span>
         <textarea
           name="nextActions"
-          rows={5}
+          rows={4}
           defaultValue={nextActions}
           onChange={() => {
             setSaved(false);
             setMessage("");
           }}
-          className={`${inputClass} min-h-32`}
+          className={`${inputClass} min-h-24`}
         />
       </label>
       <div className="flex items-center justify-end gap-3">

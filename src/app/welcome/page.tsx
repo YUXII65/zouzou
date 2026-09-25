@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { isGuestUser, requireUser } from "@/lib/auth";
+import { FIRST_RUN_GUIDE_ENABLED } from "@/lib/entry-policy";
 import { isOnboardingCompletedValue } from "@/lib/onboarding";
 import { FirstRunGuide } from "./first-run-guide";
 
@@ -24,6 +25,9 @@ export default async function WelcomePage({
         ? "register"
         : null;
   const user = await requireUser();
+  if (!FIRST_RUN_GUIDE_ENABLED) {
+    redirect("/");
+  }
   if (isOnboardingCompletedValue(user.userPreferences[0]?.value)) {
     redirect("/workspace");
   }

@@ -1,8 +1,6 @@
 import { TOUR_EVENT, TOUR_STORAGE_KEY, type TourStep } from "@/lib/tour";
 
-const SHOW_KEY = "next_step_show_review_hint";
 const AI_QUESTION_KEY = "next_step_ai_question_asked";
-export const FIRST_TASK_REVIEW_EVENT = "next-step:first-task-review";
 
 function tourIsActive() {
   try {
@@ -37,17 +35,9 @@ export function notifyTourStep(step: TourStep) {
   window.dispatchEvent(new CustomEvent(TOUR_EVENT, { detail: { step } }));
 }
 
-/** 只有首组计划任务全部收尾后，才进入复盘引导。 */
+/** 首组计划任务全部收尾后，进入统一的第 4 步复盘引导。 */
 export function markFirstTaskGroupDone() {
-  if (typeof window === "undefined") return;
-
-  try {
-    localStorage.setItem(SHOW_KEY, "1");
-    notifyTourStep("done");
-    window.dispatchEvent(new Event(FIRST_TASK_REVIEW_EVENT));
-  } catch {
-    // Ignore storage errors and continue without the hint.
-  }
+  notifyTourStep("4");
 }
 
 /** 当前是否处于新手引导中（用于图标是否展开文字等） */

@@ -4,7 +4,7 @@ import { getFirstRunState, setFirstRunTourStep } from "@/lib/first-run";
 
 export const dynamic = "force-dynamic";
 
-const steps = ["1", "2", "3", "done"] as const;
+const steps = ["1", "2", "3", "4", "done"] as const;
 
 export async function GET(request: Request) {
   const user = await getMiniProgramUser(request);

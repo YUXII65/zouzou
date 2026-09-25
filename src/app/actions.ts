@@ -20,13 +20,17 @@ import {
   requireUser,
   verifyPassword,
 } from "@/lib/auth";
-import { endOfDay, startOfDay, toDateInputValue } from "@/lib/date";
+import { startOfDay, toDateInputValue } from "@/lib/date";
 import { buildAiContext } from "@/lib/ai-context";
 import { createInboxClarification, createInboxPlan } from "@/lib/inbox-ai";
 import { createReviewDraft } from "@/lib/review-ai";
 import { syncReviewRelations } from "@/lib/review-relations";
 import { recordAiFeedback } from "@/lib/feedback";
 import { recordUsageEvent } from "@/lib/usage";
+import {
+  guestEntryPath,
+  newUserEntryPath,
+} from "@/lib/entry-policy";
 import { isAiQuotaEnabled, withAiQuota } from "@/lib/ai-quota";
 import {
   isOnboardingCompleted,
@@ -42,6 +46,13 @@ import {
 } from "@/lib/task-sticky";
 import { buildTaskContract } from "@/lib/task-contract";
 import { ensureInboxProject } from "@/lib/inbox-project";
+import {
+  appendTaskContinuation,
+  formatReviewNextActions,
+  OPEN_TASK_STATUSES,
+  parseReviewNextActions,
+  shouldSyncReviewActions,
+} from "@/lib/task-flow";
 import {
   clarifyInbox,
   generateFirstRunPlan,
@@ -294,12 +305,12 @@ export async function registerUser(formData: FormData) {
   }
 
   await createUserSession(user.id);
-  redirect("/welcome?signup=register");
+  redirect(newUserEntryPath(next));
 }
 
 export async function startGuestExperience() {
   const current = await getCurrentUser();
-  if (current) redirect("/welcome");
+  if (current) redirect("/");
 
   const username = `guest_${randomUUID().replaceAll("-", "").slice(0, 12)}`;
   const password = randomBytes(12).toString("base64url");
@@ -312,7 +323,7 @@ export async function startGuestExperience() {
   });
 
   await createUserSession(user.id);
-  redirect("/welcome?guest=1&signup=guest");
+  redirect(guestEntryPath());
 }
 
 export async function claimGuestAccount(formData: FormData) {
@@ -481,7 +492,7 @@ export async function updateUserProfile(formData: FormData) {
 }
 
 /**
- * 新手引导进度（1 / 2 / 3 / done）。
+ * 新手引导进度（1 / 2 / 3 / 4 / done）。
  * 客户端会在切换步骤时调用，失败不影响使用。
  */
 export async function setFirstRunTourStep(step: string) {
@@ -622,7 +633,7 @@ export async function loginUser(formData: FormData) {
   }
 
   await createUserSession(created.id);
-  redirect("/welcome?signup=register");
+  redirect(newUserEntryPath(next));
 }
 
 export async function recordSignupEvent(kind: string) {
@@ -873,20 +884,6 @@ export async function addInboxItemAndPlan(formData: FormData) {
     },
   });
 
-  const projects = await prisma.project.findMany({
-    where: { userId: user.id },
-    select: {
-      name: true,
-      objective: true,
-      currentMilestone: true,
-    },
-    orderBy: { name: "asc" },
-  });
-  const projectContext = projects.map((project) => ({
-    name: project.name,
-    objective: project.objective,
-    currentMilestone: project.currentMilestone,
-  }));
   const aiContext = await buildAiContext({
     kind: "inbox_plan",
     inboxItemId: item.id,
@@ -895,13 +892,13 @@ export async function addInboxItemAndPlan(formData: FormData) {
   const plan = await withAiQuota("inbox_plan", () =>
     planInbox(
       content,
-      projects.map((project) => project.name),
+      aiContext.projectFacts.map((project) => project.name),
       apiKey,
       model,
       baseUrl,
       undefined,
       undefined,
-      projectContext,
+      aiContext.projectFacts,
       aiContext.summary,
       undefined,
       aiContext.evidence,
@@ -1002,25 +999,36 @@ export async function ignoreInboxItem(formData: FormData) {
     },
   });
 
-  await prisma.aiPlanFeedback.create({
-    data: {
-      userId: user.id,
-      inboxItemId: id,
-      action: "ignored",
-      planJson:
-        item.aiPlanJson ?? item.aiSuggestionJson ?? "{}",
-    },
-  });
-  await recordAiFeedback({
-    userId: user.id,
-    source: "inbox_plan",
-    action: "plan_ignored",
-    inboxItemId: id,
-    beforeJson: item.aiPlanJson ?? item.aiSuggestionJson ?? "{}",
-  });
-
   revalidatePath("/");
   revalidatePath("/workspace");
+
+  // 反馈记录不能反过来阻断用户的忽略操作。
+  after(async () => {
+    try {
+      await prisma.aiPlanFeedback.create({
+        data: {
+          userId: user.id,
+          inboxItemId: id,
+          action: "ignored",
+          planJson: item.aiPlanJson ?? item.aiSuggestionJson ?? "{}",
+        },
+      });
+    } catch {
+      // Ignore analytics failure.
+    }
+
+    try {
+      await recordAiFeedback({
+        userId: user.id,
+        source: "inbox_plan",
+        action: "plan_ignored",
+        inboxItemId: id,
+        beforeJson: item.aiPlanJson ?? item.aiSuggestionJson ?? "{}",
+      });
+    } catch {
+      // Ignore analytics failure.
+    }
+  });
 }
 
 export async function suggestInboxItem(formData: FormData) {
@@ -1167,6 +1175,7 @@ export async function confirmInboxPlan(formData: FormData) {
   );
   const edited = confirmedTasksJson !== JSON.stringify(plan.tasks);
   let confirmedProjectId: string | null = item.projectId;
+  let attachedTaskId: string | null = null;
 
   await prisma.$transaction(async (tx) => {
     const projectId = await ensureInboxProject(tx, {
@@ -1182,8 +1191,25 @@ export async function confirmInboxPlan(formData: FormData) {
       fallbackDoneWhen: firstTask.doneWhen,
     });
 
-    for (const [index, plannedTask] of tasks.entries()) {
-      await tx.task.create({
+    const openTasks = await tx.task.findMany({
+      where: {
+        userId: user.id,
+        projectId,
+        status: { in: [...OPEN_TASK_STATUSES] },
+      },
+      orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+      select: { id: true, notes: true },
+    });
+    const shouldCreateNewBatch =
+      openTasks.length === 0 || plan.taskDisposition !== "attach";
+    const createCount = shouldCreateNewBatch ? tasks.length : 0;
+    const tasksToCreate = tasks.slice(0, createCount);
+    const tasksToAttach = tasks.slice(createCount);
+    let anchorTaskId = openTasks[0]?.id ?? null;
+    let anchorTaskNotes = openTasks[0]?.notes ?? null;
+
+    for (const [index, plannedTask] of tasksToCreate.entries()) {
+      const created = await tx.task.create({
         data: {
           userId: user.id,
           title: plannedTask.title,
@@ -1204,7 +1230,28 @@ export async function confirmInboxPlan(formData: FormData) {
             toolPolicy: plannedTask.toolPolicy,
           }),
         },
+        select: { id: true },
       });
+      if (!anchorTaskId) {
+        anchorTaskId = created.id;
+        anchorTaskNotes = plannedTask.notes;
+      }
+    }
+
+    if (anchorTaskId && tasksToAttach.length) {
+      let mergedNotes = anchorTaskNotes;
+      for (const plannedTask of tasksToAttach) {
+        mergedNotes = appendTaskContinuation(
+          mergedNotes,
+          plannedTask.title,
+          plannedTask.notes,
+        );
+      }
+      await tx.task.update({
+        where: { id: anchorTaskId, userId: user.id },
+        data: { notes: mergedNotes },
+      });
+      attachedTaskId = anchorTaskId;
     }
 
     await tx.inboxItem.update({
@@ -1240,17 +1287,22 @@ export async function confirmInboxPlan(formData: FormData) {
     projectId: confirmedProjectId,
     beforeJson: item.aiPlanJson,
     afterJson: confirmedTasksJson,
-    detail: edited ? "用户编辑 AI 计划后确认" : "用户直接确认 AI 计划",
+    detail: attachedTaskId
+      ? "新想法并入当前任务"
+      : edited
+        ? "用户编辑 AI 计划后确认"
+        : "用户直接确认 AI 计划",
   });
   await recordUsageEvent({
     userId: user.id,
-    event: "task_created",
+    event: attachedTaskId ? "plan_attached" : "task_created",
     detail: "inbox_plan",
   });
 
   return {
     ok: true as const,
     projectId: confirmedProjectId,
+    attachedTaskId,
     showProjectHint,
   };
 }
@@ -1427,42 +1479,33 @@ export async function saveReview(formData: FormData) {
 
   if (!id || !summary) return;
 
-  const nextActionLines = rawNextActions
-    .split(/\r?\n/)
-    .map((line) =>
-      line
-        .replace(/^[-*]\s*/, "")
-        .replace(/^\d+[.、)]\s*/, "")
-        .trim(),
-    )
-    .filter(Boolean);
-  const nextActions: Array<{ title: string; shortTitle: string }> = [];
-  for (
-    let index = 0;
-    index < nextActionLines.length && nextActions.length < 3;
-    index += 2
-  ) {
-    const shortTitle = nextActionLines[index].trim().slice(0, 80);
-    const detail = (nextActionLines[index + 1] ?? shortTitle).trim().slice(0, 200);
-    if (shortTitle) nextActions.push({ title: detail, shortTitle });
-  }
+  const nextActions = parseReviewNextActions(rawNextActions);
+  const nextActionsText = formatReviewNextActions(nextActions);
+  const existingReview = await prisma.review.findFirst({
+    where: { id, userId: user.id },
+    select: { status: true, nextActions: true },
+  });
+  if (!existingReview) return;
+
+  const shouldSyncActions = shouldSyncReviewActions(
+    existingReview.status,
+    existingReview.nextActions,
+    nextActionsText,
+  );
 
   const review = await prisma.review.update({
     where: { id, userId: user.id },
     data: {
       summary,
-      nextActions: nextActions
-        .map((action) =>
-          action.shortTitle !== action.title
-            ? `${action.shortTitle}\n${action.title}`
-            : action.shortTitle,
-        )
-        .join("\n"),
+      nextActions: nextActionsText,
       status: "final",
     },
   });
 
-  await syncReviewRelations(review, nextActions, user.id);
+  // 已保存过的同一批下一步只更新复盘正文，不再重复创建或替换任务。
+  if (shouldSyncActions) {
+    await syncReviewRelations(review, nextActions, user.id);
+  }
   await recordUsageEvent({ userId: user.id, event: "review_saved" });
 
   return { date: toDateInputValue(review.reviewDate) };
@@ -1751,6 +1794,9 @@ export async function setTaskStatus(formData: FormData) {
       prisma.review.count({ where: { userId: user.id } }),
     ]);
     reviewHintEligible = firstPlanGroupComplete && reviewCount === 0;
+    if (reviewHintEligible) {
+      await persistFirstRunTourStep(user.id, "4");
+    }
   }
 
   const updatedTask = updated[0];

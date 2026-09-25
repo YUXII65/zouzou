@@ -29,8 +29,13 @@ export async function createReviewDraft(input: {
           status: { in: ["todo", "in_progress"] },
           userId: input.userId,
         },
-        select: { title: true, project: { select: { name: true } } },
-        orderBy: [{ createdAt: "desc" }, { id: "asc" }],
+        select: {
+          id: true,
+          title: true,
+          status: true,
+          project: { select: { name: true } },
+        },
+        orderBy: [{ updatedAt: "desc" }, { id: "asc" }],
         take: 20,
       }),
       prisma.task.findMany({
@@ -52,7 +57,11 @@ export async function createReviewDraft(input: {
         select: {
           name: true,
           currentMilestone: true,
-          _count: { select: { tasks: true } },
+          _count: {
+            select: {
+              tasks: { where: { status: { in: ["todo", "in_progress"] } } },
+            },
+          },
         },
         orderBy: [{ updatedAt: "desc" }, { id: "asc" }],
       }),
@@ -70,7 +79,9 @@ export async function createReviewDraft(input: {
           projectName: task.project?.name ?? null,
         })),
         open: openTasks.map((task) => ({
+          id: task.id,
           title: task.title,
+          status: task.status,
           projectName: task.project?.name ?? null,
         })),
         planned: plannedTasks.map((task) => ({ title: task.title })),
@@ -78,6 +89,7 @@ export async function createReviewDraft(input: {
           name: project.name,
           currentMilestone: project.currentMilestone,
           taskCount: project._count.tasks,
+          openTaskCount: project._count.tasks,
         })),
       },
       aiContext.evidence,

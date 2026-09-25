@@ -37,9 +37,9 @@ export function LogoutButton({
           aria-modal="true"
           aria-labelledby="logout-confirm-title"
         >
-          <div className="zouzou-panel w-full max-w-sm rounded-xl p-6 shadow-pop">
+          <div className="zouzou-panel w-full max-w-xs rounded-xl p-4 shadow-pop">
             <div className="flex items-start gap-3">
-              <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-surface-muted text-ink-secondary">
+              <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-surface-muted text-ink-secondary">
                 <LogOut className="size-4" />
               </span>
               <div>
@@ -49,23 +49,21 @@ export function LogoutButton({
                 >
                   退出登录？
                 </h2>
-                <p className="mt-2 text-sm leading-6 text-ink-secondary">
-                  退出不会删除你的项目、任务和复盘，下次登录后还会在。
-                </p>
+
               </div>
             </div>
-            <div className="mt-5 flex items-center justify-end gap-2">
+            <div className="mt-4 flex items-center justify-end gap-2">
               <button
                 type="button"
                 onClick={() => setConfirming(false)}
-                className="zouzou-secondary-button inline-flex h-10 items-center rounded-lg border border-border bg-surface px-4 text-sm font-medium text-ink-secondary transition-colors hover:bg-surface-hover"
+                className="zouzou-secondary-button inline-flex h-9 items-center rounded-lg border border-border bg-surface px-3 text-sm font-medium text-ink-secondary transition-colors hover:bg-surface-hover"
               >
                 再想想
               </button>
               <button
                 type="button"
                 onClick={() => formRef.current?.requestSubmit()}
-                className="zouzou-primary-button inline-flex h-10 items-center rounded-lg bg-accent px-4 text-sm font-medium text-white transition-colors hover:bg-accent-strong"
+                className="zouzou-primary-button inline-flex h-9 items-center rounded-lg bg-accent px-3 text-sm font-medium text-white transition-colors hover:bg-accent-strong"
               >
                 退出登录
               </button>

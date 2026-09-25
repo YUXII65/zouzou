@@ -53,8 +53,8 @@
       <view class="review-form" wx:else>
         <text class="field-label">当日总结</text>
         <textarea class="review-textarea" value="{{summary}}" placeholder="写下今天真正推进了什么，卡在哪里" bindinput="onSummaryInput"></textarea>
-        <text class="field-label">下一步任务（1-3 条）</text>
-        <textarea class="review-textarea small" value="{{nextActions}}" placeholder="每条两行：精简标题 + 具体说明" bindinput="onNextActionsInput"></textarea>
+        <text class="field-label">复盘调整（可选，最多 1 条）</text>
+        <textarea class="review-textarea small" value="{{nextActions}}" placeholder="只有需要调整时才写：精简标题 + 具体说明" bindinput="onNextActionsInput"></textarea>
         <view class="save-button {{reviewSavedAlready ? 'save-button-saved' : ''}}" bindtap="onSave">{{reviewSavedAlready ? '保存成功' : '保存复盘'}}</view>
       </view>
     </view>

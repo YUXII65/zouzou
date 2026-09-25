@@ -77,7 +77,7 @@ export function TaskForm({
             name="title"
             required
             defaultValue={task?.title}
-            placeholder="写清今天要推进的具体动作"
+            placeholder="写一个能独立收尾的推进结果"
             className={inputClass}
           />
         </div>
@@ -94,7 +94,7 @@ export function TaskForm({
             name="notes"
             defaultValue={task?.notes ?? ""}
             rows={3}
-            placeholder="补充背景、对象或你现在的想法"
+            placeholder="补充过程步骤、背景或你现在的想法"
             className={`${inputClass} resize-y`}
           />
         </div>

@@ -109,6 +109,10 @@ export function AiTaskPlanner({
                       supplementPlaceholder={
                         clarification.supplementPlaceholder
                       }
+                      mode={clarification.mode}
+                      status={clarification.status}
+                      history={clarification.history}
+                      summary={clarification.summary}
                     />
                   </>
                 ) : (
@@ -127,7 +131,7 @@ export function AiTaskPlanner({
                   <form action={ignoreInboxItem}>
                     <input type="hidden" name="id" value={item.id} />
                     <SubmitButton
-                      pendingText="..."
+                      pendingText="忽略中..."
                       className="zouzou-secondary-button inline-flex h-8 items-center gap-1.5 rounded-md border border-border bg-surface px-2.5 text-xs font-medium text-ink-secondary transition-colors hover:border-warning hover:text-warning"
                     >
                       <EyeOff className="size-3.5" />

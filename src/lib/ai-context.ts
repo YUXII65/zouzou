@@ -17,6 +17,20 @@ export type AiContextInput = {
   projectId?: string;
 };
 
+export type ProjectPlanFact = {
+  id: string;
+  name: string;
+  objective: string | null;
+  currentMilestone: string | null;
+  openTaskCount: number;
+  openTasks: Array<{
+    id: string;
+    title: string;
+    shortTitle: string | null;
+    status: string;
+  }>;
+};
+
 export type AiContext = {
   summary: string;
   evidence: string[];
@@ -27,6 +41,7 @@ export type AiContext = {
   feedbackSummary: string;
   reviewSummary: string;
   taskHistorySummary: string;
+  projectFacts: ProjectPlanFact[];
 };
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -87,12 +102,23 @@ export async function buildAiContext(
           currentMilestone: true,
           updatedAt: true,
           tasks: {
+            where: { status: { in: ["todo", "in_progress"] } },
             select: {
+              id: true,
+              title: true,
+              shortTitle: true,
               updatedAt: true,
               status: true,
             },
             orderBy: [{ updatedAt: "desc" }, { id: "asc" }],
-            take: 10,
+            take: 5,
+          },
+          _count: {
+            select: {
+              tasks: {
+                where: { status: { in: ["todo", "in_progress"] } },
+              },
+            },
           },
           reviewTasks: {
             select: {
@@ -139,6 +165,7 @@ export async function buildAiContext(
 
   const projectLines: string[] = [];
   const projectEvidence: string[] = [];
+  const projectFacts: ProjectPlanFact[] = [];
   for (const project of activeProjects) {
     const lastActivity = latestDate(
       project.updatedAt,
@@ -146,9 +173,20 @@ export async function buildAiContext(
       ...project.reviewTasks.map((item) => item.review.reviewDate),
     );
     const stalledDays = daysBetween(lastActivity);
-    const openTasks = project.tasks.filter(
-      (task) => task.status === "todo" || task.status === "in_progress",
-    ).length;
+    const openTasks = project._count.tasks;
+    projectFacts.push({
+      id: project.id,
+      name: project.name,
+      objective: project.objective,
+      currentMilestone: project.currentMilestone,
+      openTaskCount: openTasks,
+      openTasks: project.tasks.map((task) => ({
+        id: task.id,
+        title: task.title,
+        shortTitle: task.shortTitle,
+        status: task.status,
+      })),
+    });
     const milestone = project.currentMilestone
       ? ` / ${project.currentMilestone}`
       : "";
@@ -200,16 +238,17 @@ export async function buildAiContext(
     }
   }
   const planningGuidanceParts: string[] = [];
-  let maxPlanTasks = 4;
+  let maxPlanTasks = 5;
   if (preferenceMap.get("plan_scale") === "few") {
-    planningGuidanceParts.push("用户偏好少而稳，单次计划任务控制在 1-2 条");
-    maxPlanTasks = 2;
+    planningGuidanceParts.push("用户偏好少而稳，请尽量合并动作，但仍以完整交付为准");
+    maxPlanTasks = 3;
   } else if (preferenceMap.get("plan_scale") === "ambitious") {
-    planningGuidanceParts.push("用户接受较完整计划，任务可以排到 4-5 条");
+    planningGuidanceParts.push("用户接受较完整的推进，可以保留必要的独立任务");
     maxPlanTasks = 5;
   } else {
-    planningGuidanceParts.push("默认任务 2-3 条，避免排满");
+    planningGuidanceParts.push("任务数量由完整交付目标决定，不按固定 1 条或 2 条凑数");
   }
+  planningGuidanceParts.push("只输出缺失任务，已有任务不要重复；续接或修正当前任务时使用 taskDisposition=attach");
   if (preferenceMap.get("default_start_action") === "research") {
     planningGuidanceParts.push("第一步优先安排调研和整理材料");
   } else if (preferenceMap.get("default_start_action") === "complete") {
@@ -303,5 +342,6 @@ export async function buildAiContext(
     feedbackSummary,
     reviewSummary,
     taskHistorySummary,
+    projectFacts,
   };
 }

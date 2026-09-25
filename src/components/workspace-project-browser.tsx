@@ -16,6 +16,7 @@ import { TaskRow } from "@/components/task-row";
 import { ConfirmActionButton } from "@/components/confirm-action-button";
 import { StatusBadge } from "@/components/status-badge";
 import type { TaskStickyNoteData } from "@/lib/task-sticky";
+import { isOpenTaskStatus } from "@/lib/task-flow";
 import {
   createProject,
   createTask,
@@ -35,6 +36,7 @@ type TaskData = {
   focusDate?: Date | null;
   executionMode?: string | null;
   doneWhen?: string | null;
+  completedAt?: Date | null;
   stickyNotes?: TaskStickyNoteData[];
 };
 
@@ -63,6 +65,13 @@ function sortTasks(tasks: TaskData[], sortMode: "order" | "priority") {
   );
 }
 
+function sortCompletedTasks(tasks: TaskData[]) {
+  return [...tasks].sort(
+    (a, b) =>
+      (b.completedAt?.getTime() ?? 0) - (a.completedAt?.getTime() ?? 0),
+  );
+}
+
 export function WorkspaceProjectBrowser({
   projects,
   unassociatedTasks,
@@ -84,18 +93,27 @@ export function WorkspaceProjectBrowser({
     initialProjectId ?? projects[0]?.id ?? null,
   );
   const [showUnassigned, setShowUnassigned] = useState(initialShowUnassigned);
+  const [taskView, setTaskView] = useState<"open" | "done">("open");
+  const firstProjectId = projects[0]?.id ?? null;
 
   useEffect(() => {
-    setActiveId(initialProjectId ?? projects[0]?.id ?? null);
+    setActiveId(initialProjectId ?? firstProjectId);
     setShowUnassigned(initialShowUnassigned);
-  }, [initialProjectId, initialShowUnassigned]);
+  }, [firstProjectId, initialProjectId, initialShowUnassigned]);
 
   const activeProject =
     projects.find((project) => project.id === activeId) ?? null;
+  const openTasks = activeProject
+    ? sortTasks(activeProject.tasks.filter((task) => isOpenTaskStatus(task.status)), sortMode)
+    : [];
+  const completedTasks = activeProject
+    ? sortCompletedTasks(activeProject.tasks.filter((task) => task.status === "done"))
+    : [];
 
   function openProject(projectId: string) {
     setActiveId(projectId);
     setShowUnassigned(false);
+    setTaskView("open");
     window.history.replaceState(
       null,
       "",
@@ -139,7 +157,7 @@ export function WorkspaceProjectBrowser({
                   >
                     <span className="min-w-0 truncate">{project.name}</span>
                     <span className="shrink-0 text-xs text-ink-muted">
-                      {project.tasks.length}
+                      {project.tasks.filter((task) => isOpenTaskStatus(task.status)).length}
                     </span>
                   </button>
                 );
@@ -259,8 +277,31 @@ export function WorkspaceProjectBrowser({
                 </div>
               </details>
               <div className="mt-4">
-                <div className="flex items-center justify-between gap-3">
-                  <p className="text-sm font-semibold text-ink">任务</p>
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div className="inline-flex rounded-lg border border-border bg-surface-muted p-1">
+                    <button
+                      type="button"
+                      onClick={() => setTaskView("open")}
+                      className={
+                        taskView === "open"
+                          ? "rounded-md bg-surface px-3 py-1.5 text-xs font-medium text-accent-strong shadow-sm"
+                          : "rounded-md px-3 py-1.5 text-xs font-medium text-ink-secondary transition-colors hover:text-ink"
+                      }
+                    >
+                      当前推进 {openTasks.length}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setTaskView("done")}
+                      className={
+                        taskView === "done"
+                          ? "rounded-md bg-surface px-3 py-1.5 text-xs font-medium text-success shadow-sm"
+                          : "rounded-md px-3 py-1.5 text-xs font-medium text-ink-secondary transition-colors hover:text-ink"
+                      }
+                    >
+                      已完成 {completedTasks.length}
+                    </button>
+                  </div>
                   <details className="rounded-md border border-border bg-surface">
                     <summary className="flex cursor-pointer list-none items-center gap-1.5 px-3 py-2 text-xs font-medium text-ink-secondary transition-colors hover:text-accent">
                       <FolderPlus className="size-3.5" />
@@ -276,9 +317,29 @@ export function WorkspaceProjectBrowser({
                     </div>
                   </details>
                 </div>
-                {activeProject.tasks.length ? (
+                {taskView === "open" ? (
+                  openTasks.length ? (
+                    <div className="zouzou-panel mt-3 divide-y divide-border rounded-xl bg-surface">
+                      {openTasks.map((task) => (
+                        <TaskRow
+                          key={task.id}
+                          task={task}
+                          projectId={activeProject.id}
+                          projectName={activeProject.name}
+                          showLabels={showLabels}
+                        />
+                      ))}
+                    </div>
+                  ) : (
+                    <EmptyState
+                      icon={ListTodo}
+                      title="当前没有推进中的任务"
+                      hint="下一步只需要确定一个具体结果。"
+                    />
+                  )
+                ) : completedTasks.length ? (
                   <div className="zouzou-panel mt-3 divide-y divide-border rounded-xl bg-surface">
-                    {sortTasks(activeProject.tasks, sortMode).map((task) => (
+                    {completedTasks.map((task) => (
                       <TaskRow
                         key={task.id}
                         task={task}
@@ -291,8 +352,8 @@ export function WorkspaceProjectBrowser({
                 ) : (
                   <EmptyState
                     icon={ListTodo}
-                    title="项目下还没有任务"
-                    hint="新增第一条任务，或从 AI 想法梳理里生成。"
+                    title="这个项目还没有已完成任务"
+                    hint="任务完成后会自动出现在这里。"
                   />
                 )}
               </div>

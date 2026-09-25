@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { recordAiFeedback } from "@/lib/feedback";
 import { recordUsageEvent } from "@/lib/usage";
 import type { InboxPlan, InboxPlanTask } from "@/lib/ai";
+import { appendTaskContinuation, OPEN_TASK_STATUSES } from "@/lib/task-flow";
 
 export const dynamic = "force-dynamic";
 
@@ -163,6 +164,7 @@ export async function POST(request: Request) {
   );
 
   let confirmedProjectId: string | null = item.projectId;
+  let attachedTaskId: string | null = null;
   await prisma.$transaction(async (tx) => {
     let projectId = item.projectId;
 
@@ -187,8 +189,27 @@ export async function POST(request: Request) {
     }
 
     const firstTask = tasks[0];
-    for (const [index, task] of tasks.entries()) {
-      await tx.task.create({
+    const openTasks = projectId
+      ? await tx.task.findMany({
+          where: {
+            userId: user.id,
+            projectId,
+            status: { in: [...OPEN_TASK_STATUSES] },
+          },
+          orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+          select: { id: true, notes: true },
+        })
+      : [];
+    const shouldCreateNewBatch =
+      openTasks.length === 0 || plan.taskDisposition !== "attach";
+    const createCount = shouldCreateNewBatch ? tasks.length : 0;
+    const tasksToCreate = tasks.slice(0, createCount);
+    const tasksToAttach = tasks.slice(createCount);
+    let anchorTaskId = openTasks[0]?.id ?? null;
+    let anchorTaskNotes = openTasks[0]?.notes ?? null;
+
+    for (const [index, task] of tasksToCreate.entries()) {
+      const created = await tx.task.create({
         data: {
           userId: user.id,
           title: task.title,
@@ -205,7 +226,24 @@ export async function POST(request: Request) {
           maxTurns: task.maxTurns,
           toolPolicy: task.toolPolicy,
         },
+        select: { id: true },
       });
+      if (!anchorTaskId) {
+        anchorTaskId = created.id;
+        anchorTaskNotes = task.notes;
+      }
+    }
+
+    if (anchorTaskId && tasksToAttach.length) {
+      let mergedNotes = anchorTaskNotes;
+      for (const task of tasksToAttach) {
+        mergedNotes = appendTaskContinuation(mergedNotes, task.title, task.notes);
+      }
+      await tx.task.update({
+        where: { id: anchorTaskId, userId: user.id },
+        data: { notes: mergedNotes },
+      });
+      attachedTaskId = anchorTaskId;
     }
 
     await tx.inboxItem.update({
@@ -241,18 +279,23 @@ export async function POST(request: Request) {
     projectId: confirmedProjectId,
     beforeJson: item.aiPlanJson,
     afterJson: confirmedTasksJson,
-    detail: edited ? "小程序用户编辑 AI 计划后确认" : "小程序用户直接确认 AI 计划",
+    detail: attachedTaskId
+      ? "小程序新想法并入当前任务"
+      : edited
+        ? "小程序用户编辑 AI 计划后确认"
+        : "小程序用户直接确认 AI 计划",
   });
   await recordUsageEvent({
     userId: user.id,
-    event: "task_created",
+    event: attachedTaskId ? "plan_attached" : "task_created",
     page: "miniprogram",
     detail: "inbox_plan",
   });
 
   return NextResponse.json({
     projectId: confirmedProjectId,
-    taskCount: tasks.length,
+    attachedTaskId,
+    taskCount: attachedTaskId ? 0 : tasks.length,
     edited,
   });
 }

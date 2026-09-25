@@ -57,6 +57,10 @@ test("任务数超过上限会被抓出来", () => {
   assert.ok(issues.some((issue) => issue.includes("超过上限")));
 });
 
+test("taskDisposition 非法会被抓出来", () => {
+  const issues = checkPlanQuality(plan({ taskDisposition: "parallel" }));
+  assert.ok(issues.some((issue) => issue.includes("taskDisposition 非法")));
+});
 test("maxTurns 与 executionMode 不一致会被抓出来", () => {
   const issues = checkPlanQuality(plan({ tasks: [task({ executionMode: "quick", maxTurns: 3 })] }));
   assert.ok(issues.some((issue) => issue.includes("不一致")));

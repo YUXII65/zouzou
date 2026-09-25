@@ -3,7 +3,6 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import { Loader2, RefreshCw, Sparkles } from "lucide-react";
-import { InboxClarification } from "@/components/inbox-clarification";
 import { useRotatingText } from "@/components/rotating-text";
 import {
   markFirstAiQuestionAsked,
@@ -44,17 +43,19 @@ export function QuickCapture({
   const [baseUrl, setBaseUrl] = useState("https://api.deepseek.com");
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState("");
-  const [localResult, setLocalResult] = useState<CaptureResult | null>(null);
+  const [settledItemId, setSettledItemId] = useState<string | null>(null);
   const [pendingContent, setPendingContent] = useState("");
   const [streamPreview, setStreamPreview] = useState("");
   const router = useRouter();
   const waitingLabel = useRotatingText(submitting, CAPTURE_WAITING_LABELS);
 
   useEffect(() => {
-    if (localResult && pendingIds.includes(localResult.itemId)) {
-      setLocalResult(null);
+    if (settledItemId && pendingIds.includes(settledItemId)) {
+      setSettledItemId(null);
+      setPendingContent("");
+      setStreamPreview("");
     }
-  }, [localResult, pendingIds]);
+  }, [pendingIds, settledItemId]);
 
   useEffect(() => {
     function readStorage() {
@@ -90,7 +91,7 @@ export function QuickCapture({
 
     setSubmitting(true);
     setSubmitError("");
-    setLocalResult(null);
+    setSettledItemId(null);
     setPendingContent(idea);
     setStreamPreview("");
     setContent("");
@@ -98,25 +99,29 @@ export function QuickCapture({
     notifyTourStep("2");
     trackEvent("home_ai_input_submit");
 
+    let keepPreview = false;
     try {
       const response = await fetch("/api/ai/inbox/clarify", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ content: idea, apiKey, model, baseUrl }),
+        body: JSON.stringify({ content: idea, mode: "socratic", apiKey, model, baseUrl }),
       });
       const result = await consumeAiStream<CaptureResult>(
         response,
         setStreamPreview,
       );
-      setLocalResult(result);
+      keepPreview = true;
+      setSettledItemId(result.itemId);
       router.refresh();
     } catch {
       setSubmitError("没送出去，再试一次");
       setContent(idea);
     } finally {
       setSubmitting(false);
-      setPendingContent("");
-      setStreamPreview("");
+      if (!keepPreview) {
+        setPendingContent("");
+        setStreamPreview("");
+      }
     }
   }
 
@@ -162,7 +167,7 @@ export function QuickCapture({
           onClick={refreshSamples}
           aria-label="换一批示例想法"
           title="换一批示例想法"
-          className="inline-flex h-9 items-center justify-center gap-1.5 rounded-lg border border-border/80 bg-surface/90 px-3 text-xs font-medium text-ink-secondary transition-colors hover:border-accent/30 hover:text-accent-strong"
+          className="inline-flex h-9 w-auto self-start items-center justify-center gap-1.5 rounded-lg border border-border/80 bg-surface/90 px-3 text-xs font-medium text-ink-secondary transition-colors hover:border-accent/30 hover:text-accent-strong sm:self-auto"
         >
           <RefreshCw className="size-3.5" />
           换一批
@@ -184,7 +189,7 @@ export function QuickCapture({
         <p className="relative mt-3 text-xs text-danger">{submitError}</p>
       ) : null}
     </form>
-    {pendingContent ? (
+    {pendingContent && !(settledItemId && pendingIds.includes(settledItemId)) ? (
       <div className="mt-4 rounded-xl border border-accent/15 bg-surface p-4">
         <p className="text-sm leading-6 text-ink">{pendingContent}</p>
         <div className="mt-3 border-l-2 border-accent/30 pl-3 text-sm leading-7 text-ink-secondary">
@@ -211,16 +216,7 @@ export function QuickCapture({
         </div>
       </div>
     ) : null}
-    {localResult ? (
-      <div className="mt-4">
-        <InboxClarification
-          itemId={localResult.itemId}
-          content={localResult.content}
-          dimensions={localResult.clarification.dimensions}
-          supplementPlaceholder={localResult.clarification.supplementPlaceholder}
-        />
-      </div>
-    ) : null}
+
     </>
   );
 }

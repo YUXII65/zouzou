@@ -3,8 +3,10 @@
 import { useEffect, useRef, useState } from "react";
 import { Check, CornerDownLeft, Send, Sparkles } from "lucide-react";
 import { useRotatingText } from "@/components/rotating-text";
-import { TypewriterText } from "@/components/typewriter-text";
-import type { InboxClarificationDimension } from "@/lib/ai";
+import type {
+  InboxClarificationDimension,
+  InboxClarificationHistoryItem,
+} from "@/lib/ai";
 
 type Props = {
   dimensions: InboxClarificationDimension[];
@@ -12,14 +14,28 @@ type Props = {
   busy?: boolean;
   liveText?: string;
   submitLabel?: string;
+  initialHistory?: InboxClarificationHistoryItem[];
+  clarificationStatus?: "asking" | "done";
+  summaryText?: string;
+  onNext?: (payload: {
+    answer: string[];
+    history: InboxClarificationHistoryItem[];
+  }) => Promise<{
+    status: "asking" | "done";
+    question?: InboxClarificationDimension | null;
+    reflection?: string | null;
+    summaryText?: string | null;
+  }>;
   onSubmit: (payload: { answers: string[][]; supplement: string }) => void;
 };
 
 type Turn = {
   role: "ai" | "user";
   text: string;
+  reflection?: string;
   options?: string[];
   multi?: boolean;
+  key?: string;
 };
 
 const TYPING_MS = 600;
@@ -29,6 +45,55 @@ const WAITING_LABELS = [
   "正在把任务写具体...",
   "快整理好了...",
 ];
+
+function initialAnswers(history: InboxClarificationHistoryItem[]) {
+  return history
+    .filter((item) => item.answer.length)
+    .map((item) => item.answer);
+}
+
+function buildInitialTurns(
+  dimensions: InboxClarificationDimension[],
+  history: InboxClarificationHistoryItem[],
+  clarificationStatus?: "asking" | "done",
+  summaryText = "",
+): Turn[] {
+  const turns: Turn[] = [];
+
+  if (history.length) {
+    for (const item of history) {
+      turns.push({
+        role: "ai",
+        text: item.question,
+        reflection: item.reflection ?? undefined,
+        options: item.answer.length ? undefined : item.options,
+        multi: item.multi,
+        key: item.key,
+      });
+      if (item.answer.length) {
+        turns.push({ role: "user", text: item.answer.join("、") });
+      }
+    }
+    if (clarificationStatus === "done" && summaryText) {
+      turns.push({ role: "ai", text: summaryText });
+    }
+    return turns;
+  }
+
+  if (dimensions.length) {
+    turns.push({
+      role: "ai",
+      text: dimensions[0].question,
+      options: dimensions[0].options,
+      multi: dimensions[0].multi,
+      key: dimensions[0].key,
+    });
+  }
+  if (clarificationStatus === "done" && summaryText) {
+    turns.push({ role: "ai", text: summaryText });
+  }
+  return turns;
+}
 
 function closingFor(answers: string[]) {
   const signal = answers.join(" ");
@@ -66,24 +131,26 @@ export function ChatClarify({
   busy = false,
   liveText = "",
   submitLabel = "看看怎么走",
+  initialHistory = [],
+  clarificationStatus,
+  summaryText = "",
+  onNext,
   onSubmit,
 }: Props) {
   const [turns, setTurns] = useState<Turn[]>(() =>
-    dimensions.length
-      ? [
-          {
-            role: "ai",
-            text: dimensions[0].question,
-            options: dimensions[0].options,
-            multi: dimensions[0].multi,
-          },
-        ]
-      : [],
+    buildInitialTurns(dimensions, initialHistory, clarificationStatus, summaryText),
   );
-  const [answers, setAnswers] = useState<string[][]>([]);
+  const [answers, setAnswers] = useState<string[][]>(() =>
+    initialAnswers(initialHistory),
+  );
+  const [history, setHistory] =
+    useState<InboxClarificationHistoryItem[]>(initialHistory);
   const [pending, setPending] = useState<string[]>([]);
   const [thinking, setThinking] = useState(false);
-  const [done, setDone] = useState(dimensions.length === 0);
+  const [done, setDone] = useState(
+    clarificationStatus === "done" ||
+      (!initialHistory.length && dimensions.length === 0),
+  );
   const [typed, setTyped] = useState("");
   const [directInput, setDirectInput] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -95,6 +162,7 @@ export function ChatClarify({
   const showOptions = Boolean(
     lastTurn?.role === "ai" && lastTurn.options?.length && !done,
   );
+
   useEffect(() => {
     const node = scrollRef.current;
     if (node) node.scrollTop = node.scrollHeight;
@@ -109,20 +177,75 @@ export function ChatClarify({
     );
   }
 
-  function commit(answer: string[]) {
+  async function commit(answer: string[]) {
     if (busy || thinking || !answer.length) return;
-    const nextAnswered = answeredCount + 1;
-    const isLast = nextAnswered >= dimensions.length;
+    const currentTurn = lastTurn;
     const all = [...answers, answer];
+    const nextHistory = history.map((item) =>
+      item.answer.length === 0 ? { ...item, answer } : item,
+    );
+
     setTurns((current) => [
       ...current,
       { role: "user", text: answer.join("、") },
     ]);
-    setAnswers((current) => [...current, answer]);
+    setAnswers(all);
+    if (onNext) setHistory(nextHistory);
     setPending([]);
     setTyped("");
     setDirectInput(false);
     setThinking(true);
+
+    if (onNext) {
+      try {
+        const result = await onNext({ answer, history: nextHistory });
+        if (result.status === "done") {
+          setDone(true);
+          setTurns((current) => [
+            ...current,
+            {
+              role: "ai",
+              text: result.summaryText || closingFor(all.flat()),
+            },
+          ]);
+        } else if (result.question) {
+          const nextHistoryItem: InboxClarificationHistoryItem = {
+            ...result.question,
+            answer: [],
+            reflection: result.reflection ?? null,
+          };
+          setHistory([...nextHistory, nextHistoryItem]);
+          setTurns((current) => [
+            ...current,
+            {
+              role: "ai",
+              text: result.question?.question ?? "",
+              reflection: result.reflection ?? undefined,
+              options: result.question?.options,
+              multi: result.question?.multi,
+              key: result.question?.key,
+            },
+          ]);
+        }
+      } catch {
+        setTurns((current) => [
+          ...current,
+          {
+            role: "ai",
+            text: "这次没接上，再回答一次刚才的问题。",
+            options: currentTurn?.options,
+            multi: currentTurn?.multi,
+            key: currentTurn?.key,
+          },
+        ]);
+      } finally {
+        setThinking(false);
+      }
+      return;
+    }
+
+    const nextAnswered = answeredCount + 1;
+    const isLast = nextAnswered >= dimensions.length;
     window.setTimeout(() => {
       setThinking(false);
       if (!isLast) {
@@ -134,6 +257,7 @@ export function ChatClarify({
             text: next.question,
             options: next.options,
             multi: next.multi,
+            key: next.key,
           },
         ]);
       } else {
@@ -151,7 +275,7 @@ export function ChatClarify({
 
   function submitDirect() {
     if (!typed.trim() || busy || thinking) return;
-    commit([typed.trim()]);
+    void commit([typed.trim()]);
   }
 
   function toggleDirectInput() {
@@ -193,10 +317,12 @@ export function ChatClarify({
                 </span>
                 <div className="min-w-0 max-w-full">
                   <div className="rounded-xl rounded-tl-sm border border-border/70 bg-surface px-3 py-2.5 text-sm leading-6 text-ink">
-                    <TypewriterText
-                      text={turn.text}
-                      animate={index === turns.length - 1}
-                    />
+                    {turn.reflection ? (
+                      <p className="mb-1.5 text-xs leading-5 text-ink-muted">
+                        {turn.reflection}
+                      </p>
+                    ) : null}
+                    <span className="whitespace-pre-wrap">{turn.text}</span>
                   </div>
                   {showOptions && index === turns.length - 1 ? (
                     <div className="mt-2">
@@ -208,7 +334,7 @@ export function ChatClarify({
                               key={option}
                               type="button"
                               onClick={() =>
-                                isMulti ? toggle(option) : commit([option])
+                                isMulti ? toggle(option) : void commit([option])
                               }
                               disabled={busy || thinking}
                               className={
@@ -242,7 +368,7 @@ export function ChatClarify({
                           <p className="text-[11px] text-ink-muted">可多选</p>
                           <button
                             type="button"
-                            onClick={() => commit(pending)}
+                            onClick={() => void commit(pending)}
                             disabled={!pending.length || busy || thinking}
                             className="zouzou-primary-button inline-flex h-8 items-center gap-1 rounded-lg bg-accent px-3 text-xs font-medium text-white transition-colors hover:bg-accent-strong disabled:cursor-not-allowed disabled:opacity-50"
                           >
@@ -282,7 +408,7 @@ export function ChatClarify({
                     <span className="size-1.5 animate-[zouzou-soft-pulse_1s_ease-in-out_infinite] rounded-full bg-ink-muted [animation-delay:150ms]" />
                     <span className="size-1.5 animate-[zouzou-soft-pulse_1s_ease-in-out_infinite] rounded-full bg-ink-muted [animation-delay:300ms]" />
                   </span>
-                  {waitingLabel}
+                  {onNext ? "正在顺着你的回答判断..." : waitingLabel}
                 </span>
               )}
             </div>

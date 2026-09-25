@@ -2,6 +2,11 @@ import { toDateInputValue } from "@/lib/date";
 import { after } from "next/server";
 import { buildTaskContract } from "@/lib/task-contract";
 import {
+  collapsePlannedTasks,
+  MAX_AI_TASKS_PER_PLAN,
+  MAX_REVIEW_NEXT_ACTIONS,
+} from "@/lib/task-flow";
+import {
   estimateAiUsage,
   hasAiQuota,
   isAiQuotaEnabled,
@@ -10,6 +15,7 @@ import {
 import {
   OUTPUT_QUALITY_RULES,
   PLAN_SYSTEM_PROMPT,
+  SOCRATIC_CLARIFY_SYSTEM_PROMPT,
   buildPlanUserPayload,
 } from "@/lib/ai-prompts";
 
@@ -28,6 +34,7 @@ export type InboxPlanTask = {
 
 export type InboxPlan = {
   action: "create_project" | "existing_project" | "single_task" | "ignore";
+  taskDisposition?: "attach" | "new_tasks";
   projectName: string | null;
   projectObjective: string | null;
   projectMilestone: string | null;
@@ -58,15 +65,45 @@ export type InboxClarificationDimension = {
   multi?: boolean;
 };
 
+export type InboxClarificationHistoryItem = InboxClarificationDimension & {
+  answer: string[];
+  reflection?: string | null;
+};
+
+export type InboxClarificationSummary = {
+  originalIdea: string;
+  realProblem: string;
+  confirmedFacts: string[];
+  interpretations: string[];
+  valueJudgments: string[];
+  goals: string[];
+  unverifiedAssumptions: string[];
+  keyVariable: string;
+  newQuestion: string;
+};
+
 export type InboxClarification = {
   dimensions: InboxClarificationDimension[];
   supplementPlaceholder: string;
+  mode?: "socratic";
+  status?: "asking" | "done";
+  askedCount?: number;
+  maxQuestions?: number;
+  history?: InboxClarificationHistoryItem[];
+  summary?: InboxClarificationSummary | null;
 };
 
 export type InboxProjectContext = {
   name: string;
   objective: string | null;
   currentMilestone: string | null;
+  openTaskCount?: number;
+  openTasks?: Array<{
+    id: string;
+    title: string;
+    shortTitle: string | null;
+    status: string;
+  }>;
 };
 
 export type TaskEditSuggestion = {
@@ -839,6 +876,235 @@ function heuristicClarification(
   };
 }
 
+function normalizeClarificationDimension(
+  value: unknown,
+): InboxClarificationDimension | null {
+  if (!value || typeof value !== "object") return null;
+  const raw = value as Record<string, unknown>;
+  if (typeof raw.question !== "string" || !Array.isArray(raw.options)) return null;
+  const options = raw.options
+    .filter((option): option is string => typeof option === "string" && Boolean(option.trim()))
+    .slice(0, 3)
+    .map((option) => option.trim().slice(0, 100));
+  if (!options.length) return null;
+  const key = typeof raw.key === "string" && raw.key.trim()
+    ? raw.key.trim().slice(0, 40)
+    : "dimension-" + Math.random().toString(36).slice(2, 7);
+  return {
+    key,
+    question: raw.question.trim().slice(0, 200),
+    options,
+    ...(raw.multi === true ? { multi: true } : {}),
+  };
+}
+
+function clarificationHistoryToDimensions(
+  history: InboxClarificationHistoryItem[],
+): InboxClarificationDimension[] {
+  return history.map((item) => ({
+    key: item.key,
+    question: item.question,
+    options: item.options,
+    ...(item.multi ? { multi: true } : {}),
+  }));
+}
+
+function normalizeClarificationSummary(
+  value: unknown,
+  fallback: InboxClarificationSummary,
+): InboxClarificationSummary {
+  if (!value || typeof value !== "object") return fallback;
+  const raw = value as Record<string, unknown>;
+  const stringValue = (item: unknown, fallbackValue: string) =>
+    typeof item === "string" && item.trim()
+      ? item.trim().slice(0, 500)
+      : fallbackValue;
+  const stringList = (item: unknown, fallbackValue: string[]) =>
+    Array.isArray(item)
+      ? item
+          .filter((entry): entry is string => typeof entry === "string" && Boolean(entry.trim()))
+          .slice(0, 5)
+          .map((entry) => entry.trim().slice(0, 300))
+      : fallbackValue;
+  return {
+    originalIdea: stringValue(raw.originalIdea, fallback.originalIdea),
+    realProblem: stringValue(raw.realProblem, fallback.realProblem),
+    confirmedFacts: stringList(raw.confirmedFacts, fallback.confirmedFacts),
+    interpretations: stringList(raw.interpretations, fallback.interpretations),
+    valueJudgments: stringList(raw.valueJudgments, fallback.valueJudgments),
+    goals: stringList(raw.goals, fallback.goals),
+    unverifiedAssumptions: stringList(raw.unverifiedAssumptions, fallback.unverifiedAssumptions),
+    keyVariable: stringValue(raw.keyVariable, fallback.keyVariable),
+    newQuestion: stringValue(raw.newQuestion, fallback.newQuestion),
+  };
+}
+
+function buildSocraticFallbackSummary(
+  content: string,
+  history: InboxClarificationHistoryItem[],
+): InboxClarificationSummary {
+  const answers = history.flatMap((item) => item.answer).map((answer) => answer.trim()).filter(Boolean);
+  const lastQuestion = history.at(-1)?.question ?? "";
+  return {
+    originalIdea: content,
+    realProblem: answers[0]
+      ? "你现在真正卡住的是：" + answers[0]
+      : "先把「" + content + "」里最影响下一步的限制说清楚。",
+    confirmedFacts: answers.slice(0, 3),
+    interpretations: [],
+    valueJudgments: [],
+    goals: [],
+    unverifiedAssumptions: [],
+    keyVariable: lastQuestion,
+    newQuestion: "确认这次最想推进的方向和完成标准后，再生成下一步。",
+  };
+}
+
+function buildSocraticStartFallback(
+  content: string,
+  projectNames: string[],
+): InboxClarification {
+  const fallback = heuristicClarification(content, projectNames);
+  const first = fallback.dimensions[0];
+  if (!first) {
+    return {
+      dimensions: [],
+      supplementPlaceholder: "",
+      mode: "socratic",
+      status: "done",
+      askedCount: 0,
+      maxQuestions: 3,
+      history: [],
+      summary: buildSocraticFallbackSummary(content, []),
+    };
+  }
+  const history: InboxClarificationHistoryItem[] = [
+    { ...first, answer: [], reflection: null },
+  ];
+  return {
+    dimensions: clarificationHistoryToDimensions(history),
+    supplementPlaceholder: "",
+    mode: "socratic",
+    status: "asking",
+    askedCount: 1,
+    maxQuestions: 3,
+    history,
+    summary: null,
+  };
+}
+
+export async function generateSocraticClarification(input: {
+  content: string;
+  history: InboxClarificationHistoryItem[];
+  apiKey?: string;
+  model?: string;
+  baseUrl?: string;
+  projectContext?: InboxProjectContext[];
+  memorySummary?: string;
+  evidence?: string[];
+  maxQuestions?: number;
+  onDelta?: (delta: string) => void;
+}): Promise<InboxClarification> {
+  const maxQuestions = Math.min(Math.max(input.maxQuestions ?? 3, 1), 3);
+  const fallbackSummary = buildSocraticFallbackSummary(input.content, input.history);
+  const startFallback = buildSocraticStartFallback(
+    input.content,
+    (input.projectContext ?? []).map((project) => project.name),
+  );
+  const text = await callModel(
+    SOCRATIC_CLARIFY_SYSTEM_PROMPT,
+    JSON.stringify({
+      originalIdea: input.content,
+      contextSummary: input.memorySummary ?? null,
+      contextEvidence: input.evidence ?? [],
+      history: input.history,
+      askedCount: input.history.length,
+      maxQuestions,
+    }),
+    input.apiKey,
+    input.model,
+    input.baseUrl,
+    0.55,
+    { onDelta: input.onDelta, maxTokens: 900 },
+  );
+
+  if (!text) {
+    if (!input.history.length) return startFallback;
+    return {
+      dimensions: clarificationHistoryToDimensions(input.history),
+      supplementPlaceholder: "",
+      mode: "socratic",
+      status: "done",
+      askedCount: input.history.length,
+      maxQuestions,
+      history: input.history,
+      summary: fallbackSummary,
+    };
+  }
+
+  try {
+    const raw = JSON.parse(extractJson(text) ?? "{}") as Record<string, unknown>;
+    const forcedDone = raw.done === true || input.history.length >= maxQuestions;
+    if (forcedDone) {
+      return {
+        dimensions: clarificationHistoryToDimensions(input.history),
+        supplementPlaceholder: "",
+        mode: "socratic",
+        status: "done",
+        askedCount: input.history.length,
+        maxQuestions,
+        history: input.history,
+        summary: normalizeClarificationSummary(raw.summary, fallbackSummary),
+      };
+    }
+
+    const question = normalizeClarificationDimension(raw.question);
+    if (!question) {
+      if (!input.history.length) return startFallback;
+      return {
+        dimensions: clarificationHistoryToDimensions(input.history),
+        supplementPlaceholder: "",
+        mode: "socratic",
+        status: "done",
+        askedCount: input.history.length,
+        maxQuestions,
+        history: input.history,
+        summary: normalizeClarificationSummary(raw.summary, fallbackSummary),
+      };
+    }
+
+    const reflection = typeof raw.reflection === "string" && raw.reflection.trim()
+      ? raw.reflection.trim().slice(0, 300)
+      : null;
+    const history: InboxClarificationHistoryItem[] = [
+      ...input.history,
+      { ...question, answer: [], reflection },
+    ];
+    return {
+      dimensions: clarificationHistoryToDimensions(history),
+      supplementPlaceholder: "",
+      mode: "socratic",
+      status: "asking",
+      askedCount: history.length,
+      maxQuestions,
+      history,
+      summary: null,
+    };
+  } catch {
+    if (!input.history.length) return startFallback;
+    return {
+      dimensions: clarificationHistoryToDimensions(input.history),
+      supplementPlaceholder: "",
+      mode: "socratic",
+      status: "done",
+      askedCount: input.history.length,
+      maxQuestions,
+      history: input.history,
+      summary: fallbackSummary,
+    };
+  }
+}
+
 export async function clarifyInbox(
   content: string,
   projectNames: string[],
@@ -942,6 +1208,8 @@ export async function planInbox(
   evidence?: string[],
   maxTasks?: number,
   onDelta?: (delta: string) => void,
+  clarificationHistory?: InboxClarificationHistoryItem[],
+  clarificationSummary?: InboxClarificationSummary | null,
 ) {
   const clarifiedContent = [content, direction, supplement]
     .filter((part): part is string => Boolean(part?.trim()))
@@ -957,6 +1225,13 @@ export async function planInbox(
       projects: projectContext ?? [],
       memorySummary: memorySummary ?? null,
       dimensionChoices: dimensionChoices ?? [],
+      clarificationHistory: (clarificationHistory ?? []).map((item) => ({
+        key: item.key,
+        question: item.question,
+        answers: item.answer,
+        reflection: item.reflection ?? null,
+      })),
+      clarificationSummary: clarificationSummary ?? null,
       contextEvidence: evidence ?? [],
       maxTasks: maxTasks ?? null,
     }),
@@ -971,17 +1246,31 @@ export async function planInbox(
 
   try {
     const raw = JSON.parse(extractJson(text) ?? "{}") as Partial<InboxPlan>;
-    const tasks = Array.isArray(raw.tasks)
-      ? raw.tasks.map(safePlanTask).slice(0, maxTasks ?? 5)
-      : fallback.tasks;
     const action = safePlanAction(raw.action);
+    const projectName =
+      typeof raw.projectName === "string" && raw.projectName.trim()
+        ? raw.projectName.trim().slice(0, 120)
+        : fallback.projectName;
+
+    const taskDisposition =
+      raw.taskDisposition === "attach" || raw.taskDisposition === "new_tasks"
+        ? raw.taskDisposition
+        : action === "create_project"
+          ? "new_tasks"
+          : "attach";
+    const taskLimit = Math.min(
+      maxTasks ?? MAX_AI_TASKS_PER_PLAN,
+      MAX_AI_TASKS_PER_PLAN,
+    );
+    const rawTasks = Array.isArray(raw.tasks)
+      ? raw.tasks.map(safePlanTask)
+      : fallback.tasks;
+    const tasks = collapsePlannedTasks(rawTasks, taskLimit);
 
     return {
       action,
-      projectName:
-        typeof raw.projectName === "string" && raw.projectName.trim()
-          ? raw.projectName.trim().slice(0, 120)
-          : fallback.projectName,
+      taskDisposition,
+      projectName,
       projectObjective:
         typeof raw.projectObjective === "string" && raw.projectObjective.trim()
           ? raw.projectObjective.trim().slice(0, 500)
@@ -1642,6 +1931,7 @@ function heuristicReview(
     name: string;
     currentMilestone: string | null;
     taskCount: number;
+    openTaskCount?: number;
   }>,
 ) {
   const projectSummary = projects.length
@@ -1674,24 +1964,28 @@ function heuristicReview(
     summary: completed.length
       ? `今天完成了 ${completedText}。${openText}${projectSummary}`.trim()
       : `今天没有完成明确任务。${openText}${projectSummary}`.trim(),
-    nextActions: open
-      .slice(0, 3)
-      .map(
-        (task) =>
-          `${normalizeShortTitle(null, task.title)}\n${task.title}`,
-      )
-      .join("\n"),
+    nextActions: open.length
+      ? ""
+      : projects.length
+        ? `继续当前里程碑\n把「${projects[0].name}」下一件要拿到的具体结果写清并开始执行`
+        : "",
   };
 }
 
 export async function generateReviewDraft(input: {
   completed: Array<{ title: string; projectName: string | null }>;
-  open: Array<{ title: string; projectName: string | null }>;
+  open: Array<{
+    id?: string;
+    title: string;
+    status?: string;
+    projectName: string | null;
+  }>;
   planned: Array<{ title: string }>;
   projects: Array<{
     name: string;
     currentMilestone: string | null;
     taskCount: number;
+    openTaskCount?: number;
   }>;
 }, evidence?: string[], onDelta?: (delta: string) => void) {
   const fallback = heuristicReview(
@@ -1701,8 +1995,10 @@ export async function generateReviewDraft(input: {
     input.projects,
   );
 
+  const reviewPrompt = `你是走走里的每日复盘伙伴。请根据当天完成的任务、今日计划、未完成任务和项目状态，写一段像用户自己留在纸上的复盘，不要写成汇报、心理分析或总结陈词。summary 2-4 句话，先说具体做了什么，再说卡在哪里、下一步怎么判断；不要使用“今天真正推进的是”“不是……而是……”“意味着”“价值在于”等模板句，不要罗列任务数量。nextActions 只写 ${MAX_REVIEW_NEXT_ACTIONS} 条，也可以返回空字符串。已有未完成任务时不要再新建，只判断继续、调整还是替换；只有项目没有未完成任务时才给一条新任务。每条任务分两行：第一行是 6-16 个字的精简标题，第二行是 20-45 个字的具体说明。不要标序号、不要项目符号、不要竖线、不要写日期。只返回 JSON，不要 Markdown。格式：{\"summary\":\"总结\",\"nextActions\":\"精简标题\\n具体说明\"}。`;
+
   const text = await callModel(
-    "你是走走里的每日复盘伙伴。请根据当天完成的任务、今日计划、未完成任务和项目状态，写一段像用户自己留在纸上的复盘，不要写成汇报、心理分析或总结陈词。summary 2-4 句话，先说具体做了什么，再说卡在哪里、下一步怎么判断；不要使用“今天真正推进的是”“不是……而是……”“意味着”“价值在于”等模板句，不要罗列任务数量。nextActions 只写 1-3 条，每条任务分两行：第一行是 6-16 个字的精简标题，第二行是 20-45 个字的具体说明。不要标序号、不要项目符号、不要竖线、不要写日期。只返回 JSON，不要 Markdown。格式：{\"summary\":\"总结\",\"nextActions\":\"精简标题\\n具体说明\\n精简标题\\n具体说明\"}。",
+    reviewPrompt,
     JSON.stringify({ ...input, contextEvidence: evidence ?? [] }),
     undefined,
     undefined,
@@ -1719,9 +2015,15 @@ export async function generateReviewDraft(input: {
       typeof raw.summary === "string" &&
       typeof raw.nextActions === "string"
     ) {
+      const nextActions = raw.nextActions
+        .split(/\r?\n/)
+        .map((line) => line.trim())
+        .filter(Boolean)
+        .slice(0, MAX_REVIEW_NEXT_ACTIONS * 2)
+        .join("\n");
       return {
         summary: raw.summary.trim(),
-        nextActions: raw.nextActions.trim(),
+        nextActions,
       };
     }
   } catch {

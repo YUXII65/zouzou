@@ -51,9 +51,19 @@ test("应用代码不再引用 SQLite 时代的 prisma/dev.db", () => {
 const PUBLIC_ROUTES = new Set([
   // 健康检查：只返回 ok，失败时返回经过脱敏的错误信息；必须不依赖登录态
   "src/app/api/health/route.ts",
+  // 登录/注册必须在未登录态可访问，只负责签发会话，不读取用户数据
+  "src/app/api/auth/login/route.ts",
+  "src/app/api/auth/register/route.ts",
+  "src/app/api/miniprogram/auth/login/route.ts",
+  "src/app/api/miniprogram/auth/register/route.ts",
 ]);
 
-const AUTH_HELPERS = ["requireUser", "getCurrentUser", "getAdminUser"];
+const AUTH_HELPERS = [
+  "requireUser",
+  "getCurrentUser",
+  "getAdminUser",
+  "getMiniProgramUser",
+];
 
 function apiRoutes() {
   return walk(path.join(root, "src", "app", "api")).filter((file) =>
@@ -89,7 +99,7 @@ test("白名单里的路由都真实存在（避免白名单名写错后失效�
 test("公开路由的数量被显式限制在最小集合内", () => {
   // 公开路由一旦变多，就应该有人重新读一遍这条测试，而不是默默放行。
   assert.ok(
-    PUBLIC_ROUTES.size <= 1,
+    PUBLIC_ROUTES.size <= 5,
     `公开路由增加到 ${PUBLIC_ROUTES.size} 个，请确认这是有意为之`,
   );
 });

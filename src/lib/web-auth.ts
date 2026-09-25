@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { hashPassword, verifyPassword } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { recordUsageEvent } from "@/lib/usage";
+import { newUserEntryPath } from "@/lib/entry-policy";
 import {
   issueSessionToken,
   SESSION_COOKIE,
@@ -163,10 +164,7 @@ export async function handleWebAuth(request: Request, mode: WebAuthMode) {
     }
 
     if (result.kind === "created") {
-      return redirectWithSession(
-        "/welcome?signup=register",
-        result.user.id,
-      );
+      return redirectWithSession(newUserEntryPath(next), result.user.id);
     }
     return redirectWithSession(next, result.user.id);
   } catch (error) {

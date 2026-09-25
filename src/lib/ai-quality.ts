@@ -99,6 +99,12 @@ export function checkPlanQuality(
     issues.push("缺少 reason，没有说明为什么这样安排");
   }
 
+  if (
+    typeof typed.taskDisposition === "string" &&
+    !["attach", "new_tasks"].includes(typed.taskDisposition)
+  ) {
+    issues.push(`taskDisposition 非法：${typed.taskDisposition}`);
+  }
   if (!tasks.length) {
     issues.push("至少要有一条任务");
     return issues;

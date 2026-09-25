@@ -1,9 +1,13 @@
 import { prisma } from "@/lib/prisma";
 import { endOfDay, startOfDay } from "@/lib/date";
 import { buildTaskContract } from "@/lib/task-contract";
+import {
+  appendTaskContinuation,
+  MAX_REVIEW_NEXT_ACTIONS,
+  OPEN_TASK_STATUSES,
+} from "@/lib/task-flow";
 
 const TASK_EXECUTION_MODES = ["quick", "tool", "produce", "explore", "project"] as const;
-const TASK_TOOL_POLICIES = ["none", "read", "confirm-write"] as const;
 
 function taskContractData(input: { title: string; notes?: string | null; executionMode?: string | null }) {
   const inferred = buildTaskContract(`${input.title} ${input.notes ?? ""}`.trim(), input.title);
@@ -57,7 +61,14 @@ export async function syncReviewRelations(
   const projectCandidates = [...projectStats.values()].sort(
     (a, b) => b.count - a.count || b.updatedAt.getTime() - a.updatedAt.getTime(),
   );
-  const defaultProjectId = projectCandidates[0]?.id ?? null;
+  const fallbackProject = projectCandidates.length
+    ? null
+    : await prisma.project.findFirst({
+        where: { userId, status: "active" },
+        orderBy: [{ updatedAt: "desc" }, { id: "asc" }],
+        select: { id: true },
+      });
+  const defaultProjectId = projectCandidates[0]?.id ?? fallbackProject?.id ?? null;
 
   function projectIdForNextAction(title: string) {
     const normalized = title.trim().toLowerCase();
@@ -95,39 +106,92 @@ export async function syncReviewRelations(
   });
 
   await prisma.$transaction(async (tx) => {
-    for (const [index, action] of nextActions.entries()) {
+    for (const [index, action] of nextActions
+      .slice(0, MAX_REVIEW_NEXT_ACTIONS)
+      .entries()) {
       const existing = existingActions[index];
       const projectId = projectIdForNextAction(action.title);
-      if (existing) {
-        await tx.reviewNextAction.update({
-          where: { id: existing.id, userId },
-          data: { title: action.title, status: "pending", sortOrder: index },
-        });
-        if (existing.taskId) {
-          await tx.task.update({
+      const scheduledDate = new Date(review.reviewDate);
+      scheduledDate.setDate(scheduledDate.getDate() + 1);
+
+      const linkedTask = existing?.taskId
+        ? await tx.task.findFirst({
             where: { id: existing.taskId, userId },
+            select: { id: true, notes: true, status: true },
+          })
+        : null;
+      const openTask =
+        linkedTask && OPEN_TASK_STATUSES.includes(linkedTask.status as (typeof OPEN_TASK_STATUSES)[number])
+          ? linkedTask
+          : projectId
+            ? await tx.task.findFirst({
+                where: {
+                  userId,
+                  projectId,
+                  status: { in: [...OPEN_TASK_STATUSES] },
+                },
+                orderBy: [{ updatedAt: "desc" }, { id: "asc" }],
+                select: { id: true, notes: true, status: true },
+              })
+            : null;
+
+      if (openTask) {
+        const notes = appendTaskContinuation(
+          openTask.notes,
+          action.shortTitle,
+          action.title !== action.shortTitle ? action.title : null,
+        );
+        await tx.task.update({
+          where: { id: openTask.id, userId },
+          data: { notes },
+        });
+
+        if (existing) {
+          await tx.reviewNextAction.update({
+            where: { id: existing.id, userId },
             data: {
               title: action.title,
-              shortTitle: action.shortTitle,
-              projectId,
-              ...taskContractData({ title: action.title }),
+              status: "pending",
+              sortOrder: index,
+              taskId: existing.taskId,
+            },
+          });
+        } else {
+          await tx.reviewNextAction.create({
+            data: {
+              userId,
+              reviewId: review.id,
+              title: action.title,
+              sortOrder: index,
             },
           });
         }
-      } else {
-        const scheduledDate = new Date(review.reviewDate);
-        scheduledDate.setDate(scheduledDate.getDate() + 1);
-        const task = await tx.task.create({
+        continue;
+      }
+
+      const task = await tx.task.create({
+        data: {
+          userId,
+          title: action.title,
+          shortTitle: action.shortTitle,
+          projectId,
+          priority: "medium",
+          scheduledDate,
+          ...taskContractData({ title: action.title }),
+        },
+      });
+
+      if (existing) {
+        await tx.reviewNextAction.update({
+          where: { id: existing.id, userId },
           data: {
-            userId,
             title: action.title,
-            shortTitle: action.shortTitle,
-            projectId,
-            priority: "medium",
-            scheduledDate,
-            ...taskContractData({ title: action.title }),
+            status: "pending",
+            sortOrder: index,
+            taskId: task.id,
           },
         });
+      } else {
         await tx.reviewNextAction.create({
           data: {
             userId,
@@ -140,8 +204,24 @@ export async function syncReviewRelations(
       }
     }
 
-    for (let index = nextActions.length; index < existingActions.length; index += 1) {
+    for (
+      let index = Math.min(nextActions.length, MAX_REVIEW_NEXT_ACTIONS);
+      index < existingActions.length;
+      index += 1
+    ) {
       const extra = existingActions[index];
+      if (extra.taskId) {
+        const linkedTask = await tx.task.findFirst({
+          where: { id: extra.taskId, userId },
+          select: { id: true, status: true },
+        });
+        if (linkedTask?.status === "todo") {
+          await tx.task.update({
+            where: { id: linkedTask.id, userId },
+            data: { status: "cancelled", completedAt: null, completedBy: null },
+          });
+        }
+      }
       await tx.reviewNextAction.update({
         where: { id: extra.id, userId },
         data: { status: "cancelled" },

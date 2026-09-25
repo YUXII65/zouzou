@@ -1,30 +1,11 @@
 import Link from "next/link";
-import {
-  ArrowRight,
-  FolderKanban,
-  FolderPlus,
-  ListTodo,
-  PencilLine,
-} from "lucide-react";
+import { ListTodo } from "lucide-react";
 import { PageHeader } from "@/components/page-header";
 import { FirstRunTour } from "@/components/first-run-tour";
-import { FirstTaskReviewHint } from "@/components/first-task-review-hint";
 import { Panel, PanelHeader } from "@/components/panel";
-import { EmptyState } from "@/components/empty-state";
-import { ProjectForm } from "@/components/project-form";
 import { TaskForm } from "@/components/task-form";
-import { TaskRow } from "@/components/task-row";
-import { ConfirmActionButton } from "@/components/confirm-action-button";
-import { StatusBadge } from "@/components/status-badge";
 import { WorkspaceProjectBrowser } from "@/components/workspace-project-browser";
-import {
-  createProject,
-  createTask,
-  deleteProject,
-  updateProject,
-  updateTask,
-} from "@/app/actions";
-import { cx } from "@/lib/utils";
+import { updateTask } from "@/app/actions";
 import { prisma } from "@/lib/prisma";
 import { requireUser } from "@/lib/auth";
 import {
@@ -36,24 +17,6 @@ import { buildTaskContract } from "@/lib/task-contract";
 import { repairUnassignedInboxProjects } from "@/lib/inbox-project";
 
 export const dynamic = "force-dynamic";
-
-const priorityOrder: Record<string, number> = {
-  urgent: 0,
-  high: 1,
-  medium: 2,
-  low: 3,
-};
-
-function sortTasks<T extends { priority: string }>(
-  tasks: T[],
-  sortMode: "order" | "priority",
-) {
-  if (sortMode !== "priority") return tasks;
-  return [...tasks].sort(
-    (a, b) =>
-      (priorityOrder[a.priority] ?? 9) - (priorityOrder[b.priority] ?? 9),
-  );
-}
 
 export default async function ProjectsPage({
   searchParams,
@@ -162,10 +125,10 @@ export default async function ProjectsPage({
           initialStep={firstRun.tourStep}
           context="workspace"
           hasTasks={tasks.length > 0}
+          reviewEligible={firstGroupReviewEligible}
         />
       ) : null}
 
-      <FirstTaskReviewHint eligible={firstGroupReviewEligible} />
 
       <WorkspaceProjectBrowser
         projects={browserProjects}

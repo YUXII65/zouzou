@@ -5,11 +5,9 @@ import {
   Clock3,
   Focus,
   ListTodo,
-  NotebookPen,
 } from "lucide-react";
 import { CalendarDatePanel } from "@/components/calendar-date-panel";
 import { FirstRunTour } from "@/components/first-run-tour";
-import { FirstTaskReviewHint } from "@/components/first-task-review-hint";
 import { Panel, PanelHeader } from "@/components/panel";
 import { EmptyState } from "@/components/empty-state";
 import { StatusBadge } from "@/components/status-badge";
@@ -58,6 +56,7 @@ type AgendaTask = {
     nextStep: string;
     createdAt: Date;
   }>;
+  doneWhen: string | null;
   project: { name: string } | null;
   inboxItem: { id: string } | null;
   reviewNextAction: {
@@ -189,9 +188,9 @@ export default async function TodayPage() {
           initialStep={firstRun.tourStep}
           context="home"
           hasTasks={tasks.length > 0}
+          reviewEligible={firstGroupReviewEligible}
         />
       ) : null}
-      <FirstTaskReviewHint eligible={firstGroupReviewEligible} />
       <CalendarDatePanel
         now={now}
         completedToday={completedToday}
@@ -324,6 +323,7 @@ function AgendaTaskRow({
               notes={task.notes}
               projectName={task.project?.name ?? null}
               status={task.status}
+              doneWhen={task.doneWhen}
             />
           </div>
         </div>

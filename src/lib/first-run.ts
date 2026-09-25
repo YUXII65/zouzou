@@ -4,7 +4,7 @@ import { FIRST_RUN_PREFERENCE } from "@/lib/preferences";
 const FRESH_ACCOUNT_DAYS = 14;
 
 export type FirstRunState = {
-  /** 新手引导进度："1" | "2" | "3" | "done" */
+  /** 新手引导进度："1" | "2" | "3" | "4" | "done" */
   tourStep: string;
   /** 是否还在新手期：决定是否显示引导、图标文字标签、页内提示 */
   isFirstRun: boolean;

@@ -15,21 +15,25 @@ import {
 
 const dismissButtonClass =
   "inline-flex h-7 items-center rounded-md border border-border bg-surface px-2.5 text-xs font-medium text-ink-secondary transition-colors hover:border-accent hover:text-accent";
+const primaryButtonClass =
+  "zouzou-primary-button inline-flex h-7 items-center rounded-md bg-accent px-2.5 text-xs font-medium text-white transition-colors hover:bg-accent-strong";
 
 /**
- * 新人引导只负责「记想法 → 推进任务 → 用便利贴」三步。
+ * 统一的新人引导：记想法 → 推进任务 → 便利贴 → 抽屉复盘。
  *
- * 首组任务完成后的复盘提示由 FirstTaskReviewHint 单独处理，
- * 这样用户完成首组任务的最后一件事就会看到，不用依赖引导走到哪一步。
+ * 前 3 步由用户在首页 / 书桌页自然触发，第 4 步只在首组任务完整收尾后出现。
+ * 复盘不再是独立弹层，而是这套 4 步引导的最后一环。
  */
 export function FirstRunTour({
   initialStep,
   context,
   hasTasks = false,
+  reviewEligible = false,
 }: {
   initialStep: string;
   context: "home" | "workspace";
   hasTasks?: boolean;
+  reviewEligible?: boolean;
 }) {
   const [step, setStep] = useState<TourStep>(() =>
     normalizeTourStep(initialStep),
@@ -44,6 +48,18 @@ export function FirstRunTour({
     void setFirstRunTourStep(next).catch(() => {});
   }, []);
 
+  const advance = useCallback(
+    (next: TourStep) => {
+      setStep(next);
+      persist(next);
+    },
+    [persist],
+  );
+
+  const finish = useCallback(() => {
+    advance("done");
+  }, [advance]);
+
   useEffect(() => {
     try {
       localStorage.setItem(TOUR_STORAGE_KEY, step);
@@ -56,34 +72,25 @@ export function FirstRunTour({
     function onAdvance(event: Event) {
       const detail = (event as CustomEvent<{ step?: unknown }>).detail;
       const next = normalizeTourStep(detail?.step);
-      setStep((current) =>
-        tourOrder(next) > tourOrder(current) ? next : current,
-      );
+      if (tourOrder(next) <= tourOrder(step)) return;
+      setStep(next);
       void setFirstRunTourStep(next).catch(() => {});
     }
 
     window.addEventListener(TOUR_EVENT, onAdvance);
     return () => window.removeEventListener(TOUR_EVENT, onAdvance);
-  }, []);
+  }, [step]);
 
   useEffect(() => {
     if (context === "workspace" && step === "1" && hasTasks) {
-      setStep("2");
-      persist("2");
+      advance("2");
     }
-  }, [context, hasTasks, persist, step]);
-
-  const finish = useCallback(() => {
-    setStep("done");
-    persist("done");
-  }, [persist]);
+  }, [advance, context, hasTasks, step]);
 
   const effectiveStep: TourStep =
     context === "workspace" && step === "1" && hasTasks ? "2" : step;
 
-  if (context === "home") {
-    if (effectiveStep !== "1") return null;
-
+  if (context === "home" && effectiveStep === "1") {
     return (
       <AnchoredHint
         target={TOUR_TARGETS.quickCapture}
@@ -91,13 +98,10 @@ export function FirstRunTour({
         onDismiss={finish}
         footer={
           <div className="flex items-center justify-between gap-3 text-xs text-ink-muted">
-            <span>1 / 3</span>
+            <span>1 / 4</span>
             <button
               type="button"
-              onClick={() => {
-                setStep("2");
-                persist("2");
-              }}
+              onClick={() => advance("2")}
               className={dismissButtonClass}
             >
               知道了
@@ -118,7 +122,7 @@ export function FirstRunTour({
         onDismiss={finish}
         footer={
           <div className="flex items-center justify-between gap-3 text-xs text-ink-muted">
-            <span>1 / 3</span>
+            <span>1 / 4</span>
             <button type="button" onClick={finish} className={dismissButtonClass}>
               知道了
             </button>
@@ -130,44 +134,19 @@ export function FirstRunTour({
     );
   }
 
-  if (effectiveStep === "2" && !hasTasks) {
-    return (
-      <AnchoredHint
-        target={TOUR_TARGETS.homeNav}
-        title="先把想法变成一条任务"
-        onDismiss={finish}
-        footer={
-          <div className="flex items-center justify-between gap-3 text-xs text-ink-muted">
-            <span>2 / 3</span>
-            <button type="button" onClick={finish} className={dismissButtonClass}>
-              知道了
-            </button>
-          </div>
-        }
-      >
-        点「日历」回去提交那条想法。出现任务后，再回来点下一步。
-      </AnchoredHint>
-    );
-  }
 
   if (effectiveStep === "2") {
     return (
       <AnchoredHint
         target={TOUR_TARGETS.nextButton}
         title="把任务推起来"
-        onDismiss={() => {
-          setStep("3");
-          persist("3");
-        }}
+        onDismiss={() => advance("3")}
         footer={
           <div className="flex items-center justify-between gap-3 text-xs text-ink-muted">
-            <span>2 / 3</span>
+            <span>2 / 4</span>
             <button
               type="button"
-              onClick={() => {
-                setStep("3");
-                persist("3");
-              }}
+              onClick={() => advance("3")}
               className={dismissButtonClass}
             >
               知道了
@@ -175,7 +154,7 @@ export function FirstRunTour({
           </div>
         }
       >
-        点击【下一步】推进任务，一次只用走一小步
+        点击【下一步】推进任务，一次只推进一个完整动作
       </AnchoredHint>
     );
   }
@@ -185,11 +164,15 @@ export function FirstRunTour({
       <AnchoredHint
         target={TOUR_TARGETS.stickyButton}
         title="使用便利贴"
-        onDismiss={finish}
+        onDismiss={() => advance("4")}
         footer={
           <div className="flex items-center justify-between gap-3 text-xs text-ink-muted">
-            <span>3 / 3</span>
-            <button type="button" onClick={finish} className={dismissButtonClass}>
+            <span>3 / 4</span>
+            <button
+              type="button"
+              onClick={() => advance("4")}
+              className={dismissButtonClass}
+            >
               知道了
             </button>
           </div>
@@ -197,6 +180,31 @@ export function FirstRunTour({
       >
         <span className="block">点一下【便利贴】，AI 会为你写一张详细执行步骤。</span>
         <span className="mt-1 block">你也可以补充自己的想法或卡点。</span>
+      </AnchoredHint>
+    );
+  }
+
+  if (effectiveStep === "4" && reviewEligible) {
+    return (
+      <AnchoredHint
+        target={TOUR_TARGETS.reviewNav}
+        title="抽屉复盘"
+        onDismiss={finish}
+        footer={
+          <div className="flex items-center justify-between gap-3 text-xs text-ink-muted">
+            <span>4 / 4</span>
+            <div className="flex items-center gap-2">
+              <Link href="/review" onClick={finish} className={primaryButtonClass}>
+                去复盘
+              </Link>
+              <button type="button" onClick={finish} className={dismissButtonClass}>
+                稍后
+              </button>
+            </div>
+          </div>
+        }
+      >
+        首组任务已完成。点左侧【抽屉】，用复盘留下今天的判断和明天的方向。
       </AnchoredHint>
     );
   }
