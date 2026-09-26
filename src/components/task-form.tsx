@@ -17,6 +17,7 @@ type TaskFormTask = {
   id: string;
   title: string;
   notes: string | null;
+  methodHint?: string | null;
   projectId: string | null;
   status: string;
   priority: string;
@@ -96,6 +97,22 @@ export function TaskForm({
             rows={3}
             placeholder="补充过程步骤、背景或你现在的想法"
             className={`${inputClass} resize-y`}
+          />
+        </div>
+
+        <div className="sm:col-span-2">
+          <label
+            htmlFor={`task-method-${id}`}
+            className="mb-1.5 block text-xs font-medium text-ink-secondary"
+          >
+            做法
+          </label>
+          <input
+            id={`task-method-${id}`}
+            name="methodHint"
+            defaultValue={task?.methodHint ?? ""}
+            placeholder="写清这件事最适合怎么推进"
+            className={inputClass}
           />
         </div>
 

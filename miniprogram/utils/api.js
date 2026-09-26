@@ -166,6 +166,13 @@ function clarifyIdea(content) {
   });
 }
 
+function advanceClarify(itemId, answer) {
+  return request("/api/miniprogram/ai/inbox/clarify", {
+    method: "POST",
+    data: { mode: "socratic", itemId, answer }
+  });
+}
+
 function planInbox(data) {
   return request("/api/miniprogram/ai/inbox/plan", {
     method: "POST",
@@ -329,6 +336,7 @@ module.exports = {
   getTools,
   createInboxItem,
   clarifyIdea,
+  advanceClarify,
   planInbox,
   confirmPlan,
   ignoreInbox,

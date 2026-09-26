@@ -26,7 +26,7 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 - 端口占用时改 3001/3002 等，并把新链接告诉用户。
 - 排障顺序：`Get-NetTCPConnection -LocalPort 3000 -State Listen` 确认监听 → 看 `.next-dev-3000.out.log` / `.next-dev-3000.err.log`。
 - **重构后必须确认进程晚于 build**：`next build` 完成后，旧的 `next start` 进程可能仍在运行并读取旧 manifest，表现为页面 HTML 正常但 `/_next/static/css/*.css` 返回 404、整页无样式。先停止所有本项目 `next start` 进程，再重新启动；检查进程 `CreationDate` 应晚于 `.next/BUILD_ID` 的更新时间。
-- 数据库是 Neon Postgres（`.env` 的 `DATABASE_URL`）：冷启动偶发 `terminating connection due to administrator command`，属环境问题不是代码 bug；登录/注册等写库操作偶尔需重试。
+- 数据库是 Neon Postgres（`.env` 的 `DATABASE_URL`）：冷启动偶发 `terminating connection due to administrator command`，属环境问题不是代码 bug；登录/注册等写库操作偶尔需重试。任务确认保存走 interactive transaction，必须使用 `withTransactionRetry`；Prisma 默认 5 秒事务超时会在 Neon 抖动时直接报 `P2028`，不能把这种失败伪装成「保存按钮没反应」。
 
 # 产品取舍（跨会话记忆，勿删）
 
@@ -69,6 +69,33 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 - AI 输出不要在每轮开头先肯定用户，不要复用「我大概知道你真正看重什么了」「接下来不再套标准流程」「先做最小下一步」「不是 A 而是 B」这类模板句，也不要把用户最后选的选项原样复述一遍当作理解。全局约束在 `src/lib/ai.ts` 的 `OUTPUT_QUALITY_RULES`，禁止删除。
 - 复盘生成的下一步任务要精炼：每条两行（精简标题 + 具体说明），具体内容放进任务正文里展开，不标序号、不写竖线。任务标题生成好再上屏，不能让用户看到「先有正文再总结标题」的过程。
 - `callModel` 必须有总时间预算（当前 26 秒上限，单次 20 秒），任何 AI 请求都不能让按钮无限停在「处理中」。
+
+# 对话澄清与规划方法（2026-09-26，跨会话记忆，勿删）
+
+- 澄清不是问卷。每轮先形成 `InboxClarificationFrame`（surfaceRequest / coreNeedHypothesis / decisionFork / decisiveUnknown / whyItChangesPlan / workingAssumptions / methodOptions），随 `aiSuggestionJson` 持久化，下一轮必须基于上一轮 frame 继续，不能重新猜一遍。
+- frame 还必须包含 `readiness`（ready / needs_context / needs_meaning）、`missingSlots`、`completionPrompt`、`completionOptions`。输入没有具体对象或明显在说“我不知道干什么”时，先进入“补齐信息”路径；不能自行补出产品、写作、求职、健身等领域。
+- 本地用 `src/lib/idea-readiness.ts` 做输入完整性预判，模型可以纠正，但第一问不能与缺失槽位脱节。用户选择“我也说不清”后，要继续帮助他外部化真实事情，而不是偷换成一个新的项目计划。
+- 只问会改变最终计划的未知点；如果候选答案最后得到同一种计划，就停止。低风险、可默认完成的小任务不追问。
+- 默认一次只问一个问题，选项通常 2-3 个；只有用户自己明确列出多个并列对象时，才允许最多 6 个，且不能再增加用户没提过的对象。
+- 结束时 `summary` 必须给出 `workingAssumption` 和 `ifWrongThen`，不能留下一个“会影响计划但没问”的 `newQuestion`。
+- AI 计划的每条任务都带 `methodHint`，和 title / doneWhen 同级；它必须说清最适合的做法，必要时在同一条里点出工具、材料、渠道或验证方式。不要新增独立「工具推荐」板块，methodHint 要内嵌在任务里，并持久化到 `tasks.methodHint`。
+- v3.5 规划任务还必须带 `recommendation`、`executionSteps`、`fallback`：推荐是已经替用户做出的默认决定，执行步骤要包含去哪里、做什么、例外怎么处理，fallback 是主方案失效时的替代路径。不能把“自己去设计几个方案”当第一任务。
+- 所有 AI 输出最终通过 `src/lib/decision.ts` 收敛成 `DecisionCard`：计划任务、便利贴建议、后续教练输出都走同一个“推荐 / 理由 / 执行步骤 / fallback / nextStep / 完成信号”结构；不要再在各 action 或组件里各自拼字段。
+- `DecisionRouter` 按用户当前请求区分 recommend / compare / plan / coach / clarify / review；任务便利贴手动提问也要先走这个路由，不能永远返回同一套教练步骤。澄清的 `aiSuggestionJson` 和计划的 `aiPlanJson` 都要保存 `DecisionSession`，把原始需求、核心假设、默认推荐、下一步和 fallback 串成同一条决策会话。
+- `buildAiContext` 要把 `task_completed / task_delayed / task_cancelled / plan_ignored / plan_edited / suggestion_useful / suggestion_useless` 和最近便利贴动作整理成 `decisionMemory`，并传给澄清、计划、今日建议、复盘和编辑建议。连续延期或取消的任务下一次不能原样再推，必须降低密度、换方法或缩小范围。
+- 复盘保存时必须把 `summary + nextActions` 形成 `DecisionSession`，写入 `Review.decisionJson`；`buildAiContext` 再把复盘结论读回 `decisionMemory`。这样“复盘 → 下一天建议”是同一条决策链，不是复盘文本和次日计划各自独立。
+- 今日建议的每条 `TodaySuggestion` 必须带 `decision`（DecisionSession）；用户点“有用 / 没用”时把该 session 写入反馈 detail，下一轮 `decisionMemory` 才能解释为什么换了推法。不要再返回只有 title + reason 的建议。
+- `DecisionSession` / `DecisionCard` 的 `explanation` 必须在用户侧可见：今日建议显示「调整依据」，任务/项目编辑建议显示同一条解释，自动生成的便利贴把 explanation 拼进 encouragement。不要只在后台保存。
+- 确认 AI 计划时，新的任务必须自动生成第一张便利贴：`recommendation` 作为便利贴主内容，`executionSteps` 作为步骤，`nextStep` 作为当前动作，`fallback` 作为一个例外步骤。便利贴成为任务的主执行界面，不再靠用户主动点一次才生成。
+- 首启引导（`completeFirstRun` / `planOnboarding`）必须走同一条决策链：`generateFirstRunPlan` 返回 `taskRecommendation / taskExecutionSteps / taskFallback`，落库时用 `decisionCardFromTask` + `stickyPayloadFromDecisionCard` 生成第一张便利贴。prompt 放在 `ai-prompts.ts` 的 `FIRST_RUN_PLAN_SYSTEM_PROMPT`，和评测脚本共用同一份，不要再写回内联字符串。
+- 判断"已经替用户做出决定"的标准：推荐本身要包含答案——要买的具体东西、要用的具体工具、要做的具体判断。凡是"先去了解 / 先去拍照 / 再筛选 / 再决定 / 挑出几个组合"这类把决定推迟给用户的写法都不合格。
+- 质量门禁：`pnpm eval:clarify`、`pnpm eval:ai`、`pnpm eval:first-run`、`pnpm verify:clarify-flow`（真实 HTTP，需本地服务）。
+- `pnpm eval:clarify` 同时覆盖单轮与多轮：corpus 里用 `followUps` 声明第 2 轮的模拟回答，断言第二问必须接住上一轮的话（`mustBuildOn`）、到上限必须收口。不要只加单轮用例。
+- `pnpm verify:clarify-flow` 除了校验落库，还要拉一次 `/workspace` 的真实 HTML，确认便利贴的 `nextStep` 和执行步骤渲染给了用户，不能只存在数据库里。
+- 任务标题下原来的“完整任务展开块”已删除。任务行直接展示便利贴中的 `nextStep`，完整任务信息分别进入任务编辑和便利贴；不要再恢复标题点击展开详情。
+- 澄清提示词使用 `CLARIFICATION_QUALITY_RULES`，不能继续把计划/任务质量规则追加到澄清请求里。
+- 澄清框不要直接展示流式 JSON 的局部结果。流式过程只允许显示稳定的阶段状态；最终问题和选项必须在完成时一次性替换，避免“先完整出现、又消失、再等待”的闪动。
+- 质量门禁：`pnpm eval:clarify`（澄清场景）、`pnpm eval:ai`（计划结构 + methodHint）、`pnpm verify:clarify-flow`（真实 HTTP 澄清到计划端到端，需本地服务）。
 
 # 线上部署（跨会话记忆，勿删）
 

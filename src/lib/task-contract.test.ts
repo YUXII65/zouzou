@@ -49,7 +49,14 @@ test("所有样本的轮次与工具策略都在允许范围内", () => {
       `${input} 的 toolPolicy 越界：${contract.toolPolicy}`,
     );
     assert.ok(contract.doneWhen.trim().length > 0);
+    assert.ok(contract.methodHint.trim().length > 0);
   }
+});
+
+test("每条执行合同都会带一句具体做法", () => {
+  const contract = buildTaskContract("验证用户是否愿意为这个功能付费");
+  assert.ok(contract.methodHint.includes("验证"));
+  assert.ok(contract.methodHint.length >= 12);
 });
 
 test("完成标准里不出现空泛说法", () => {

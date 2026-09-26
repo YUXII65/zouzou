@@ -29,6 +29,31 @@ export const TEMPLATE_PHRASES = [
   "今天真正推进的是",
 ];
 
+/** 没有给出真实做法的模板式方法建议 */
+export const VAGUE_METHOD_PHRASES = [
+  "按计划推进",
+  "一步一步来",
+  "先想清楚",
+  "做好准备",
+  "根据情况调整",
+  "开始行动",
+  "继续努力",
+  "慢慢来",
+];
+
+/** 看起来像问题，但没有区分度、不会改变计划的通用问句 */
+export const GENERIC_CLARIFY_QUESTIONS = [
+  "你最想要什么",
+  "你最看重什么",
+  "你在意什么",
+  "你想怎么做",
+  "第一步做什么",
+  "怎么开始",
+  "有什么想法",
+  "优先级是什么",
+  "你的目标是什么",
+];
+
 const EXECUTION_MODES = ["quick", "tool", "produce", "explore", "project"];
 const TOOL_POLICIES = ["none", "read", "confirm-write"];
 const MAX_TURNS_BY_MODE: Record<string, number> = {
@@ -61,8 +86,23 @@ function textFields(plan: AnyPlan): string[] {
     if (typeof plan[key] === "string") fields.push(plan[key] as string);
   }
   for (const task of asTasks(plan)) {
-    for (const key of ["title", "shortTitle", "doneWhen", "notes"]) {
+    for (const key of [
+      "title",
+      "shortTitle",
+      "doneWhen",
+      "methodHint",
+      "recommendation",
+      "fallback",
+      "notes",
+    ]) {
       if (typeof task[key] === "string") fields.push(task[key] as string);
+    }
+    if (Array.isArray(task.executionSteps)) {
+      fields.push(
+        ...task.executionSteps.filter(
+          (step): step is string => typeof step === "string",
+        ),
+      );
     }
   }
   return fields;
@@ -145,6 +185,38 @@ export function checkPlanQuality(
       issues.push(`${label}缺少 doneWhen，没写清什么算完成`);
     }
 
+    const methodHint =
+      typeof task.methodHint === "string" ? task.methodHint.trim() : "";
+    if (!methodHint) {
+      issues.push(`${label}缺少 methodHint，没有给出具体做法`);
+    } else if (methodHint.length < 8) {
+      issues.push(`${label}的 methodHint 太短，不足以指导执行`);
+    } else {
+      for (const phrase of VAGUE_METHOD_PHRASES) {
+        if (methodHint.includes(phrase)) {
+          issues.push(`${label}的 methodHint 是空泛做法：${phrase}`);
+        }
+      }
+    }
+
+    const recommendation =
+      typeof task.recommendation === "string" ? task.recommendation.trim() : "";
+    if (!recommendation) {
+      issues.push(`${label}缺少 recommendation，没有替用户做出默认决定`);
+    }
+    const executionSteps = Array.isArray(task.executionSteps)
+      ? task.executionSteps.filter(
+          (step): step is string => typeof step === "string" && Boolean(step.trim()),
+        )
+      : [];
+    if (!executionSteps.length) {
+      issues.push(`${label}缺少 executionSteps，没有现实执行路径`);
+    }
+    const fallback = typeof task.fallback === "string" ? task.fallback.trim() : "";
+    if (mode && mode !== "quick" && !fallback) {
+      issues.push(`${label}缺少 fallback，主方案失效时没有替代路径`);
+    }
+
     const shortTitle =
       typeof task.shortTitle === "string" ? task.shortTitle.trim() : "";
     if (!shortTitle) {
@@ -164,6 +236,193 @@ export function checkPlanQuality(
   }
   for (const hit of findPhrases(texts, TEMPLATE_PHRASES)) {
     issues.push(`出现模板句：${hit}`);
+  }
+
+  return issues;
+}
+
+export type ClarificationQualityContext = {
+  originalIdea?: string;
+  previousQuestions?: string[];
+  contextFacts?: string[];
+};
+
+type AnyClarification = Record<string, unknown>;
+
+function nonEmptyString(value: unknown) {
+  return typeof value === "string" && Boolean(value.trim());
+}
+
+function hasSharedFragment(left: string, right: string) {
+  const cleanLeft = left.replace(/[^\p{L}\p{N}]/gu, "");
+  const cleanRight = right.replace(/[^\p{L}\p{N}]/gu, "");
+  if (!cleanLeft || !cleanRight) return false;
+  const stopFragments = new Set([
+    "一个",
+    "这个",
+    "这些",
+    "可以",
+    "可能",
+    "就是",
+    "什么",
+    "东西",
+    "还有",
+    "已经",
+    "现在",
+  ]);
+  const minimum = 2;
+  for (let length = Math.min(6, cleanLeft.length); length >= minimum; length -= 1) {
+    for (let index = 0; index + length <= cleanLeft.length; index += 1) {
+      const fragment = cleanLeft.slice(index, index + length);
+      if (stopFragments.has(fragment)) continue;
+      if (cleanRight.includes(fragment)) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
+/**
+ * 检查一轮澄清输出是否真的在“做判断”，而不是换一种方式问问卷。
+ * 这里不评价模型是否聪明，只拦住结构缺失、重复提问和明显通用问句。
+ */
+export function checkClarificationQuality(
+  value: unknown,
+  context: ClarificationQualityContext = {},
+): string[] {
+  const issues: string[] = [];
+  if (!value || typeof value !== "object") {
+    return ["澄清结果不是有效的 JSON 对象"];
+  }
+
+  const raw = value as AnyClarification;
+  const frame =
+    raw.frame && typeof raw.frame === "object"
+      ? (raw.frame as Record<string, unknown>)
+      : null;
+  if (!frame) {
+    issues.push("缺少 frame，无法确认是否先形成了推进判断");
+  } else {
+    for (const key of [
+      "surfaceRequest",
+      "coreNeedHypothesis",
+      "decisionFork",
+      "decisiveUnknown",
+      "whyItChangesPlan",
+    ]) {
+      if (!nonEmptyString(frame[key])) {
+        issues.push(`frame 缺少 ${key}`);
+      }
+    }
+    const readiness = frame.readiness;
+    if (!["ready", "needs_context", "needs_meaning"].includes(String(readiness))) {
+      issues.push("frame.readiness 非法或缺失");
+    } else if (readiness !== "ready") {
+      if (!Array.isArray(frame.missingSlots) || frame.missingSlots.length === 0) {
+        issues.push("输入不完整时缺少 missingSlots");
+      }
+      if (!nonEmptyString(frame.completionPrompt)) {
+        issues.push("输入不完整时缺少 completionPrompt");
+      }
+      if (
+        !Array.isArray(frame.completionOptions) ||
+        frame.completionOptions.length < 2
+      ) {
+        issues.push("输入不完整时缺少 completionOptions");
+      }
+    }
+  }
+
+  if (raw.done === true) {
+    if (raw.question !== null && raw.question !== undefined) {
+      issues.push("结束时仍在返回问题，澄清没有真正收口");
+    }
+    const summary =
+      raw.summary && typeof raw.summary === "object"
+        ? (raw.summary as Record<string, unknown>)
+        : null;
+    if (!summary) {
+      issues.push("结束时缺少 summary");
+    } else {
+      if (!nonEmptyString(summary.realProblem)) {
+        issues.push("summary 缺少 realProblem");
+      }
+      if (!nonEmptyString(summary.workingAssumption)) {
+        issues.push("summary 缺少 workingAssumption，无法说明带着什么假设往下走");
+      }
+      if (nonEmptyString(summary.newQuestion)) {
+        issues.push("结束时仍留下会影响计划的新问题");
+      }
+    }
+    return issues;
+  }
+
+  const question =
+    raw.question && typeof raw.question === "object"
+      ? (raw.question as Record<string, unknown>)
+      : null;
+  if (!question) {
+    issues.push("继续提问时缺少 question");
+    return issues;
+  }
+
+  const questionText = nonEmptyString(question.question)
+    ? String(question.question).trim()
+    : "";
+  if (!questionText) {
+    issues.push("question.question 为空");
+  } else if (questionText.length < 8) {
+    issues.push("问题太短，缺少具体对象");
+  }
+  if (questionText) {
+    for (const phrase of GENERIC_CLARIFY_QUESTIONS) {
+      if (questionText.includes(phrase)) {
+        issues.push(`问题是通用问句：${phrase}`);
+      }
+    }
+    const originalIdea = context.originalIdea?.trim() ?? "";
+    if (originalIdea) {
+      // 选项也是用户实际看到的语境：问句用通用句式、选项里带上用户的对象，
+      // 对用户同样是具体的，不能只拿问句本身判定。
+      const optionText = Array.isArray(question.options)
+        ? question.options
+            .filter((item): item is string => typeof item === "string")
+            .join(" ")
+            .trim()
+        : "";
+      const groundingText = `${questionText} ${optionText}`.trim();
+      const referencesContext =
+        /这(?:个|些|几|六|两|三)?|其中|上面|前面|刚才|上述/.test(groundingText);
+      // 不要求逐字复述，但至少要和用户原话共享一个具体词段。
+      const facts = [originalIdea, ...(context.contextFacts ?? [])];
+      const groundedInContext = facts.some((fact) =>
+        hasSharedFragment(fact, groundingText),
+      );
+      if (!referencesContext && !groundedInContext) {
+        issues.push("问题没有引用用户原话里的具体对象");
+      }
+    }
+  }
+
+  const previous = new Set(
+    (context.previousQuestions ?? []).map((item) => item.trim()),
+  );
+  if (questionText && previous.has(questionText)) {
+    issues.push("问题与之前重复");
+  }
+
+  const options = Array.isArray(question.options)
+    ? question.options.filter(
+        (option): option is string =>
+          typeof option === "string" && Boolean(option.trim()),
+      )
+    : [];
+  if (options.length < 2 || options.length > 6) {
+    issues.push(`question.options 数量应为 2-6，当前 ${options.length}`);
+  }
+  if (new Set(options.map((option) => option.trim())).size !== options.length) {
+    issues.push("question.options 有重复项");
   }
 
   return issues;

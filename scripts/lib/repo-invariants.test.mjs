@@ -103,3 +103,27 @@ test("公开路由的数量被显式限制在最小集合内", () => {
     `公开路由增加到 ${PUBLIC_ROUTES.size} 个，请确认这是有意为之`,
   );
 });
+
+/* ------------------------------------------------------------------ *
+ * 坑三：首启引导（completeFirstRun）一度直接 task.create 就结束了，
+ * 既没有 recommendation/executionSteps/fallback，也没有第一张便利贴。
+ * 新人看到的第一条任务因此缺了主执行界面，决策链在第一步就断了。
+ * ------------------------------------------------------------------ */
+test("首启计划落库时同时生成第一张便利贴，并走统一决策结构", () => {
+  const file = path.join(root, "src", "app", "actions.ts");
+  const text = fs.readFileSync(file, "utf8");
+  const start = text.indexOf("export async function completeFirstRun");
+  assert.ok(start >= 0, "找不到 completeFirstRun");
+  const next = text.indexOf("export async function", start + 10);
+  const body = text.slice(start, next === -1 ? undefined : next);
+
+  assert.ok(
+    body.includes("taskStickyNote.create"),
+    "completeFirstRun 没有生成第一张便利贴：新人第一屏会缺少执行界面",
+  );
+  assert.ok(
+    body.includes("decisionCardFromTask") &&
+      body.includes("stickyPayloadFromDecisionCard"),
+    "completeFirstRun 没有走 src/lib/decision.ts 的统一决策结构",
+  );
+});

@@ -140,6 +140,52 @@ export function InboxPlanEditor({
               />
             </label>
 
+            <label className="mt-3 block">
+              <span className="mb-1.5 block text-xs font-medium text-ink-secondary">
+                做法
+              </span>
+              <input
+                name={`tasks[${index}].methodHint`}
+                defaultValue={task.methodHint ?? ""}
+                className={`${inputClass} text-ink-secondary`}
+              />
+            </label>
+
+            <label className="mt-3 block">
+              <span className="mb-1.5 block text-xs font-medium text-ink-secondary">
+                推荐
+              </span>
+              <textarea
+                name={`tasks[${index}].recommendation`}
+                defaultValue={task.recommendation ?? ""}
+                rows={2}
+                className={`${inputClass} text-ink-secondary`}
+              />
+            </label>
+
+            <label className="mt-3 block">
+              <span className="mb-1.5 block text-xs font-medium text-ink-secondary">
+                执行步骤
+              </span>
+              <textarea
+                name={`tasks[${index}].executionSteps`}
+                defaultValue={(task.executionSteps ?? []).join("\n")}
+                rows={3}
+                className={`${inputClass} text-ink-secondary`}
+              />
+            </label>
+
+            <label className="mt-3 block">
+              <span className="mb-1.5 block text-xs font-medium text-ink-secondary">
+                替代方案
+              </span>
+              <input
+                name={`tasks[${index}].fallback`}
+                defaultValue={task.fallback ?? ""}
+                className={`${inputClass} text-ink-secondary`}
+              />
+            </label>
+
             <div className="mt-3 grid gap-3 sm:grid-cols-3">
               <label className="block">
                 <span className="mb-1.5 block text-xs font-medium text-ink-secondary">

@@ -115,7 +115,13 @@ Page({
           pendingItems: (result.pendingItems || []).map((item) => {
             const plan = parseJson(item.aiPlanJson);
             const clarification = parseJson(item.aiSuggestionJson);
-            const dimensions = normalizeDimensions(clarification);
+            const rawDimensions = normalizeDimensions(clarification);
+            const clarifyStatus = clarification && clarification.status
+              ? clarification.status
+              : rawDimensions.length
+                ? "asking"
+                : "done";
+            const dimensions = clarifyStatus === "done" ? [] : rawDimensions;
             const actionLabels = {
               create_project: "新建项目",
               existing_project: "归入项目",
@@ -127,7 +133,9 @@ Page({
               ? (actionLabels[plan.action] || "已整理")
               : dimensions.length
                 ? "需要补充"
-                : "正在梳理...";
+                : clarifyStatus === "done"
+                  ? "信息够了"
+                  : "正在梳理...";
 
             return {
               id: item.id,
@@ -146,6 +154,7 @@ Page({
                       shortTitle: task.shortTitle || "",
                       notes: task.notes || "",
                       doneWhen: task.doneWhen || "",
+                      methodHint: task.methodHint || "",
                       priority: PRIORITY_OPTIONS[index].value,
                       priorityIndex: index,
                       priorityLabel: PRIORITY_OPTIONS[index].label,
@@ -155,6 +164,8 @@ Page({
                   })
                 : [],
               dimensions,
+              clarifyStatus,
+              clarifyMode: clarification && clarification.mode ? clarification.mode : "",
               supplement: "",
               supplementPlaceholder: clarification && clarification.supplementPlaceholder
                 ? clarification.supplementPlaceholder
@@ -218,11 +229,30 @@ Page({
     const { clarifyIdea } = require("../../utils/api");
     wx.showLoading({ title: "正在读你的原话..." });
     clarifyIdea(content)
-      .then(() => {
+      .then((response) => {
+        const result = response && response.result ? response.result : response;
+        const clarification = result && result.clarification;
+        const itemId = result && result.itemId;
         this.setData({ content: "" });
-        wx.hideLoading();
-        wx.showToast({ title: "已收进收件箱", icon: "none" });
-        this.loadToday();
+        const needsNoQuestion = Boolean(
+          itemId &&
+            (!clarification ||
+              clarification.status === "done" ||
+              !Array.isArray(clarification.dimensions) ||
+              clarification.dimensions.length === 0)
+        );
+        if (!needsNoQuestion) {
+          wx.hideLoading();
+          wx.showToast({ title: "已收进收件箱", icon: "none" });
+          this.loadToday();
+          return null;
+        }
+        const { planInbox } = require("../../utils/api");
+        return planInbox({ itemId }).then(() => {
+          wx.hideLoading();
+          wx.showToast({ title: "计划已生成", icon: "success" });
+          this.loadToday();
+        });
       })
       .catch((error) => {
         wx.hideLoading();
@@ -270,23 +300,82 @@ Page({
     const item = this.data.pendingItems[itemIndex];
     if (!item || this.data.submittingClarifyId) return;
 
+    const selected = item.dimensions
+      .flatMap((dimension) =>
+        dimension.options
+          .filter((option) => option.selected)
+          .map((option) => option.label)
+      )
+      .filter(Boolean)
+      .slice(0, 6);
     const dimensionChoices = item.dimensions.map((dimension) =>
-      dimension.options.filter((option) => option.selected).map((option) => option.label).join("、")
+      dimension.options
+        .filter((option) => option.selected)
+        .map((option) => option.label)
+        .join("、")
     );
-    if (dimensionChoices.some((choice) => !choice)) {
-      wx.showToast({ title: "先把每个方向选一下", icon: "none" });
+    const supplement = String(item.supplement || "").trim();
+    const answer = selected.length ? selected : supplement ? [supplement] : [];
+    if (!answer.length) {
+      wx.showToast({ title: "选一个方向，或补充两句", icon: "none" });
       return;
     }
-    const option = dimensionChoices.find(Boolean) || "";
+    const { advanceClarify, planInbox } = require("../../utils/api");
+    this.setData({ submittingClarifyId: item.id });
+    wx.showLoading({ title: "正在判断..." });
+    const next = item.clarifyMode === "socratic"
+      ? advanceClarify(item.id, answer)
+      : Promise.resolve(null);
+    next
+      .then((response) => {
+        if (item.clarifyMode !== "socratic") {
+          return planInbox({
+            itemId: item.id,
+            option: dimensionChoices.find(Boolean) || answer.join("、"),
+            dimensionChoices,
+            supplement
+          });
+        }
+        const result = response && response.result ? response.result : response;
+        const clarification = result && result.clarification ? result.clarification : result;
+        if (clarification && clarification.status !== "done") {
+          return null;
+        }
+        return planInbox({
+          itemId: item.id,
+          option: answer.join("、"),
+          dimensionChoices: [answer.join("、")],
+          supplement
+        });
+      })
+      .then((planResult) => {
+        wx.hideLoading();
+        this.setData({ submittingClarifyId: "" });
+        wx.showToast({
+          title: planResult ? "计划已生成" : "继续问一个关键问题",
+          icon: planResult ? "success" : "none"
+        });
+        this.loadToday();
+      })
+      .catch((error) => {
+        wx.hideLoading();
+        this.setData({ submittingClarifyId: "" });
+        if (error.statusCode === 401) {
+          wx.reLaunch({ url: "/pages/login/login" });
+          return;
+        }
+        wx.showToast({ title: "这次没拆出来，再试一次", icon: "none" });
+      });
+  },
+
+  onGeneratePlan(event) {
+    const itemIndex = Number(event.currentTarget.dataset.itemIndex);
+    const item = this.data.pendingItems[itemIndex];
+    if (!item || this.data.submittingClarifyId) return;
     const { planInbox } = require("../../utils/api");
     this.setData({ submittingClarifyId: item.id });
-    wx.showLoading({ title: "正在拆解..." });
-    planInbox({
-      itemId: item.id,
-      option,
-      dimensionChoices,
-      supplement: item.supplement || ""
-    })
+    wx.showLoading({ title: "正在整理..." });
+    planInbox({ itemId: item.id })
       .then(() => {
         wx.hideLoading();
         this.setData({ submittingClarifyId: "" });
@@ -300,7 +389,7 @@ Page({
           wx.reLaunch({ url: "/pages/login/login" });
           return;
         }
-        wx.showToast({ title: "这次没拆出来，再试一次", icon: "none" });
+        wx.showToast({ title: "这次没整理出来，再试一次", icon: "none" });
       });
   },
 
@@ -358,6 +447,7 @@ Page({
         shortTitle: task.shortTitle,
         notes: task.notes,
         doneWhen: task.doneWhen,
+        methodHint: task.methodHint,
         priority: task.priority,
         scheduledDate: task.scheduledDate,
         dueDate: task.dueDate

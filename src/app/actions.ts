@@ -9,7 +9,7 @@ import type {
   ProjectStatus,
   TaskStatus,
 } from "@prisma/client";
-import { prisma } from "@/lib/prisma";
+import { prisma, withTransactionRetry } from "@/lib/prisma";
 import { isAdminUsername } from "@/lib/admin";
 import {
   createUserSession,
@@ -45,6 +45,13 @@ import {
   type TaskStickyNoteData,
 } from "@/lib/task-sticky";
 import { buildTaskContract } from "@/lib/task-contract";
+import {
+  decisionCardFromAdvice,
+  decisionCardFromTask,
+  decisionSessionFromReview,
+  routeDecisionKind,
+  stickyPayloadFromDecisionCard,
+} from "@/lib/decision";
 import { ensureInboxProject } from "@/lib/inbox-project";
 import {
   appendTaskContinuation,
@@ -54,8 +61,8 @@ import {
   shouldSyncReviewActions,
 } from "@/lib/task-flow";
 import {
-  clarifyInbox,
   generateFirstRunPlan,
+  generateSocraticClarification,
   generateTaskCoachAdvice,
   generateTaskEditSuggestion,
   generateTaskShortTitle,
@@ -91,6 +98,19 @@ const priorities: Priority[] = ["low", "medium", "high", "urgent"];
 function text(formData: FormData, key: string) {
   const value = String(formData.get(key) ?? "").trim();
   return value || null;
+}
+
+function lines(value: string | null | undefined) {
+  return String(value ?? "")
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .slice(0, 10);
+}
+
+function linesOr(value: string | null | undefined, fallback: string[]) {
+  const parsed = lines(value);
+  return parsed.length ? parsed : fallback;
 }
 
 function shortTitleFromTitle(title: string) {
@@ -163,6 +183,7 @@ function taskContractData(input: {
   notes?: string | null;
   executionMode?: FormDataEntryValue | null;
   doneWhen?: FormDataEntryValue | null;
+  methodHint?: FormDataEntryValue | null;
   maxTurns?: FormDataEntryValue | number | null;
   toolPolicy?: FormDataEntryValue | null;
 }) {
@@ -173,6 +194,8 @@ function taskContractData(input: {
   const rawMode = typeof input.executionMode === "string" ? input.executionMode : "";
   const rawPolicy = typeof input.toolPolicy === "string" ? input.toolPolicy : "";
   const rawDoneWhen = typeof input.doneWhen === "string" ? input.doneWhen.trim() : "";
+  const rawMethodHint =
+    typeof input.methodHint === "string" ? input.methodHint.trim() : "";
   const rawMaxTurns = Number(
     typeof input.maxTurns === "string" || typeof input.maxTurns === "number"
       ? input.maxTurns
@@ -184,6 +207,9 @@ function taskContractData(input: {
       ? rawMode
       : inferred.executionMode,
     doneWhen: rawDoneWhen || inferred.doneWhen,
+    methodHint: rawMethodHint
+      ? rawMethodHint.slice(0, 240)
+      : inferred.methodHint,
     maxTurns:
       Number.isFinite(rawMaxTurns) && rawMaxTurns > 0
         ? Math.min(Math.floor(rawMaxTurns), 5)
@@ -369,6 +395,8 @@ export async function completeFirstRun(formData: FormData) {
   const milestone = text(formData, "milestone");
   const taskTitle = text(formData, "taskTitle");
   const taskShortTitle = text(formData, "taskShortTitle");
+  const taskRecommendation = text(formData, "taskRecommendation");
+  const taskFallback = text(formData, "taskFallback");
 
   if (!projectName || !objective || !taskTitle) return;
 
@@ -377,6 +405,7 @@ export async function completeFirstRun(formData: FormData) {
     notes: objective,
     executionMode: formData.get("taskExecutionMode"),
     doneWhen: formData.get("taskDoneWhen"),
+    methodHint: formData.get("taskMethodHint"),
     maxTurns: formData.get("taskMaxTurns"),
     toolPolicy: formData.get("taskToolPolicy"),
   });
@@ -406,7 +435,7 @@ export async function completeFirstRun(formData: FormData) {
     select: { id: true },
   });
 
-  await prisma.task.create({
+  const createdTask = await prisma.task.create({
     data: {
       userId: user.id,
       title: taskTitle,
@@ -417,6 +446,30 @@ export async function completeFirstRun(formData: FormData) {
       scheduledDate: startOfDay(),
       planOrder: 0,
       ...taskContract,
+    },
+    select: { id: true },
+  });
+
+  const sticky = stickyPayloadFromDecisionCard(
+    decisionCardFromTask({
+      title: taskTitle,
+      shortTitle: taskShortTitle ?? taskTitle,
+      recommendation: taskRecommendation,
+      executionSteps: lines(text(formData, "taskExecutionSteps")),
+      fallback: taskFallback,
+      methodHint: taskContract.methodHint,
+      doneWhen: taskContract.doneWhen,
+    }),
+  );
+  await prisma.taskStickyNote.create({
+    data: {
+      userId: user.id,
+      taskId: createdTask.id,
+      sourceMessage: text(formData, "sourceIdea") ?? objective,
+      title: sticky.title,
+      encouragement: sticky.encouragement,
+      stepsJson: JSON.stringify(sticky.steps),
+      nextStep: sticky.nextStep,
     },
   });
 
@@ -526,6 +579,10 @@ export async function planOnboarding(idea: string): Promise<FirstRunPlanResult> 
       taskShortTitle: "写下具体动作",
       taskExecutionMode: "quick",
       taskDoneWhen: "写下今天能马上开始的一个具体动作",
+      taskMethodHint: "先写成一个 30 分钟内能完成的具体动作，再判断它是否真的能推进。",
+      taskRecommendation: "先写成一个 30 分钟内能完成的具体动作，再判断它是否真的能推进。",
+      taskExecutionSteps: ["写下今天能马上开始的那个具体动作"],
+      taskFallback: "",
       taskMaxTurns: 1,
       taskToolPolicy: "none",
       usedFallback: true,
@@ -550,16 +607,15 @@ export async function clarifyOnboarding(
   });
 
   return withAiQuota("onboarding_clarify", () =>
-    clarifyInbox(
+    generateSocraticClarification({
       content,
-      [],
-      undefined,
-      undefined,
-      undefined,
-      [],
-      aiContext.summary,
-      aiContext.evidence,
-    ),
+      history: [],
+      projectContext: aiContext.projectFacts,
+      memorySummary: aiContext.summary,
+      evidence: aiContext.evidence,
+      decisionMemory: aiContext.decisionMemory,
+      maxQuestions: 2,
+    }),
   );
 }
 
@@ -708,6 +764,7 @@ export async function getTaskEditSuggestion(input: {
       suggestionInput,
       aiContext.summary,
       aiContext.evidence,
+      aiContext.decisionMemory,
     ),
   );
 }
@@ -776,6 +833,7 @@ export async function getProjectEditSuggestion(input: {
       suggestionInput,
       aiContext.summary,
       aiContext.evidence,
+      aiContext.decisionMemory,
     ),
   );
 }
@@ -831,15 +889,21 @@ export async function createTaskStickyNote(input: {
       aiContext.evidence,
     ),
   );
+  const sticky = stickyPayloadFromDecisionCard(
+    decisionCardFromAdvice(
+      advice,
+      routeDecisionKind({ message: input.message, mode: "coach" }),
+    ),
+  );
   const note = await prisma.taskStickyNote.create({
     data: {
       userId: user.id,
       taskId: input.taskId,
       sourceMessage: input.message,
-      title: advice.title,
-      encouragement: advice.encouragement,
-      stepsJson: JSON.stringify(advice.steps),
-      nextStep: advice.nextStep,
+      title: sticky.title,
+      encouragement: sticky.encouragement,
+      stepsJson: JSON.stringify(sticky.steps),
+      nextStep: sticky.nextStep,
     },
   });
   const overflowNotes = await prisma.taskStickyNote.findMany({
@@ -1139,6 +1203,17 @@ export async function confirmInboxPlan(formData: FormData) {
       plannedTask.executionMode,
     doneWhen:
       text(formData, `tasks[${index}].doneWhen`) ?? plannedTask.doneWhen,
+    methodHint:
+      text(formData, `tasks[${index}].methodHint`) ?? plannedTask.methodHint,
+    recommendation:
+      text(formData, `tasks[${index}].recommendation`) ??
+      plannedTask.recommendation,
+    executionSteps: linesOr(
+      text(formData, `tasks[${index}].executionSteps`),
+      plannedTask.executionSteps,
+    ),
+    fallback:
+      text(formData, `tasks[${index}].fallback`) ?? plannedTask.fallback,
     maxTurns: plannedTask.maxTurns,
     toolPolicy: plannedTask.toolPolicy,
     priority: priority(
@@ -1166,6 +1241,10 @@ export async function confirmInboxPlan(formData: FormData) {
       shortTitle: task.shortTitle,
       notes: task.notes,
       executionMode: task.executionMode,
+      methodHint: task.methodHint,
+      recommendation: task.recommendation,
+      executionSteps: task.executionSteps,
+      fallback: task.fallback,
       priority: task.priority,
       scheduledDate: task.scheduledDate
         ? toDateInputValue(task.scheduledDate)
@@ -1177,7 +1256,7 @@ export async function confirmInboxPlan(formData: FormData) {
   let confirmedProjectId: string | null = item.projectId;
   let attachedTaskId: string | null = null;
 
-  await prisma.$transaction(async (tx) => {
+  await withTransactionRetry(async (tx) => {
     const projectId = await ensureInboxProject(tx, {
       userId: user.id,
       inboxItemId: item.id,
@@ -1226,11 +1305,26 @@ export async function confirmInboxPlan(formData: FormData) {
             notes: plannedTask.notes,
             executionMode: plannedTask.executionMode,
             doneWhen: plannedTask.doneWhen,
+            methodHint: plannedTask.methodHint,
             maxTurns: plannedTask.maxTurns,
             toolPolicy: plannedTask.toolPolicy,
           }),
         },
         select: { id: true },
+      });
+      const sticky = stickyPayloadFromDecisionCard(
+        decisionCardFromTask(plannedTask),
+      );
+      await tx.taskStickyNote.create({
+        data: {
+          userId: user.id,
+          taskId: created.id,
+          sourceMessage: item.content,
+          title: sticky.title,
+          encouragement: sticky.encouragement,
+          stepsJson: JSON.stringify(sticky.steps),
+          nextStep: sticky.nextStep,
+        },
       });
       if (!anchorTaskId) {
         anchorTaskId = created.id;
@@ -1362,6 +1456,7 @@ export async function generateTodaySuggestion(
       },
       aiContext.summary,
       aiContext.evidence,
+      aiContext.decisionMemory,
     ),
   );
 
@@ -1492,12 +1587,17 @@ export async function saveReview(formData: FormData) {
     existingReview.nextActions,
     nextActionsText,
   );
+  const decisionSession = decisionSessionFromReview({
+    summary,
+    nextAction: nextActions[0]?.title ?? null,
+  });
 
   const review = await prisma.review.update({
     where: { id, userId: user.id },
     data: {
       summary,
       nextActions: nextActionsText,
+      decisionJson: JSON.stringify(decisionSession),
       status: "final",
     },
   });
@@ -1598,6 +1698,7 @@ export async function createTask(formData: FormData) {
         notes,
         executionMode: formData.get("executionMode"),
         doneWhen: formData.get("doneWhen"),
+        methodHint: formData.get("methodHint"),
         maxTurns: formData.get("maxTurns"),
         toolPolicy: formData.get("toolPolicy"),
       }),
@@ -1671,6 +1772,7 @@ export async function updateTask(formData: FormData) {
         notes,
         executionMode: formData.get("executionMode"),
         doneWhen: formData.get("doneWhen"),
+        methodHint: formData.get("methodHint"),
         maxTurns: formData.get("maxTurns"),
         toolPolicy: formData.get("toolPolicy"),
       }),

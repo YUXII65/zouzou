@@ -1,10 +1,14 @@
 import { NextResponse } from "next/server";
 import { getMiniProgramUser } from "@/lib/miniprogram-auth";
-import { prisma } from "@/lib/prisma";
+import { prisma, withTransactionRetry } from "@/lib/prisma";
 import { recordAiFeedback } from "@/lib/feedback";
 import { recordUsageEvent } from "@/lib/usage";
 import type { InboxPlan, InboxPlanTask } from "@/lib/ai";
 import { appendTaskContinuation, OPEN_TASK_STATUSES } from "@/lib/task-flow";
+import {
+  decisionCardFromTask,
+  stickyPayloadFromDecisionCard,
+} from "@/lib/decision";
 
 export const dynamic = "force-dynamic";
 
@@ -16,6 +20,10 @@ type ConfirmTaskInput = Partial<
     | "shortTitle"
     | "notes"
     | "doneWhen"
+    | "methodHint"
+    | "recommendation"
+    | "executionSteps"
+    | "fallback"
     | "priority"
     | "scheduledDate"
     | "dueDate"
@@ -76,6 +84,10 @@ function samePlanTasks(
     shortTitle: string;
     notes: string | null;
     doneWhen: string | null;
+    methodHint: string;
+    recommendation: string;
+    executionSteps: string[];
+    fallback: string;
     priority: Priority;
     scheduledDate: Date | null;
     dueDate: Date | null;
@@ -90,6 +102,10 @@ function samePlanTasks(
       task.shortTitle === planned.shortTitle &&
       task.notes === planned.notes &&
       task.doneWhen === planned.doneWhen &&
+      task.methodHint === planned.methodHint &&
+      task.recommendation === planned.recommendation &&
+      JSON.stringify(task.executionSteps) === JSON.stringify(planned.executionSteps) &&
+      task.fallback === planned.fallback &&
       task.priority === planned.priority &&
       dateKey(task.scheduledDate) === planned.scheduledDate &&
       dateKey(task.dueDate) === planned.dueDate
@@ -141,6 +157,16 @@ export async function POST(request: Request) {
       shortTitle: cleanText(input.shortTitle, 120) ?? plannedTask.shortTitle,
       notes: cleanText(input.notes, 4000) ?? plannedTask.notes,
       doneWhen: cleanText(input.doneWhen, 500) ?? plannedTask.doneWhen,
+      methodHint: cleanText(input.methodHint, 500) ?? plannedTask.methodHint,
+      recommendation:
+        cleanText(input.recommendation, 500) ?? plannedTask.recommendation,
+      executionSteps: Array.isArray(input.executionSteps)
+        ? input.executionSteps
+            .map((step) => String(step).trim())
+            .filter(Boolean)
+            .slice(0, 10)
+        : plannedTask.executionSteps,
+      fallback: cleanText(input.fallback, 500) ?? plannedTask.fallback,
       priority: normalizePriority(input.priority, plannedTask.priority),
       scheduledDate: parseDate(input.scheduledDate) ?? parseDate(plannedTask.scheduledDate),
       dueDate: parseDate(input.dueDate) ?? parseDate(plannedTask.dueDate),
@@ -157,6 +183,10 @@ export async function POST(request: Request) {
       shortTitle: task.shortTitle,
       notes: task.notes,
       doneWhen: task.doneWhen,
+      methodHint: task.methodHint,
+      recommendation: task.recommendation,
+      executionSteps: task.executionSteps,
+      fallback: task.fallback,
       priority: task.priority,
       scheduledDate: dateKey(task.scheduledDate),
       dueDate: dateKey(task.dueDate),
@@ -165,7 +195,7 @@ export async function POST(request: Request) {
 
   let confirmedProjectId: string | null = item.projectId;
   let attachedTaskId: string | null = null;
-  await prisma.$transaction(async (tx) => {
+  await withTransactionRetry(async (tx) => {
     let projectId = item.projectId;
 
     if (plan.action === "create_project" && projectName) {
@@ -223,10 +253,25 @@ export async function POST(request: Request) {
           inboxItemId: item.id,
           executionMode: task.executionMode,
           doneWhen: task.doneWhen,
+          methodHint: task.methodHint,
           maxTurns: task.maxTurns,
           toolPolicy: task.toolPolicy,
         },
         select: { id: true },
+      });
+      const sticky = stickyPayloadFromDecisionCard(
+        decisionCardFromTask(task),
+      );
+      await tx.taskStickyNote.create({
+        data: {
+          userId: user.id,
+          taskId: created.id,
+          sourceMessage: item.content,
+          title: sticky.title,
+          encouragement: sticky.encouragement,
+          stepsJson: JSON.stringify(sticky.steps),
+          nextStep: sticky.nextStep,
+        },
       });
       if (!anchorTaskId) {
         anchorTaskId = created.id;

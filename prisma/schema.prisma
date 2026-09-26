@@ -120,6 +120,7 @@ model Task {
   completedAt      DateTime?
   executionMode    String?
   doneWhen         String?
+  methodHint       String?
   completedBy      String?
   maxTurns         Int?
   toolPolicy       String?
@@ -244,6 +245,7 @@ model Review {
   reviewDate      DateTime
   summary         String
   nextActions     String?
+  decisionJson    String?
   status          ReviewStatus       @default(draft)
   createdAt       DateTime           @default(now())
   updatedAt       DateTime           @updatedAt

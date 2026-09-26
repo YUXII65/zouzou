@@ -78,6 +78,7 @@ export default async function ProjectsPage({
         );
         task.executionMode = contract.executionMode;
         task.doneWhen = contract.doneWhen;
+        task.methodHint = contract.methodHint;
         task.maxTurns = contract.maxTurns;
         task.toolPolicy = contract.toolPolicy;
         return prisma.task.update({
@@ -85,6 +86,7 @@ export default async function ProjectsPage({
           data: {
             executionMode: contract.executionMode,
             doneWhen: contract.doneWhen,
+            methodHint: contract.methodHint,
             maxTurns: contract.maxTurns,
             toolPolicy: contract.toolPolicy,
           },

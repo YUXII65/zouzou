@@ -45,7 +45,6 @@ export function QuickCapture({
   const [submitError, setSubmitError] = useState("");
   const [settledItemId, setSettledItemId] = useState<string | null>(null);
   const [pendingContent, setPendingContent] = useState("");
-  const [streamPreview, setStreamPreview] = useState("");
   const router = useRouter();
   const waitingLabel = useRotatingText(submitting, CAPTURE_WAITING_LABELS);
 
@@ -53,7 +52,6 @@ export function QuickCapture({
     if (settledItemId && pendingIds.includes(settledItemId)) {
       setSettledItemId(null);
       setPendingContent("");
-      setStreamPreview("");
     }
   }, [pendingIds, settledItemId]);
 
@@ -93,13 +91,11 @@ export function QuickCapture({
     setSubmitError("");
     setSettledItemId(null);
     setPendingContent(idea);
-    setStreamPreview("");
     setContent("");
     markFirstAiQuestionAsked();
     notifyTourStep("2");
     trackEvent("home_ai_input_submit");
 
-    let keepPreview = false;
     try {
       const response = await fetch("/api/ai/inbox/clarify", {
         method: "POST",
@@ -108,20 +104,16 @@ export function QuickCapture({
       });
       const result = await consumeAiStream<CaptureResult>(
         response,
-        setStreamPreview,
+        () => {},
       );
-      keepPreview = true;
       setSettledItemId(result.itemId);
       router.refresh();
     } catch {
       setSubmitError("没送出去，再试一次");
       setContent(idea);
+      setPendingContent("");
     } finally {
       setSubmitting(false);
-      if (!keepPreview) {
-        setPendingContent("");
-        setStreamPreview("");
-      }
     }
   }
 
@@ -146,7 +138,7 @@ export function QuickCapture({
         value={content}
         onChange={(event) => setContent(event.target.value)}
         rows={compact ? 4 : 6}
-        placeholder="今天脑子里在转什么？直接倒出来"
+        placeholder="写一件具体的事：对象、想改变的结果、现在卡在哪里。说不清也可以直接写"
         className="zouzou-input relative min-h-40 w-full resize-none border-accent/20 bg-surface/90 px-4 py-3 text-base leading-7 text-ink shadow-sm"
       />
       <div className="relative mt-3 flex flex-wrap gap-2">
@@ -192,27 +184,9 @@ export function QuickCapture({
     {pendingContent && !(settledItemId && pendingIds.includes(settledItemId)) ? (
       <div className="mt-4 rounded-xl border border-accent/15 bg-surface p-4">
         <p className="text-sm leading-6 text-ink">{pendingContent}</p>
-        <div className="mt-3 border-l-2 border-accent/30 pl-3 text-sm leading-7 text-ink-secondary">
-          {streamPreview ? (
-            <span className="whitespace-pre-wrap">
-              {streamPreview}
-              <span
-                className="ml-0.5 inline-block animate-pulse text-accent"
-                aria-hidden
-              >
-                |
-              </span>
-            </span>
-          ) : (
-            <span className="inline-flex items-center gap-2 text-ink-muted">
-              <span className="flex gap-1">
-                <span className="size-1.5 animate-[zouzou-soft-pulse_1s_ease-in-out_infinite] rounded-full bg-accent/60" />
-                <span className="size-1.5 animate-[zouzou-soft-pulse_1s_ease-in-out_infinite] rounded-full bg-accent/60 [animation-delay:150ms]" />
-                <span className="size-1.5 animate-[zouzou-soft-pulse_1s_ease-in-out_infinite] rounded-full bg-accent/60 [animation-delay:300ms]" />
-              </span>
-              {waitingLabel}
-            </span>
-          )}
+        <div className="mt-3 flex items-center gap-2 border-l-2 border-accent/30 pl-3 text-sm leading-7 text-ink-muted">
+          <Loader2 className="size-4 shrink-0 animate-spin text-accent/70" />
+          <span>{waitingLabel}</span>
         </div>
       </div>
     ) : null}

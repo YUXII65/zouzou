@@ -36,7 +36,14 @@ export function TodayBrief({
     await recordSuggestionFeedback({
       taskId: suggestion.taskId,
       action,
-      detail: `${suggestion.title} / ${suggestion.reason}`,
+      detail: [
+        `${suggestion.title} / ${suggestion.reason}`,
+        suggestion.decision
+          ? `DecisionSession：${JSON.stringify(suggestion.decision)}`
+          : "",
+      ]
+        .filter(Boolean)
+        .join("；"),
     });
     setFeedback((current) => ({
       ...current,
@@ -67,6 +74,11 @@ export function TodayBrief({
                 <p className="mt-1 text-xs leading-5 text-ink-secondary">
                   <TypewriterText text={suggestion.reason} />
                 </p>
+                {suggestion.decision?.explanation ? (
+                  <p className="mt-1 text-[11px] leading-5 text-ai">
+                    调整依据：{suggestion.decision.explanation}
+                  </p>
+                ) : null}
                 {suggestion.evidence.length ? (
                   <div className="mt-2 flex flex-wrap gap-1.5">
                     {suggestion.evidence.map((item) => (

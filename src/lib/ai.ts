@@ -1,6 +1,14 @@
 import { toDateInputValue } from "@/lib/date";
 import { after } from "next/server";
 import { buildTaskContract } from "@/lib/task-contract";
+import { checkClarificationQuality } from "@/lib/ai-quality";
+import { assessIdeaReadiness, type IdeaReadiness } from "@/lib/idea-readiness";
+import { extractJsonObject as extractJson } from "@/lib/json-extract";
+import {
+  buildDecisionSession,
+  routeDecisionKind,
+  type DecisionSession,
+} from "@/lib/decision";
 import {
   collapsePlannedTasks,
   MAX_AI_TASKS_PER_PLAN,
@@ -13,10 +21,13 @@ import {
   recordAiUsage,
 } from "@/lib/ai-quota";
 import {
+  CLARIFICATION_QUALITY_RULES,
+  FIRST_RUN_PLAN_SYSTEM_PROMPT,
   OUTPUT_QUALITY_RULES,
   PLAN_SYSTEM_PROMPT,
   SOCRATIC_CLARIFY_SYSTEM_PROMPT,
   buildPlanUserPayload,
+  buildSocraticClarifyUserPayload,
 } from "@/lib/ai-prompts";
 
 export type InboxPlanTask = {
@@ -24,6 +35,10 @@ export type InboxPlanTask = {
   shortTitle: string;
   executionMode: string;
   doneWhen: string;
+  methodHint: string;
+  recommendation: string;
+  executionSteps: string[];
+  fallback: string;
   maxTurns: number;
   toolPolicy: string;
   notes: string | null;
@@ -40,6 +55,7 @@ export type InboxPlan = {
   projectMilestone: string | null;
   tasks: InboxPlanTask[];
   reason: string;
+  session?: DecisionSession | null;
 };
 
 export type FirstRunPlan = {
@@ -50,6 +66,10 @@ export type FirstRunPlan = {
   taskShortTitle: string;
   taskExecutionMode: string;
   taskDoneWhen: string;
+  taskMethodHint: string;
+  taskRecommendation: string;
+  taskExecutionSteps: string[];
+  taskFallback: string;
   taskMaxTurns: number;
   taskToolPolicy: string;
 };
@@ -70,6 +90,20 @@ export type InboxClarificationHistoryItem = InboxClarificationDimension & {
   reflection?: string | null;
 };
 
+export type InboxClarificationFrame = {
+  surfaceRequest: string;
+  coreNeedHypothesis: string;
+  decisionFork: string;
+  decisiveUnknown: string;
+  whyItChangesPlan: string;
+  workingAssumptions: string[];
+  methodOptions: string[];
+  readiness: IdeaReadiness;
+  missingSlots: string[];
+  completionPrompt: string;
+  completionOptions: string[];
+};
+
 export type InboxClarificationSummary = {
   originalIdea: string;
   realProblem: string;
@@ -79,7 +113,10 @@ export type InboxClarificationSummary = {
   goals: string[];
   unverifiedAssumptions: string[];
   keyVariable: string;
-  newQuestion: string;
+  /** 旧字段，兼容已经保存的澄清状态；新流程优先使用 workingAssumption。 */
+  newQuestion?: string;
+  workingAssumption?: string;
+  ifWrongThen?: string;
 };
 
 export type InboxClarification = {
@@ -91,6 +128,8 @@ export type InboxClarification = {
   maxQuestions?: number;
   history?: InboxClarificationHistoryItem[];
   summary?: InboxClarificationSummary | null;
+  frame?: InboxClarificationFrame | null;
+  session?: DecisionSession | null;
 };
 
 export type InboxProjectContext = {
@@ -115,6 +154,7 @@ export type TaskEditSuggestion = {
   dueDate?: string | null;
   focusDate?: string | null;
   reason: string;
+  decision?: DecisionSession | null;
 };
 
 export type ProjectEditSuggestion = {
@@ -124,6 +164,7 @@ export type ProjectEditSuggestion = {
   status?: string;
   notes?: string | null;
   reason: string;
+  decision?: DecisionSession | null;
 };
 
 export type TaskCoachAdvice = {
@@ -140,6 +181,7 @@ export type TodaySuggestion = {
   priority: "low" | "medium" | "high" | "urgent";
   reason: string;
   evidence: string[];
+  decision?: DecisionSession | null;
 };
 
 export type TaskShortTitleSuggestion = {
@@ -172,12 +214,6 @@ function firstLine(content: string) {
   return content.split(/\r?\n/)[0]?.trim() || content.slice(0, 80);
 }
 
-function extractJson(text: string) {
-  const start = text.indexOf("{");
-  const end = text.lastIndexOf("}");
-  if (start === -1 || end <= start) return null;
-  return text.slice(start, end + 1);
-}
 
 function safePriority(value: unknown) {
   return priorities.includes(value as (typeof priorities)[number])
@@ -198,6 +234,10 @@ function safePlanTask(value: unknown): InboxPlanTask {
       shortTitle: "整理任务",
       executionMode: "quick",
       doneWhen: "拿到可以直接使用的答案或结果",
+      methodHint: "先明确判断标准和边界，再给出一条现在就能用的答案",
+      recommendation: "先按一个明确判断，给出一个现在就能执行的答案",
+      executionSteps: ["明确判断标准", "给出一个可直接执行的答案"],
+      fallback: "",
       maxTurns: 1,
       toolPolicy: "none",
       notes: null,
@@ -218,6 +258,15 @@ function safePlanTask(value: unknown): InboxPlanTask {
       ? raw.notes.trim().slice(0, 500)
       : null;
   const contract = buildTaskContract(`${title} ${notes ?? ""}`, title);
+  const executionSteps = Array.isArray(raw.executionSteps)
+    ? raw.executionSteps
+        .filter(
+          (step): step is string =>
+            typeof step === "string" && Boolean(step.trim()),
+        )
+        .slice(0, 5)
+        .map((step) => step.trim().slice(0, 240))
+    : [];
   return {
     title,
     shortTitle: normalizeShortTitle(raw.shortTitle, title),
@@ -229,6 +278,21 @@ function safePlanTask(value: unknown): InboxPlanTask {
       typeof raw.doneWhen === "string" && raw.doneWhen.trim()
         ? raw.doneWhen.trim().slice(0, 200)
         : contract.doneWhen,
+    methodHint:
+      typeof raw.methodHint === "string" && raw.methodHint.trim()
+        ? raw.methodHint.trim().slice(0, 240)
+        : contract.methodHint,
+    recommendation:
+      typeof raw.recommendation === "string" && raw.recommendation.trim()
+        ? raw.recommendation.trim().slice(0, 400)
+        : contract.methodHint,
+    executionSteps: executionSteps.length
+      ? executionSteps
+      : [contract.methodHint],
+    fallback:
+      typeof raw.fallback === "string" && raw.fallback.trim()
+        ? raw.fallback.trim().slice(0, 300)
+        : "",
     maxTurns:
       typeof raw.maxTurns === "number" && raw.maxTurns > 0
         ? Math.min(Math.floor(raw.maxTurns), 5)
@@ -258,6 +322,7 @@ type CallModelOptions = {
   onDelta?: (delta: string) => void;
   reasoningEffort?: "none" | "low" | "medium" | "high";
   maxTokens?: number;
+  qualityRules?: string;
 };
 
 type ChatCompletionUsage = {
@@ -367,7 +432,10 @@ async function callModel(
         body: JSON.stringify({
           model,
           messages: [
-            { role: "system", content: `${system}\n\n${OUTPUT_QUALITY_RULES}` },
+            {
+              role: "system",
+              content: `${system}\n\n${options.qualityRules ?? OUTPUT_QUALITY_RULES}`,
+            },
             { role: "user", content: user },
           ],
           temperature: temperatureOverride,
@@ -494,6 +562,10 @@ function heuristicPlan(content: string, projectNames: string[]): InboxPlan {
         shortTitle: normalizeShortTitle(null, taskTitle),
         executionMode: contract.executionMode,
         doneWhen: contract.doneWhen,
+        methodHint: contract.methodHint,
+        recommendation: contract.methodHint,
+        executionSteps: [contract.methodHint],
+        fallback: "",
         maxTurns: contract.maxTurns,
         toolPolicy: contract.toolPolicy,
         notes: first,
@@ -628,6 +700,10 @@ function heuristicFirstRun(content: string): FirstRunPlan {
     taskShortTitle,
     taskExecutionMode: taskContract.executionMode,
     taskDoneWhen: taskContract.doneWhen,
+    taskMethodHint: taskContract.methodHint,
+    taskRecommendation: taskContract.methodHint,
+    taskExecutionSteps: [taskTitle],
+    taskFallback: "",
     taskMaxTurns: taskContract.maxTurns,
     taskToolPolicy: taskContract.toolPolicy,
   };
@@ -884,7 +960,7 @@ function normalizeClarificationDimension(
   if (typeof raw.question !== "string" || !Array.isArray(raw.options)) return null;
   const options = raw.options
     .filter((option): option is string => typeof option === "string" && Boolean(option.trim()))
-    .slice(0, 3)
+    .slice(0, 6)
     .map((option) => option.trim().slice(0, 100));
   if (!options.length) return null;
   const key = typeof raw.key === "string" && raw.key.trim()
@@ -909,6 +985,145 @@ function clarificationHistoryToDimensions(
   }));
 }
 
+function normalizeClarificationFrame(
+  value: unknown,
+  fallback: InboxClarificationFrame | null = null,
+): InboxClarificationFrame | null {
+  if (!value || typeof value !== "object") return fallback;
+  const raw = value as Record<string, unknown>;
+  const stringValue = (item: unknown, fallbackValue = "") =>
+    typeof item === "string" && item.trim()
+      ? item.trim().slice(0, 500)
+      : fallbackValue;
+  const stringList = (item: unknown) =>
+    Array.isArray(item)
+      ? item
+          .filter(
+            (entry): entry is string =>
+              typeof entry === "string" && Boolean(entry.trim()),
+          )
+          .slice(0, 5)
+          .map((entry) => entry.trim().slice(0, 300))
+      : [];
+
+  const workingAssumptions = stringList(raw.workingAssumptions);
+  const methodOptions = stringList(raw.methodOptions);
+  const missingSlots = stringList(raw.missingSlots);
+  const completionOptions = stringList(raw.completionOptions);
+  const rawReadiness = raw.readiness;
+  const readiness: IdeaReadiness =
+    rawReadiness === "ready" ||
+    rawReadiness === "needs_context" ||
+    rawReadiness === "needs_meaning"
+      ? rawReadiness
+      : (fallback?.readiness ?? "ready");
+  const frame: InboxClarificationFrame = {
+    surfaceRequest: stringValue(raw.surfaceRequest, fallback?.surfaceRequest),
+    coreNeedHypothesis: stringValue(
+      raw.coreNeedHypothesis,
+      fallback?.coreNeedHypothesis,
+    ),
+    decisionFork: stringValue(raw.decisionFork, fallback?.decisionFork),
+    decisiveUnknown: stringValue(raw.decisiveUnknown, fallback?.decisiveUnknown),
+    whyItChangesPlan: stringValue(
+      raw.whyItChangesPlan,
+      fallback?.whyItChangesPlan,
+    ),
+    workingAssumptions: workingAssumptions.length
+      ? workingAssumptions
+      : (fallback?.workingAssumptions ?? []),
+    methodOptions: methodOptions.length
+      ? methodOptions
+      : (fallback?.methodOptions ?? []),
+    readiness,
+    missingSlots: missingSlots.length
+      ? missingSlots
+      : (fallback?.missingSlots ?? []),
+    completionPrompt: stringValue(
+      raw.completionPrompt,
+      fallback?.completionPrompt,
+    ),
+    completionOptions: completionOptions.length
+      ? completionOptions
+      : (fallback?.completionOptions ?? []),
+  };
+
+  const hasSignal = [
+    raw.surfaceRequest,
+    raw.coreNeedHypothesis,
+    raw.decisionFork,
+    raw.decisiveUnknown,
+    raw.whyItChangesPlan,
+    raw.completionPrompt,
+  ].some((item) => typeof item === "string" && Boolean(item.trim())) ||
+    workingAssumptions.length > 0 ||
+    methodOptions.length > 0 ||
+    missingSlots.length > 0 ||
+    completionOptions.length > 0;
+  return hasSignal ? frame : fallback;
+}
+
+function buildFallbackClarificationFrame(
+  content: string,
+  question?: InboxClarificationDimension | null,
+): InboxClarificationFrame {
+  const assessment = assessIdeaReadiness(content);
+  return {
+    surfaceRequest: content,
+    coreNeedHypothesis: `先判断「${content}」真正要推进的结果，而不是只顺着表面动作往下排任务。`,
+    decisionFork: "先确认真正想解决的问题，还是先做一个能开始的动作",
+    decisiveUnknown: question?.question ?? "这次最想先改变什么",
+    whyItChangesPlan: "答案会改变第一条任务、完成标准和最适合的做法。",
+    workingAssumptions: [],
+    methodOptions: [],
+    readiness: assessment.readiness,
+    missingSlots: assessment.missingSlots,
+    completionPrompt: assessment.completionPrompt,
+    completionOptions: assessment.completionOptions,
+  };
+}
+
+function hydrateClarificationFrame(
+  frame: InboxClarificationFrame | null,
+  question: InboxClarificationDimension | null,
+  content: string,
+): InboxClarificationFrame | null {
+  if (!frame || frame.readiness === "ready") return frame;
+  const assessment = assessIdeaReadiness(content);
+  return {
+    ...frame,
+    missingSlots: frame.missingSlots.length
+      ? frame.missingSlots
+      : assessment.missingSlots,
+    completionPrompt:
+      frame.completionPrompt || question?.question || assessment.completionPrompt,
+    completionOptions: frame.completionOptions.length
+      ? frame.completionOptions
+      : question?.options.length
+        ? question.options
+        : assessment.completionOptions,
+  };
+}
+
+function buildClarificationSession(
+  frame: InboxClarificationFrame | null,
+  question: InboxClarificationDimension | null,
+  summary: InboxClarificationSummary | null,
+  done: boolean,
+): DecisionSession {
+  return buildDecisionSession({
+    stage: done ? "decide" : "clarify",
+    kind: done ? "plan" : "clarify",
+    coreNeedHypothesis: frame?.coreNeedHypothesis,
+    recommendation: summary?.realProblem ?? frame?.coreNeedHypothesis,
+    nextAction: done
+      ? summary?.workingAssumption ?? ""
+      : question?.question ?? "",
+    fallback: summary?.ifWrongThen ?? "",
+    confidence: frame?.readiness === "ready" ? 0.72 : 0.5,
+  });
+}
+
 function normalizeClarificationSummary(
   value: unknown,
   fallback: InboxClarificationSummary,
@@ -926,6 +1141,10 @@ function normalizeClarificationSummary(
           .slice(0, 5)
           .map((entry) => entry.trim().slice(0, 300))
       : fallbackValue;
+  const optionalString = (item: unknown) =>
+    typeof item === "string" && item.trim()
+      ? item.trim().slice(0, 500)
+      : undefined;
   return {
     originalIdea: stringValue(raw.originalIdea, fallback.originalIdea),
     realProblem: stringValue(raw.realProblem, fallback.realProblem),
@@ -935,7 +1154,10 @@ function normalizeClarificationSummary(
     goals: stringList(raw.goals, fallback.goals),
     unverifiedAssumptions: stringList(raw.unverifiedAssumptions, fallback.unverifiedAssumptions),
     keyVariable: stringValue(raw.keyVariable, fallback.keyVariable),
-    newQuestion: stringValue(raw.newQuestion, fallback.newQuestion),
+    newQuestion: optionalString(raw.newQuestion) ?? fallback.newQuestion,
+    workingAssumption:
+      optionalString(raw.workingAssumption) ?? fallback.workingAssumption,
+    ifWrongThen: optionalString(raw.ifWrongThen) ?? fallback.ifWrongThen,
   };
 }
 
@@ -956,7 +1178,10 @@ function buildSocraticFallbackSummary(
     goals: [],
     unverifiedAssumptions: [],
     keyVariable: lastQuestion,
-    newQuestion: "确认这次最想推进的方向和完成标准后，再生成下一步。",
+    workingAssumption: lastQuestion
+      ? `先按“${lastQuestion}”所指的方向推进，规划时再根据实际情况调整。`
+      : "现有信息足够先做一版可调整的计划。",
+    ifWrongThen: "如果执行后发现方向不对，优先重做第一条任务，不继续堆后续任务。",
   };
 }
 
@@ -965,8 +1190,18 @@ function buildSocraticStartFallback(
   projectNames: string[],
 ): InboxClarification {
   const fallback = heuristicClarification(content, projectNames);
-  const first = fallback.dimensions[0];
+  const assessment = assessIdeaReadiness(content);
+  const first =
+    assessment.readiness === "ready"
+      ? fallback.dimensions[0]
+      : {
+          key: "context",
+          question: assessment.completionPrompt,
+          options: assessment.completionOptions,
+        };
   if (!first) {
+    const frame = buildFallbackClarificationFrame(content);
+    const summary = buildSocraticFallbackSummary(content, []);
     return {
       dimensions: [],
       supplementPlaceholder: "",
@@ -975,12 +1210,15 @@ function buildSocraticStartFallback(
       askedCount: 0,
       maxQuestions: 3,
       history: [],
-      summary: buildSocraticFallbackSummary(content, []),
+      summary,
+      frame,
+      session: buildClarificationSession(frame, null, summary, true),
     };
   }
   const history: InboxClarificationHistoryItem[] = [
     { ...first, answer: [], reflection: null },
   ];
+  const frame = buildFallbackClarificationFrame(content, first);
   return {
     dimensions: clarificationHistoryToDimensions(history),
     supplementPlaceholder: "",
@@ -990,22 +1228,36 @@ function buildSocraticStartFallback(
     maxQuestions: 3,
     history,
     summary: null,
+    frame,
+    session: buildClarificationSession(frame, first, null, false),
   };
 }
 
 export async function generateSocraticClarification(input: {
   content: string;
   history: InboxClarificationHistoryItem[];
+  frame?: InboxClarificationFrame | null;
   apiKey?: string;
   model?: string;
   baseUrl?: string;
   projectContext?: InboxProjectContext[];
   memorySummary?: string;
   evidence?: string[];
+  decisionMemory?: string[];
   maxQuestions?: number;
   onDelta?: (delta: string) => void;
 }): Promise<InboxClarification> {
   const maxQuestions = Math.min(Math.max(input.maxQuestions ?? 3, 1), 3);
+  const assessment = assessIdeaReadiness(input.content);
+  const contextFacts = [
+    ...(input.evidence ?? []),
+    ...(input.projectContext ?? []).flatMap((project) => [
+      project.name,
+      project.objective ?? "",
+      project.currentMilestone ?? "",
+      ...(project.openTasks ?? []).map((task) => task.title),
+    ]),
+  ].filter(Boolean);
   const fallbackSummary = buildSocraticFallbackSummary(input.content, input.history);
   const startFallback = buildSocraticStartFallback(
     input.content,
@@ -1013,11 +1265,20 @@ export async function generateSocraticClarification(input: {
   );
   const text = await callModel(
     SOCRATIC_CLARIFY_SYSTEM_PROMPT,
-    JSON.stringify({
+    buildSocraticClarifyUserPayload({
       originalIdea: input.content,
       contextSummary: input.memorySummary ?? null,
       contextEvidence: input.evidence ?? [],
-      history: input.history,
+      projectContext: input.projectContext ?? [],
+      decisionMemory: input.decisionMemory ?? [],
+      previousFrame: input.frame ?? null,
+      inputAssessmentHint: assessment,
+      history: input.history.map((item) => ({
+        key: item.key,
+        question: item.question,
+        answers: item.answer,
+        reflection: item.reflection ?? null,
+      })),
       askedCount: input.history.length,
       maxQuestions,
     }),
@@ -1025,11 +1286,16 @@ export async function generateSocraticClarification(input: {
     input.model,
     input.baseUrl,
     0.55,
-    { onDelta: input.onDelta, maxTokens: 900 },
+    {
+      onDelta: input.onDelta,
+      maxTokens: 900,
+      qualityRules: CLARIFICATION_QUALITY_RULES,
+    },
   );
 
   if (!text) {
     if (!input.history.length) return startFallback;
+    const frame = input.frame ?? buildFallbackClarificationFrame(input.content);
     return {
       dimensions: clarificationHistoryToDimensions(input.history),
       supplementPlaceholder: "",
@@ -1039,13 +1305,48 @@ export async function generateSocraticClarification(input: {
       maxQuestions,
       history: input.history,
       summary: fallbackSummary,
+      frame,
+      session: buildClarificationSession(frame, null, fallbackSummary, true),
     };
   }
 
   try {
     const raw = JSON.parse(extractJson(text) ?? "{}") as Record<string, unknown>;
-    const forcedDone = raw.done === true || input.history.length >= maxQuestions;
+    const frame = normalizeClarificationFrame(
+      raw.frame,
+      input.frame ?? buildFallbackClarificationFrame(input.content),
+    );
+    const mustAskCompletion =
+      assessment.readiness !== "ready" && input.history.length === 0;
+    const qualityIssues = checkClarificationQuality(
+      {
+        done: raw.done === true,
+        frame: raw.frame,
+        question: raw.question,
+        summary: raw.summary,
+      },
+      {
+        originalIdea: input.content,
+        previousQuestions: input.history.map((item) => item.question),
+        contextFacts,
+      },
+    );
+    if (qualityIssues.length) {
+      console.warn(`[ai] clarification quality: ${qualityIssues.join("; ")}`);
+    }
+    const forcedDone =
+      (raw.done === true && !mustAskCompletion) ||
+      input.history.length >= maxQuestions;
     if (forcedDone) {
+      const summary = normalizeClarificationSummary(
+        raw.summary,
+        fallbackSummary,
+      );
+      const hydratedFrame = hydrateClarificationFrame(
+        frame,
+        null,
+        input.content,
+      );
       return {
         dimensions: clarificationHistoryToDimensions(input.history),
         supplementPlaceholder: "",
@@ -1054,13 +1355,30 @@ export async function generateSocraticClarification(input: {
         askedCount: input.history.length,
         maxQuestions,
         history: input.history,
-        summary: normalizeClarificationSummary(raw.summary, fallbackSummary),
+        summary,
+        frame: hydratedFrame,
+        session: buildClarificationSession(
+          hydratedFrame,
+          null,
+          summary,
+          true,
+        ),
       };
     }
 
     const question = normalizeClarificationDimension(raw.question);
     if (!question) {
+      if (mustAskCompletion) return startFallback;
       if (!input.history.length) return startFallback;
+      const summary = normalizeClarificationSummary(
+        raw.summary,
+        fallbackSummary,
+      );
+      const hydratedFrame = hydrateClarificationFrame(
+        frame,
+        null,
+        input.content,
+      );
       return {
         dimensions: clarificationHistoryToDimensions(input.history),
         supplementPlaceholder: "",
@@ -1069,7 +1387,14 @@ export async function generateSocraticClarification(input: {
         askedCount: input.history.length,
         maxQuestions,
         history: input.history,
-        summary: normalizeClarificationSummary(raw.summary, fallbackSummary),
+        summary,
+        frame: hydratedFrame,
+        session: buildClarificationSession(
+          hydratedFrame,
+          null,
+          summary,
+          true,
+        ),
       };
     }
 
@@ -1080,6 +1405,11 @@ export async function generateSocraticClarification(input: {
       ...input.history,
       { ...question, answer: [], reflection },
     ];
+    const hydratedFrame = hydrateClarificationFrame(
+      frame,
+      question,
+      input.content,
+    );
     return {
       dimensions: clarificationHistoryToDimensions(history),
       supplementPlaceholder: "",
@@ -1089,9 +1419,17 @@ export async function generateSocraticClarification(input: {
       maxQuestions,
       history,
       summary: null,
+      frame: hydratedFrame,
+      session: buildClarificationSession(
+        hydratedFrame,
+        question,
+        null,
+        false,
+      ),
     };
   } catch {
     if (!input.history.length) return startFallback;
+    const frame = input.frame ?? buildFallbackClarificationFrame(input.content);
     return {
       dimensions: clarificationHistoryToDimensions(input.history),
       supplementPlaceholder: "",
@@ -1101,6 +1439,8 @@ export async function generateSocraticClarification(input: {
       maxQuestions,
       history: input.history,
       summary: fallbackSummary,
+      frame,
+      session: buildClarificationSession(frame, null, fallbackSummary, true),
     };
   }
 }
@@ -1210,6 +1550,9 @@ export async function planInbox(
   onDelta?: (delta: string) => void,
   clarificationHistory?: InboxClarificationHistoryItem[],
   clarificationSummary?: InboxClarificationSummary | null,
+  clarificationFrame?: InboxClarificationFrame | null,
+  clarificationSession?: DecisionSession | null,
+  decisionMemory?: string[],
 ) {
   const clarifiedContent = [content, direction, supplement]
     .filter((part): part is string => Boolean(part?.trim()))
@@ -1231,7 +1574,10 @@ export async function planInbox(
         answers: item.answer,
         reflection: item.reflection ?? null,
       })),
+      clarificationFrame: clarificationFrame ?? null,
+      clarificationSession: clarificationSession ?? null,
       clarificationSummary: clarificationSummary ?? null,
+      decisionMemory: decisionMemory ?? [],
       contextEvidence: evidence ?? [],
       maxTasks: maxTasks ?? null,
     }),
@@ -1239,7 +1585,7 @@ export async function planInbox(
     model,
     baseUrl,
     0.65,
-    { onDelta, maxTokens: 1600 },
+    { onDelta, maxTokens: 2800 },
   );
 
   if (!text) return fallback;
@@ -1266,6 +1612,23 @@ export async function planInbox(
       ? raw.tasks.map(safePlanTask)
       : fallback.tasks;
     const tasks = collapsePlannedTasks(rawTasks, taskLimit);
+    const firstTask = tasks[0];
+    const session = firstTask
+      ? buildDecisionSession({
+          stage: "execute",
+          kind: routeDecisionKind({ mode: "plan" }),
+          coreNeedHypothesis:
+            clarificationSession?.coreNeedHypothesis ??
+            clarificationFrame?.coreNeedHypothesis ??
+            (typeof raw.projectObjective === "string"
+              ? raw.projectObjective
+              : fallback.projectObjective),
+          recommendation: firstTask.recommendation,
+          nextAction: firstTask.executionSteps[0] ?? firstTask.recommendation,
+          fallback: firstTask.fallback,
+          confidence: firstTask.recommendation ? 0.84 : 0.55,
+        })
+      : null;
 
     return {
       action,
@@ -1284,8 +1647,14 @@ export async function planInbox(
         typeof raw.reason === "string" && raw.reason.trim()
           ? raw.reason.trim()
           : fallback.reason,
+      session,
     };
-  } catch {
+  } catch (error) {
+    console.warn(
+      "[ai] plan parse failed",
+      error instanceof Error ? error.message : error,
+      text.slice(0, 500),
+    );
     return fallback;
   }
 }
@@ -1301,6 +1670,10 @@ export async function generateFirstRunPlan(
     taskShortTitle: string;
     executionMode: string;
     doneWhen: string;
+    methodHint: string;
+    taskRecommendation: string;
+    taskExecutionSteps: string[];
+    taskFallback: string;
     maxTurns: number;
     toolPolicy: string;
   }>;
@@ -1309,21 +1682,7 @@ export async function generateFirstRunPlan(
     usedFallback: true,
   };
   const text = await callModel(
-    `你是走走里的新人推进伙伴，不是计划工具。用户会输入一个真实想法。你的任务不是替他做一份大计划，而是判断此刻哪种推进方式最合适，再把想法收成一个具体的动作。
-要求：
-- projectName 用 2-8 个字概括核心方向，不能照抄原句。
-- projectName 不要用“计划”作为名称后缀。
-- 先判断用户更需要哪一种推进：拿真实反馈、做出可见产出、解决一个卡点、完成一次学习练习、做关键取舍、减少负担，或建立低摩擦节奏。不要一律套用“最小下一步”。
-- projectObjective 必须是你理解后的目的总结，不得复制、截断或复述用户原话，也不要出现“把‘……’变成……”这类机械句式；一句话说明这件事为什么值得做、希望最终改变什么。
-- projectMilestone 必须描述一个具体、可观察的阶段结果，不得套用“出现第一个进展、完成最小成果”等模板句，也不能照抄 projectObjective。
-- taskTitle 要直接描述今天能做的一个具体动作，通常 10-45 分钟；不要以“先”字开头，不要出现“最小下一步、完成最小、第一个最小动作”这类口号。如果确实适合小范围验证，也可以保留轻盈的尺度，但要说清楚到底做什么。
-- taskShortTitle 是列表展示用的语义标题，4-12 个字；要理解 taskTitle 的动作、对象和场景后重新概括，不能截取开头，也不能写成“推进任务”“执行第一步”。
-- executionMode 只能是 quick、tool、produce、explore、project；小任务用 quick，需要外部最新信息用 tool，需要产出用 produce，需要验证用 explore，长期目标才用 project。
-- doneWhen 必须写清楚什么结果算完成，不能写“继续优化”“保持耐心”；maxTurns 为 quick=1、tool/produce=2、explore/project=3。
-- toolPolicy 只能是 none、read、confirm-write；只有需要外部信息时才用 read。
-- 三条内容要彼此呼应，但不能像同一个模板换词。
-- 只返回 JSON，不要 Markdown。
-格式：{"projectName":"","projectObjective":"","projectMilestone":"","taskTitle":"","taskShortTitle":"","executionMode":"quick","doneWhen":"","maxTurns":1,"toolPolicy":"none"}`,
+    FIRST_RUN_PLAN_SYSTEM_PROMPT,
     JSON.stringify({ idea: content }),
     undefined,
     undefined,
@@ -1374,6 +1733,10 @@ export async function generateFirstRunPlan(
       typeof raw.doneWhen === "string" && raw.doneWhen.trim()
         ? raw.doneWhen.trim().slice(0, 200)
         : contract.doneWhen;
+    const methodHint =
+      typeof raw.methodHint === "string" && raw.methodHint.trim()
+        ? raw.methodHint.trim().slice(0, 240)
+        : contract.methodHint;
     const maxTurns =
       typeof raw.maxTurns === "number" && raw.maxTurns > 0
         ? Math.min(Math.floor(raw.maxTurns), 5)
@@ -1383,6 +1746,21 @@ export async function generateFirstRunPlan(
       ["none", "read", "confirm-write"].includes(raw.toolPolicy)
         ? raw.toolPolicy
         : contract.toolPolicy;
+    const taskRecommendation =
+      typeof raw.taskRecommendation === "string" && raw.taskRecommendation.trim()
+        ? raw.taskRecommendation.trim().slice(0, 400)
+        : methodHint;
+    const taskExecutionSteps = Array.isArray(raw.taskExecutionSteps)
+      ? raw.taskExecutionSteps
+          .filter((item): item is string => typeof item === "string")
+          .map((item) => item.trim())
+          .filter(Boolean)
+          .slice(0, 4)
+      : [];
+    const taskFallback =
+      typeof raw.taskFallback === "string"
+        ? raw.taskFallback.trim().slice(0, 240)
+        : "";
 
     return {
       projectName:
@@ -1393,6 +1771,10 @@ export async function generateFirstRunPlan(
       taskShortTitle,
       taskExecutionMode: executionMode,
       taskDoneWhen: doneWhen,
+      taskMethodHint: methodHint,
+      taskRecommendation,
+      taskExecutionSteps,
+      taskFallback,
       taskMaxTurns: maxTurns,
       taskToolPolicy: toolPolicy,
       usedFallback: false,
@@ -1411,20 +1793,29 @@ export async function generateTaskEditSuggestion(input: {
   dueDate?: string | null;
   focusDate?: string | null;
   idea: string;
-}, memorySummary?: string, evidence?: string[]): Promise<TaskEditSuggestion> {
+}, memorySummary?: string, evidence?: string[], decisionMemory?: string[]): Promise<TaskEditSuggestion> {
+  const decisionKind = routeDecisionKind({ message: input.idea, mode: "coach" });
   const fallback: TaskEditSuggestion = {
     title: input.idea.trim() || input.title,
     shortTitle: normalizeShortTitle(input.shortTitle, input.title),
     notes: input.notes ?? null,
     priority: safePriority(input.priority),
     reason: "本地规则：把你的想法作为新的任务标题，保留原备注。",
+    decision: buildDecisionSession({
+      kind: decisionKind,
+      coreNeedHypothesis: input.idea,
+      recommendation: input.idea.trim() || input.title,
+      nextAction: input.idea.trim() || input.title,
+      explanation: (decisionMemory ?? []).slice(0, 2).join("；"),
+    }),
   };
 
   const text = await callModel(
-    `你是走走里的任务推进伙伴，不是标准修改助手。用户会输入一个修改想法，以及当前任务字段。你需要理解用户真正想调整什么：可能是负担太重、方向变了、没时间或状态不佳。只返回 JSON，不要 Markdown。格式：{"title":"新标题","shortTitle":"精简标题","notes":"备注","priority":"low|medium|high|urgent","scheduledDate":"YYYY-MM-DD或null","dueDate":"YYYY-MM-DD或null","focusDate":"YYYY-MM-DD或null","reason":"中文说明为什么这样改"}。shortTitle 要理解任务的动作、对象和场景后重新概括，4-12 个字，不能截取 title 开头；只返回需要改的字段，reason 必须返回，并且要引用用户原话中的真实理由。如果用户想缓一缓或缩小范围，优先降低负担、简化任务，不要强行排期。`,
+    `你是走走里的任务推进伙伴，不是标准修改助手。用户会输入一个修改想法，以及当前任务字段。你需要理解用户真正想调整什么：可能是负担太重、方向变了、没时间或状态不佳。本次决策类型：${decisionKind}；如果是 recommend / compare，要把具体推荐或比较结论写进 notes/reason；如果是 plan，给出可执行路径；如果是 coach，先解除当前阻力。只返回 JSON，不要 Markdown。格式：{"title":"新标题","shortTitle":"精简标题","notes":"备注","priority":"low|medium|high|urgent","scheduledDate":"YYYY-MM-DD或null","dueDate":"YYYY-MM-DD或null","focusDate":"YYYY-MM-DD或null","reason":"中文说明为什么这样改"}。shortTitle 要理解任务的动作、对象和场景后重新概括，4-12 个字，不能截取 title 开头；只返回需要改的字段，reason 必须返回，并且要引用用户原话中的真实理由。如果用户想缓一缓或缩小范围，优先降低负担、简化任务，不要强行排期。`,
     JSON.stringify({
       ...input,
       memorySummary: memorySummary ?? null,
+      decisionMemory: decisionMemory ?? [],
       contextEvidence: evidence ?? [],
     }),
     undefined,
@@ -1470,6 +1861,19 @@ export async function generateTaskEditSuggestion(input: {
         typeof raw.reason === "string" && raw.reason.trim()
           ? raw.reason.trim()
           : fallback.reason,
+      decision: buildDecisionSession({
+        kind: decisionKind,
+        coreNeedHypothesis: input.idea,
+        recommendation:
+          typeof raw.title === "string" && raw.title.trim()
+            ? raw.title.trim()
+            : fallback.title,
+        nextAction:
+          typeof raw.title === "string" && raw.title.trim()
+            ? raw.title.trim()
+            : fallback.title,
+        explanation: (decisionMemory ?? []).slice(0, 2).join("；"),
+      }),
     };
   } catch {
     return fallback;
@@ -1483,18 +1887,27 @@ export async function generateProjectEditSuggestion(input: {
   status?: string;
   notes?: string | null;
   idea: string;
-}, memorySummary?: string, evidence?: string[]): Promise<ProjectEditSuggestion> {
+}, memorySummary?: string, evidence?: string[], decisionMemory?: string[]): Promise<ProjectEditSuggestion> {
+  const decisionKind = routeDecisionKind({ message: input.idea, mode: "coach" });
   const fallback: ProjectEditSuggestion = {
     objective: input.idea.trim() || input.objective,
     notes: input.notes ?? null,
     reason: "本地规则：把你的想法作为新的项目目标，保留原备注。",
+    decision: buildDecisionSession({
+      kind: decisionKind,
+      coreNeedHypothesis: input.idea,
+      recommendation: input.idea.trim() || input.objective,
+      nextAction: input.idea.trim() || input.objective,
+      explanation: (decisionMemory ?? []).slice(0, 2).join("；"),
+    }),
   };
 
   const text = await callModel(
-    `你是走走里的项目推进伙伴，不是标准修改助手。用户会输入一个修改想法，以及当前项目字段。你需要理解这个项目对用户来说为什么重要、当前卡在哪，并返回最合理的修改建议。只返回 JSON，不要 Markdown。格式：{"name":"项目名称","objective":"项目目标","currentMilestone":"当前里程碑","status":"active|paused|completed|archived","notes":"备注","reason":"中文说明为什么这样改"}。只返回需要改的字段，reason 必须返回，并且引用用户原话中的真实理由。如果用户提到暂停、缩小或换方向，优先让项目负担更轻，而不是增加新承诺。`,
+    `你是走走里的项目推进伙伴，不是标准修改助手。用户会输入一个修改想法，以及当前项目字段。你需要理解这个项目对用户来说为什么重要、当前卡在哪，并返回最合理的修改建议。本次决策类型：${decisionKind}；如果是 recommend / compare，要给出具体推荐或比较结论；如果是 plan，给出阶段路径；如果是 coach，先解除当前阻力。只返回 JSON，不要 Markdown。格式：{"name":"项目名称","objective":"项目目标","currentMilestone":"当前里程碑","status":"active|paused|completed|archived","notes":"备注","reason":"中文说明为什么这样改"}。只返回需要改的字段，reason 必须返回，并且引用用户原话中的真实理由。如果用户提到暂停、缩小或换方向，优先让项目负担更轻，而不是增加新承诺。`,
     JSON.stringify({
       ...input,
       memorySummary: memorySummary ?? null,
+      decisionMemory: decisionMemory ?? [],
       contextEvidence: evidence ?? [],
     }),
     undefined,
@@ -1533,6 +1946,19 @@ export async function generateProjectEditSuggestion(input: {
         typeof raw.reason === "string" && raw.reason.trim()
           ? raw.reason.trim()
           : fallback.reason,
+      decision: buildDecisionSession({
+        kind: decisionKind,
+        coreNeedHypothesis: input.idea,
+        recommendation:
+          typeof raw.objective === "string" && raw.objective.trim()
+            ? raw.objective.trim()
+            : fallback.objective,
+        nextAction:
+          typeof raw.currentMilestone === "string" && raw.currentMilestone.trim()
+            ? raw.currentMilestone.trim()
+            : fallback.currentMilestone ?? fallback.objective,
+        explanation: (decisionMemory ?? []).slice(0, 2).join("；"),
+      }),
     };
   } catch {
     return fallback;
@@ -1583,9 +2009,14 @@ export async function generateTaskCoachAdvice(input: {
   message: string;
 }, memorySummary?: string, evidence?: string[]): Promise<TaskCoachAdvice> {
   const fallback = buildLocalTaskCoachAdvice(input);
+  const decisionKind = routeDecisionKind({
+    message: input.message,
+    mode: "coach",
+  });
 
   const text = await callModel(
     `你是走走里的任务伙伴，不是标准助手。用户会给你一个任务标题和一段很随意的想法。你要像熟悉他的朋友一样，先接住他的话，再写一张便利贴。
+本次决策类型：${decisionKind}。如果是 recommend 或 compare，不要只给执行步骤，要在 encouragement、steps 和 nextStep 里直接给出具体推荐或比较结论；如果是 plan，给出可执行路径；如果是 coach，帮他排除当前阻力。
 硬性要求：
 - 必须回应用户原话和任务标题，不能只讲通用道理。
 - 禁止使用“卡住很正常”“保持耐心”“一步一步来”“你可以尝试”这类模板句。
@@ -1602,6 +2033,7 @@ export async function generateTaskCoachAdvice(input: {
 示例输出：{"title":"从三张最能代表你的作品开始","encouragement":"你不知道放什么，是因为还没想清楚要给谁看。","steps":["写下你希望作品集让谁看到","挑三张你最想被记住的作品","把这三张放上去，其他以后再说"],"nextStep":"挑三张作品并放上去"}`,
     JSON.stringify({
       ...input,
+      decisionKind,
       memorySummary: memorySummary ?? null,
       contextEvidence: evidence ?? [],
     }),
@@ -1860,6 +2292,13 @@ function heuristicToday(tasks: FocusTask[]): TodaySuggestion[] {
         ? "先处理临近截止的这件，避免拖延变成负担"
         : "今天先推进这一件，不用给自己太多压力",
       evidence: [],
+      decision: buildDecisionSession({
+        kind: "plan",
+        coreNeedHypothesis: "从今天可推进的任务里选出一个最小但真实的前进动作",
+        recommendation: task.title,
+        nextAction: task.title,
+        confidence: 0.6,
+      }),
     }));
 }
 
@@ -1871,12 +2310,13 @@ export async function suggestTodayFocus(
   },
   memorySummary?: string,
   evidence?: string[],
-) {
+  decisionMemory?: string[],
+): Promise<TodaySuggestion[]> {
   const fallback = heuristicToday(tasks);
   if (!tasks.length) return fallback;
 
   const text = await callModel(
-    "你是走走里的今日推进伙伴，不是标准排期助手。根据任务列表、最近复盘和用户反馈，选择今天最值得推进的 1-3 个任务。不要只按优先级和截止日期选；reason 要像朋友解释为什么今天做它，可以引用复盘、项目状态或用户原话，不要总用“先做最小一步”这类说法。如果用户最近有延期或低质量反馈，优先选负担合适、真的能开始的任务。只返回 JSON，不要 Markdown。格式：{\"suggestions\":[{\"title\":\"任务标题\",\"reason\":\"中文理由\"}]}。",
+    "你是走走里的今日推进伙伴，不是标准排期助手。根据任务列表、最近复盘、用户反馈和 decisionMemory，选择今天最值得推进的 1-3 个任务。不要只按优先级和截止日期选；reason 要像朋友解释为什么今天做它，可以引用复盘、项目状态、最近完成/延期/取消结果或用户原话，不要总用“先做最小一步”这类说法。如果最近有任务延期、取消、计划被忽略或建议无效，优先降低密度、换方法或缩小范围，不要重复推荐同类高压任务。只返回 JSON，不要 Markdown。格式：{\"suggestions\":[{\"title\":\"任务标题\",\"reason\":\"中文理由\"}]}。",
     JSON.stringify({
       tasks: tasks.map((task) => ({
         title: task.title,
@@ -1887,6 +2327,7 @@ export async function suggestTodayFocus(
       reviewSummary: context?.reviewSummary ?? null,
       projects: context?.projects ?? [],
       memorySummary: memorySummary ?? null,
+      decisionMemory: decisionMemory ?? [],
       contextEvidence: evidence ?? [],
     }),
     undefined,
@@ -1902,7 +2343,7 @@ export async function suggestTodayFocus(
       suggestions?: Array<{ title?: string; reason?: string }>;
     };
     const suggestions = (raw.suggestions ?? [])
-      .map((item) => {
+      .map((item): TodaySuggestion | null => {
         const task = tasks.find((candidate) => candidate.title === item.title);
         if (!task) return null;
     return {
@@ -1912,6 +2353,18 @@ export async function suggestTodayFocus(
       priority: safePriority(task.priority),
       reason: typeof item.reason === "string" ? item.reason : "AI 建议",
       evidence: evidence ?? [],
+      decision: buildDecisionSession({
+        kind: routeDecisionKind({
+          message: `${task.title} ${item.reason ?? ""}`,
+        }),
+        coreNeedHypothesis:
+          typeof item.reason === "string" ? item.reason : "今天优先推进这件任务",
+        recommendation: task.title,
+        nextAction: task.title,
+        fallback: "",
+        confidence: evidence?.length ? 0.82 : 0.65,
+        explanation: (decisionMemory ?? []).slice(0, 2).join("；"),
+      }),
     };
       })
       .filter((item): item is TodaySuggestion => item !== null)
@@ -1987,7 +2440,7 @@ export async function generateReviewDraft(input: {
     taskCount: number;
     openTaskCount?: number;
   }>;
-}, evidence?: string[], onDelta?: (delta: string) => void) {
+}, evidence?: string[], onDelta?: (delta: string) => void, decisionMemory?: string[]) {
   const fallback = heuristicReview(
     input.completed,
     input.open,
@@ -1995,11 +2448,15 @@ export async function generateReviewDraft(input: {
     input.projects,
   );
 
-  const reviewPrompt = `你是走走里的每日复盘伙伴。请根据当天完成的任务、今日计划、未完成任务和项目状态，写一段像用户自己留在纸上的复盘，不要写成汇报、心理分析或总结陈词。summary 2-4 句话，先说具体做了什么，再说卡在哪里、下一步怎么判断；不要使用“今天真正推进的是”“不是……而是……”“意味着”“价值在于”等模板句，不要罗列任务数量。nextActions 只写 ${MAX_REVIEW_NEXT_ACTIONS} 条，也可以返回空字符串。已有未完成任务时不要再新建，只判断继续、调整还是替换；只有项目没有未完成任务时才给一条新任务。每条任务分两行：第一行是 6-16 个字的精简标题，第二行是 20-45 个字的具体说明。不要标序号、不要项目符号、不要竖线、不要写日期。只返回 JSON，不要 Markdown。格式：{\"summary\":\"总结\",\"nextActions\":\"精简标题\\n具体说明\"}。`;
+  const reviewPrompt = `你是走走里的每日复盘伙伴。请根据当天完成的任务、今日计划、未完成任务、项目状态和 decisionMemory，写一段像用户自己留在纸上的复盘，不要写成汇报、心理分析或总结陈词。decisionMemory 里的完成、延期、取消、忽略计划和最近便利贴动作要用来判断下一步：重复延期的要缩小范围，被取消或无效的不要原样再来。summary 2-4 句话，先说具体做了什么，再说卡在哪里、下一步怎么判断；不要使用“今天真正推进的是”“不是……而是……”“意味着”“价值在于”等模板句，不要罗列任务数量。nextActions 只写 ${MAX_REVIEW_NEXT_ACTIONS} 条，也可以返回空字符串。已有未完成任务时不要再新建，只判断继续、调整还是替换；只有项目没有未完成任务时才给一条新任务。每条任务分两行：第一行是 6-16 个字的精简标题，第二行是 20-45 个字的具体说明。不要标序号、不要项目符号、不要竖线、不要写日期。只返回 JSON，不要 Markdown。格式：{\"summary\":\"总结\",\"nextActions\":\"精简标题\\n具体说明\"}。`;
 
   const text = await callModel(
     reviewPrompt,
-    JSON.stringify({ ...input, contextEvidence: evidence ?? [] }),
+    JSON.stringify({
+      ...input,
+      contextEvidence: evidence ?? [],
+      decisionMemory: decisionMemory ?? [],
+    }),
     undefined,
     undefined,
     undefined,

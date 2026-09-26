@@ -1,6 +1,10 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { checkPlanQuality, compareAgainstBaseline } from "@/lib/ai-quality";
+import {
+  checkClarificationQuality,
+  checkPlanQuality,
+  compareAgainstBaseline,
+} from "@/lib/ai-quality";
 
 type Task = Record<string, unknown>;
 
@@ -10,6 +14,10 @@ function task(overrides: Task = {}): Task {
     shortTitle: "整理访谈抱怨",
     executionMode: "produce",
     doneWhen: "产出一份标好三处抱怨的访谈摘要",
+    methodHint: "先按访谈提纲标出具体抱怨，再按出现频次归并重复项",
+    recommendation: "先把三份访谈里的具体抱怨摘出来，按重复次数排序",
+    executionSteps: ["打开三份访谈记录", "标出具体抱怨", "按重复次数排序并写摘要"],
+    fallback: "如果访谈内容不完整，先补充一次回访再整理",
     maxTurns: 2,
     toolPolicy: "none",
     notes: null,
@@ -77,6 +85,35 @@ test("executionMode 与 toolPolicy 取值非法会被抓出来", () => {
 test("缺少 doneWhen 会被抓出来", () => {
   const issues = checkPlanQuality(plan({ tasks: [task({ doneWhen: "" })] }));
   assert.ok(issues.some((issue) => issue.includes("缺少 doneWhen")));
+});
+
+test("缺少 methodHint 会被抓出来", () => {
+  const issues = checkPlanQuality(plan({ tasks: [task({ methodHint: "" })] }));
+  assert.ok(issues.some((issue) => issue.includes("缺少 methodHint")));
+});
+
+test("空泛的 methodHint 会被抓出来", () => {
+  const issues = checkPlanQuality(
+    plan({ tasks: [task({ methodHint: "按计划推进，根据情况调整" })] }),
+  );
+  assert.ok(issues.some((issue) => issue.includes("空泛做法")));
+});
+
+test("缺少默认推荐和执行路径会被抓出来", () => {
+  const issues = checkPlanQuality(
+    plan({
+      tasks: [
+        task({
+          recommendation: "",
+          executionSteps: [],
+          fallback: "",
+        }),
+      ],
+    }),
+  );
+  assert.ok(issues.some((issue) => issue.includes("recommendation")));
+  assert.ok(issues.some((issue) => issue.includes("executionSteps")));
+  assert.ok(issues.some((issue) => issue.includes("fallback")));
 });
 
 test("shortTitle 直接截断标题会被抓出来", () => {
@@ -152,4 +189,191 @@ test("回归门禁：一直失败的用例不算新增回归", () => {
   );
   assert.deepEqual(result.newFailures, []);
   assert.deepEqual(result.fixed, []);
+});
+
+test("合格的澄清会通过结构检查", () => {
+  assert.deepEqual(
+    checkClarificationQuality(
+      {
+        done: false,
+        frame: {
+          surfaceRequest: "想给个人网站先做作品集还是博客",
+          coreNeedHypothesis: "先用一个能展示方向和能力的页面拿到反馈",
+          decisionFork: "先做作品集还是先做博客",
+          decisiveUnknown: "网站第一版最需要服务谁",
+          whyItChangesPlan: "答案会改变首页结构和第一条任务",
+          readiness: "ready",
+          missingSlots: [],
+          completionPrompt: "",
+          completionOptions: [],
+        },
+        reflection: "",
+        question: {
+          key: "goal",
+          question: "个人网站第一版是想让招聘方快速看到作品，还是让读者持续看文章？",
+          options: ["先服务招聘方", "先服务长期读者"],
+        },
+        summary: null,
+      },
+      { originalIdea: "我想做一个个人网站，可能是作品集也可能是博客" },
+    ),
+    [],
+  );
+});
+
+test("通用澄清问句和重复问题会被抓出来", () => {
+  const issues = checkClarificationQuality(
+    {
+      done: false,
+      frame: {
+        surfaceRequest: "想做一个个人网站",
+        coreNeedHypothesis: "先确定网站服务谁",
+        decisionFork: "作品集还是博客",
+        decisiveUnknown: "访客是谁",
+        whyItChangesPlan: "会影响首页结构",
+        readiness: "ready",
+        missingSlots: [],
+        completionPrompt: "",
+        completionOptions: [],
+      },
+      question: {
+        key: "goal",
+        question: "你最想要什么？",
+        options: ["作品集", "博客"],
+      },
+    },
+    {
+      originalIdea: "我想做一个个人网站，可能是作品集也可能是博客",
+      previousQuestions: ["你最想要什么？"],
+    },
+  );
+  assert.ok(issues.some((issue) => issue.includes("通用问句")));
+  assert.ok(issues.some((issue) => issue.includes("重复")));
+});
+
+test("结束时留下待确认问题会判定为没有收口", () => {
+  const issues = checkClarificationQuality({
+    done: true,
+    frame: {
+      surfaceRequest: "想做一个个人网站",
+      coreNeedHypothesis: "先确定网站服务谁",
+      decisionFork: "作品集还是博客",
+      decisiveUnknown: "访客是谁",
+      whyItChangesPlan: "会影响首页结构",
+      readiness: "ready",
+      missingSlots: [],
+      completionPrompt: "",
+      completionOptions: [],
+    },
+    question: null,
+    summary: {
+      realProblem: "先确定个人网站的第一批访客",
+      workingAssumption: "先按招聘方会看来安排",
+      newQuestion: "要不要做博客？",
+    },
+  });
+  assert.ok(issues.some((issue) => issue.includes("新问题")));
+});
+
+test("用户明确列出多个并列对象时，最多六个具体选项可以通过", () => {
+  const issues = checkClarificationQuality(
+    {
+      done: false,
+      frame: {
+        surfaceRequest: "用户在六个目标之间摇摆",
+        coreNeedHypothesis: "先选一个主线，其他方向先降级",
+        decisionFork: "先保一个主线还是六线并行",
+        decisiveUnknown: "哪一个目标最不能停",
+        whyItChangesPlan: "会改变任务数量和第一条任务",
+        readiness: "ready",
+        missingSlots: [],
+        completionPrompt: "",
+        completionOptions: [],
+      },
+      question: {
+        key: "tradeoff",
+        question: "学 AI、做个人网站、运营账号、学英语、健身、准备课程里，如果只能先保一个，你想先保哪个？",
+        options: ["学 AI", "做个人网站", "运营账号", "学英语", "健身", "准备课程"],
+      },
+    },
+    {
+      originalIdea: "我想学 AI、做个人网站、运营账号、学英语、健身、准备课程，但推进不下去。",
+    },
+  );
+  assert.deepEqual(issues, []);
+});
+
+test("输入不完整但缺少补全槽位会被抓出来", () => {
+  const issues = checkClarificationQuality({
+    done: false,
+    frame: {
+      surfaceRequest: "我有一个计划，但不知道干什么。",
+      coreNeedHypothesis: "用户需要先把真实事情说出来",
+      decisionFork: "我不知道具体是什么，还是知道但一直没动",
+      decisiveUnknown: "这件事具体指什么",
+      whyItChangesPlan: "会决定先补全对象还是先处理阻力",
+      readiness: "needs_meaning",
+      missingSlots: [],
+      completionPrompt: "",
+      completionOptions: [],
+    },
+    question: {
+      key: "context",
+      question: "这件事具体指什么？",
+      options: ["我也不知道", "我知道但没动"],
+    },
+  });
+  assert.ok(issues.some((issue) => issue.includes("missingSlots")));
+  assert.ok(issues.some((issue) => issue.includes("completionPrompt")));
+  assert.ok(issues.some((issue) => issue.includes("completionOptions")));
+});
+
+test("问句本身通用、但选项带上用户的对象时，不算没有引用原话", () => {
+  const frame = {
+    surfaceRequest: "朋友让我帮他的公司做个官网，我不知道该不该接",
+    coreNeedHypothesis: "用户要先判断自己现在有没有条件接这个活",
+    decisionFork: "接下来做还是推掉",
+    decisiveUnknown: "用户手上的时间和精力够不够",
+    whyItChangesPlan: "会决定第一条任务是排期还是婉拒",
+    readiness: "ready",
+    missingSlots: [],
+    completionPrompt: "",
+    completionOptions: [],
+  };
+  const context = {
+    originalIdea: "朋友让我帮他的公司做个官网，我不知道该不该接。",
+  };
+
+  const withOptions = checkClarificationQuality(
+    {
+      done: false,
+      frame,
+      question: {
+        key: "constraint",
+        question: "你现在最卡的是哪一点？",
+        options: [
+          "怕占太多时间，影响自己手头的事",
+          "朋友没提钱，不知道算帮忙还是接活",
+        ],
+      },
+    },
+    context,
+  );
+  assert.equal(
+    withOptions.includes("问题没有引用用户原话里的具体对象"),
+    false,
+  );
+
+  const withoutOptions = checkClarificationQuality(
+    {
+      done: false,
+      frame,
+      question: { key: "constraint", question: "你现在最卡的是哪一点？", options: [] },
+    },
+    context,
+  );
+  assert.ok(
+    withoutOptions.includes("问题没有引用用户原话里的具体对象"),
+    "没有任何具体线索时仍要报出来",
+  );
 });

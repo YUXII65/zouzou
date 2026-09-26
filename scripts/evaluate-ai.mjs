@@ -20,6 +20,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { createHash } from "node:crypto";
 import "dotenv/config";
+import { extractJsonObject as extractJson } from "../src/lib/json-extract.ts";
 import {
   OUTPUT_QUALITY_RULES,
   PLAN_SYSTEM_PROMPT,
@@ -46,6 +47,7 @@ const baseUrl = (
 ).replace(/\/$/, "");
 
 const args = process.argv.slice(2);
+const debug = args.includes("--debug");
 const argOf = (name) => {
   const hit = args.find((arg) => arg.startsWith(`--${name}=`));
   return hit ? hit.slice(name.length + 3) : null;
@@ -65,6 +67,7 @@ if (!apiKey) {
 }
 
 const limit = argOf("limit") ? Number(argOf("limit")) : corpus.cases.length;
+const idFilter = argOf("id");
 const label = argOf("label") ?? "";
 const comparePath = argOf("compare")
   ? path.resolve(root, argOf("compare"))
@@ -72,13 +75,6 @@ const comparePath = argOf("compare")
 const fileBase = label ? `ai-eval-baseline-${label}` : "ai-eval-baseline";
 const reportPath = path.join(root, "docs", `${fileBase}.md`);
 const resultsPath = path.join(root, "docs", `${fileBase}.json`);
-
-function extractJson(text) {
-  const start = text.indexOf("{");
-  const end = text.lastIndexOf("}");
-  if (start === -1 || end <= start) return null;
-  return text.slice(start, end + 1);
-}
 
 async function callPlan(aiCase) {
   const context = aiCase.context ?? {};
@@ -110,8 +106,12 @@ async function callPlan(aiCase) {
         },
       ],
       temperature: 0.2,
+      max_tokens: 2800,
+      ...(/deepseek/i.test(model) || /deepseek/i.test(baseUrl)
+        ? { reasoning_effort: "none" }
+        : {}),
     }),
-    signal: AbortSignal.timeout(30000),
+    signal: AbortSignal.timeout(45000),
   });
 
   if (!response.ok) {
@@ -119,7 +119,11 @@ async function callPlan(aiCase) {
   }
 
   const data = await response.json();
-  return data.choices?.[0]?.message?.content ?? "";
+  const content = data.choices?.[0]?.message?.content ?? "";
+  if (!content && debug) {
+    console.log("EMPTY RESPONSE:", JSON.stringify(data).slice(0, 1200));
+  }
+  return content;
 }
 
 /** 用例自带的期待项 + 通用质量检查 */
@@ -133,6 +137,15 @@ function runChecks(aiCase, plan) {
       issues.push(`计划没有提到项目「${checks.mustMentionProject}」`);
     }
   }
+  const mentionAny = Array.isArray(checks.mustMentionAny)
+    ? checks.mustMentionAny
+    : [];
+  if (mentionAny.length) {
+    const text = JSON.stringify(plan ?? {});
+    if (!mentionAny.some((item) => text.includes(item))) {
+      issues.push(`计划没有出现要求的决策线索：${mentionAny.join(" / ")}`);
+    }
+  }
 
   return issues;
 }
@@ -140,20 +153,29 @@ function runChecks(aiCase, plan) {
 const rows = [];
 const generatedAt = new Date().toISOString();
 
-for (const [index, aiCase] of corpus.cases.entries()) {
+const cases = idFilter
+  ? corpus.cases.filter((item) => item.id === idFilter)
+  : corpus.cases;
+
+for (const [index, aiCase] of cases.entries()) {
   if (index >= limit) break;
 
   let plan = null;
   let error = null;
+  let rawPlan = "";
 
   try {
-    const raw = await callPlan(aiCase);
-    plan = JSON.parse(extractJson(raw) ?? "{}");
+    rawPlan = await callPlan(aiCase);
+    plan = JSON.parse(extractJson(rawPlan) ?? "{}");
   } catch (caught) {
     error = caught.message;
   }
 
   const issues = error ? [error] : runChecks(aiCase, plan);
+  if (debug) {
+    console.log(`\n---- ${aiCase.id} ----`);
+    console.log(rawPlan || error || "empty response");
+  }
   rows.push({
     id: aiCase.id,
     title: aiCase.title,

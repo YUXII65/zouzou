@@ -1,0 +1,172 @@
+{
+  "cases": [
+    {
+      "id": "simple-edit",
+      "title": "已经说清楚的简单修改",
+      "input": "把这句话改得口语一点：明天记得带身份证。",
+      "expect": {
+        "shouldAsk": false,
+        "mustNotMention": ["你最想要什么", "第一步做什么"]
+      }
+    },
+    {
+      "id": "personal-site",
+      "title": "个人网站用途分叉",
+      "input": "我想做一个个人网站，可能是作品集也可能是博客，还没想清楚，但想尽快有个能展示的东西。",
+      "expect": {
+        "shouldAsk": true,
+        "mustMentionAny": ["网站", "作品", "文章", "展示", "谁看", "读者", "招聘", "内容", "放上去", "东西", "现成", "手上"],
+        "mustNotMention": ["你最想要什么", "第一步做什么"]
+      },
+      "followUps": [
+        { "answer": ["作品集"], "expect": { "mustBuildOn": ["作品"] } }
+      ]
+    },
+    {
+      "id": "many-goals",
+      "title": "多个目标同时抢时间",
+      "input": "我想学 AI、做个人网站、运营账号、学英语、健身、准备课程，感觉都很重要，但每天都推进不下去。",
+      "context": {
+        "memorySummary": "用户近期接受 2 次 AI 计划，忽略 1 次；当前未完成任务 8 个，累计完成 3 个。",
+        "evidence": ["当前未完成任务 8 个", "用户近期忽略过 AI 计划"]
+      },
+      "expect": {
+        "shouldAsk": true,
+        "mustMentionAny": ["六件", "重要", "保", "拖", "必须"],
+        "mustReferenceObjects": ["学 AI", "做个人网站", "运营账号", "学英语", "健身", "准备课程"],
+        "minObjectRefs": 2,
+        "mustNotMention": ["你最想要什么", "优先级是什么"]
+      },
+      "followUps": [
+        { "answer": ["学 AI"], "expect": { "mustBuildOn": ["学 AI"] } }
+      ]
+    },
+    {
+      "id": "stalled-project",
+      "title": "停滞项目重启",
+      "input": "我的下一步项目已经停了两周，最近复盘说要继续，但打开项目就不知道从哪里开始。",
+      "context": {
+        "projects": [
+          {
+            "name": "下一步",
+            "objective": "把零散想法变成可持续推进的个人项目",
+            "currentMilestone": "V1.5 AI 记忆与反馈闭环",
+            "openTaskCount": 4
+          }
+        ],
+        "memorySummary": "活跃项目：下一步（V1.5 AI 记忆与反馈闭环）。最近复盘：继续推进 AI 记忆与反馈闭环。",
+        "evidence": ["下一步 已停 14 天", "最近复盘提到继续推进 AI 记忆与反馈闭环"]
+      },
+      "expect": {
+        "shouldAsk": true,
+        "mustMentionAny": ["V1.5", "任务", "项目", "下一步"],
+        "mustNotMention": ["你最近怎么样"]
+      }
+    },
+    {
+      "id": "missing-object",
+      "title": "只有任务和计划，没有具体对象",
+      "input": "我做一个任务。我有一个计划。我不知道干什么。",
+      "expect": {
+        "shouldAsk": true,
+        "readinessAny": ["needs_context", "needs_meaning"],
+        "requiresMissingSlots": true,
+        "mustMentionAny": ["具体", "什么", "计划", "说不清", "哪件"],
+        "mustNotMention": [
+          "个人网站",
+          "健身",
+          "转行",
+          "减肥"
+        ]
+      }
+    },
+    {
+      "id": "note-app-choice",
+      "title": "工具选择需要现实条件",
+      "input": "我想换一个笔记软件，但不知道选哪个，市面上的工具太多了。",
+      "expect": {
+        "shouldAsk": true,
+        "mustMentionAny": ["笔记", "同步", "协作", "手机", "电脑", "价格", "迁移"],
+        "mustNotMention": ["最好用的工具是什么"]
+      }
+    },
+    {
+      "id": "roommate-boundary",
+      "title": "沟通同时涉及关系和规则",
+      "input": "我想和室友谈清楚家务分担，但怕把关系弄僵。",
+      "expect": {
+        "shouldAsk": true,
+        "mustMentionAny": ["室友", "家务", "关系", "边界", "约定", "分工"],
+        "mustNotMention": ["你想怎么沟通"]
+      }
+    },
+    {
+      "id": "vague-self-improvement",
+      "title": "只有抽象目标，没有落点",
+      "input": "我想提升自己。",
+      "expect": {
+        "shouldAsk": true,
+        "mustMentionAny": ["提升", "哪", "具体", "方面", "件", "什么"],
+        "mustNotMention": ["你最想要什么", "第一步做什么"]
+      }
+    },
+    {
+      "id": "quit-job-signal",
+      "title": "辞职冲动背后是情绪还是决定",
+      "input": "我最近特别想辞职。",
+      "expect": {
+        "shouldAsk": true,
+        "mustMentionAny": ["辞职", "持续", "具体", "触发", "原因", "多久", "念头", "冒出来"],
+        "mustNotMention": ["你最想要什么", "别冲动", "冷静一下"]
+      }
+    },
+    {
+      "id": "diet-relapse",
+      "title": "减肥总是中断，要问断在哪一环",
+      "input": "我想减肥，但每次都坚持不下来。",
+      "expect": {
+        "shouldAsk": true,
+        "mustMentionAny": ["减肥", "坚持", "断", "环节", "饿", "停", "原因", "哪"],
+        "mustNotMention": ["你最想要什么", "你的目标是什么"]
+      },
+      "followUps": [
+        { "answer": ["饿得受不了"], "expect": { "mustBuildOn": ["饿"] } }
+      ]
+    },
+    {
+      "id": "decline-favor",
+      "title": "要不要接朋友的活",
+      "input": "朋友让我帮他的公司做个官网，我不知道该不该接。",
+      "expect": {
+        "shouldAsk": true,
+        "mustMentionAny": ["接", "时间", "精力", "官网", "不接", "帮忙", "能力", "卡"],
+        "mustNotMention": ["你最想要什么"]
+      }
+    },
+    {
+      "id": "over-specified-request",
+      "title": "已经说得很细，不该再追问",
+      "input": "帮我写一封邮件给房东，说明厨房水龙头从周二开始漏水，我已经用毛巾垫着，希望他这周五前安排师傅上门，我的电话是13800000000。",
+      "expect": {
+        "shouldAsk": false,
+        "mustNotMention": ["你最想要什么", "第一步做什么"]
+      }
+    },
+    {
+      "id": "delegated-choice",
+      "title": "用户两轮都说“你帮我定”",
+      "input": "我想学 AI、做个人网站、运营账号、学英语、健身、准备课程，但都推进不下去。",
+      "followUps": [
+        { "answer": ["都行，你帮我定"], "expect": { "done": false } },
+        { "answer": ["没有，都差不多"] },
+        { "answer": ["真的随便，你定吧"], "expect": { "done": true } }
+      ],
+      "expect": {
+        "shouldAsk": true,
+        "mustReferenceObjects": ["学 AI", "做个人网站", "运营账号", "学英语", "健身", "准备课程"],
+        "minObjectRefs": 2,
+        "mustNotMention": ["你最想要什么"]
+      }
+    }
+  ]
+}

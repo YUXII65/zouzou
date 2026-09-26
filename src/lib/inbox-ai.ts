@@ -107,6 +107,7 @@ export async function createSocraticInboxClarification(input: {
       projectContext: aiContext.projectFacts,
       memorySummary: aiContext.summary,
       evidence: aiContext.evidence,
+      decisionMemory: aiContext.decisionMemory,
       maxQuestions: 3,
       onDelta: input.onDelta,
     }),
@@ -142,7 +143,7 @@ export async function advanceSocraticInboxClarification(input: {
   const answer = input.answer
     .map((entry) => String(entry).trim().slice(0, 120))
     .filter(Boolean)
-    .slice(0, 3);
+    .slice(0, 6);
   if (!answer.length) return null;
   const history: InboxClarificationHistoryItem[] = current.history.map(
     (entry, index) => index === unansweredIndex ? { ...entry, answer } : entry,
@@ -162,7 +163,9 @@ export async function advanceSocraticInboxClarification(input: {
       projectContext: aiContext.projectFacts,
       memorySummary: aiContext.summary,
       evidence: aiContext.evidence,
+      decisionMemory: aiContext.decisionMemory,
       maxQuestions: current.maxQuestions ?? 3,
+      frame: current.frame ?? null,
       onDelta: input.onDelta,
     }),
   );
@@ -217,6 +220,9 @@ export async function createInboxPlan(input: {
       input.onDelta,
       clarificationState?.history,
       clarificationState?.summary,
+      clarificationState?.frame,
+      clarificationState?.session,
+      aiContext.decisionMemory,
     ),
   );
 

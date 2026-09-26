@@ -5,6 +5,7 @@ import {
   Clock3,
   Focus,
   ListTodo,
+  StickyNote,
 } from "lucide-react";
 import { CalendarDatePanel } from "@/components/calendar-date-panel";
 import { FirstRunTour } from "@/components/first-run-tour";
@@ -14,6 +15,7 @@ import { StatusBadge } from "@/components/status-badge";
 import { TodayTaskActions } from "@/components/today-task-actions";
 import { TaskTitleButton } from "@/components/task-title-button";
 import { AiTaskPlanner } from "@/components/ai-task-planner";
+import { DecisionHistoryPanel } from "@/components/decision-history-panel";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
 import {
@@ -57,6 +59,7 @@ type AgendaTask = {
     createdAt: Date;
   }>;
   doneWhen: string | null;
+  methodHint: string | null;
   project: { name: string } | null;
   inboxItem: { id: string } | null;
   reviewNextAction: {
@@ -209,6 +212,8 @@ export default async function TodayPage() {
         />
       </Panel>
 
+      <DecisionHistoryPanel />
+
       <Panel className="mt-6">
         <PanelHeader
           title="今天要做"
@@ -323,8 +328,13 @@ function AgendaTaskRow({
               notes={task.notes}
               projectName={task.project?.name ?? null}
               status={task.status}
-              doneWhen={task.doneWhen}
             />
+            {task.stickyNotes[0]?.nextStep ? (
+              <p className="mt-1.5 flex items-start gap-1.5 text-xs leading-5 text-ai">
+                <StickyNote className="mt-0.5 size-3.5 shrink-0" />
+                <span className="line-clamp-2">{task.stickyNotes[0].nextStep}</span>
+              </p>
+            ) : null}
           </div>
         </div>
         <p className="mt-1 truncate text-xs text-ink-secondary">

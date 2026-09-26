@@ -62,6 +62,14 @@ export function FirstRunGuide({
   const [milestone, setMilestone] = useState("");
   const [taskTitle, setTaskTitle] = useState("");
   const [taskShortTitle, setTaskShortTitle] = useState("");
+  const [taskExecutionMode, setTaskExecutionMode] = useState("quick");
+  const [taskDoneWhen, setTaskDoneWhen] = useState("");
+  const [taskMethodHint, setTaskMethodHint] = useState("");
+  const [taskRecommendation, setTaskRecommendation] = useState("");
+  const [taskExecutionSteps, setTaskExecutionSteps] = useState("");
+  const [taskFallback, setTaskFallback] = useState("");
+  const [taskMaxTurns, setTaskMaxTurns] = useState("1");
+  const [taskToolPolicy, setTaskToolPolicy] = useState("none");
   const [planSourceIdea, setPlanSourceIdea] = useState("");
   const [generating, setGenerating] = useState(false);
   const [aiFallback, setAiFallback] = useState(false);
@@ -119,6 +127,14 @@ export function FirstRunGuide({
       setMilestone(nextPlan.milestone);
       setTaskTitle(nextPlan.taskTitle);
       setTaskShortTitle(nextPlan.taskShortTitle);
+      setTaskExecutionMode(nextPlan.taskExecutionMode);
+      setTaskDoneWhen(nextPlan.taskDoneWhen);
+      setTaskMethodHint(nextPlan.taskMethodHint);
+      setTaskRecommendation(nextPlan.taskRecommendation);
+      setTaskExecutionSteps(nextPlan.taskExecutionSteps.join("\n"));
+      setTaskFallback(nextPlan.taskFallback);
+      setTaskMaxTurns(String(nextPlan.taskMaxTurns));
+      setTaskToolPolicy(nextPlan.taskToolPolicy);
       setStep(2);
     } catch {
       setAiFallback(true);
@@ -127,6 +143,13 @@ export function FirstRunGuide({
       setObjective(`把“${ideaValue}”推进成今天能做的一件事。`);
       setMilestone("开始推进");
       setTaskTitle(`把「${ideaValue}」里最影响推进的地方写成一句话`);
+      setTaskDoneWhen("写下一个今天能开始的具体动作");
+      setTaskMethodHint("先写成一个 30 分钟内能完成的具体动作，再判断它是否真的能推进。");
+      setTaskRecommendation("先写成一个 30 分钟内能完成的具体动作，再判断它是否真的能推进。");
+      setTaskExecutionSteps("写下今天能开始的那个具体动作");
+      setTaskFallback("");
+      setTaskMaxTurns("1");
+      setTaskToolPolicy("none");
       setStep(2);
     } finally {
       setGenerating(false);
@@ -362,6 +385,46 @@ export function FirstRunGuide({
                   type="hidden"
                   name="taskShortTitle"
                   value={taskShortTitle}
+                />
+                <input
+                  type="hidden"
+                  name="taskExecutionMode"
+                  value={taskExecutionMode}
+                />
+                <input
+                  type="hidden"
+                  name="taskDoneWhen"
+                  value={taskDoneWhen}
+                />
+                <input
+                  type="hidden"
+                  name="taskMethodHint"
+                  value={taskMethodHint}
+                />
+                <input
+                  type="hidden"
+                  name="taskRecommendation"
+                  value={taskRecommendation}
+                />
+                <input
+                  type="hidden"
+                  name="taskExecutionSteps"
+                  value={taskExecutionSteps}
+                />
+                <input
+                  type="hidden"
+                  name="taskFallback"
+                  value={taskFallback}
+                />
+                <input
+                  type="hidden"
+                  name="taskMaxTurns"
+                  value={taskMaxTurns}
+                />
+                <input
+                  type="hidden"
+                  name="taskToolPolicy"
+                  value={taskToolPolicy}
                 />
                 <p className="text-base font-semibold text-ink">
                   定今日

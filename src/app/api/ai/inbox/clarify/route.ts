@@ -44,7 +44,7 @@ export async function POST(request: Request) {
   if (body.mode === "socratic" && body.itemId) {
     const itemId = body.itemId.trim();
     const answer = Array.isArray(body.answer)
-      ? body.answer.map((entry) => String(entry)).filter(Boolean).slice(0, 3)
+      ? body.answer.map((entry) => String(entry)).filter(Boolean).slice(0, 6)
       : [];
     if (!itemId || !answer.length) {
       return Response.json({ error: "缺少这一轮的回答" }, { status: 400 });

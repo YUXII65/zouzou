@@ -6,6 +6,7 @@ export type TaskToolPolicy = "none" | "read" | "confirm-write";
 export type TaskContract = {
   executionMode: TaskExecutionMode;
   doneWhen: string;
+  methodHint: string;
   maxTurns: number;
   toolPolicy: TaskToolPolicy;
   toolHint: ToolKind;
@@ -55,6 +56,7 @@ export function buildTaskContract(input: string, title?: string | null): TaskCon
     return {
       executionMode: "project",
       doneWhen: "这一阶段留下一个能被人直接检查的结果，并写清下一次从哪里继续",
+      methodHint: `用一次只推进一个阶段的节奏处理「${topic}」，阶段结束就记录下一步，不把所有子任务同时铺开`,
       maxTurns: 3,
       toolPolicy: tool.policy,
       toolHint: tool.kind,
@@ -65,6 +67,7 @@ export function buildTaskContract(input: string, title?: string | null): TaskCon
     return {
       executionMode: "explore",
       doneWhen: "拿到一条能真正改变判断的信息，而不是又多了一份待读资料",
+      methodHint: `先用最低成本的验证方式拿「${topic}」的一条支持或反证，再决定是否扩大投入`,
       maxTurns: 3,
       toolPolicy: tool.policy,
       toolHint: tool.kind,
@@ -75,6 +78,7 @@ export function buildTaskContract(input: string, title?: string | null): TaskCon
     return {
       executionMode: "tool",
       doneWhen: `围绕「${topic}」拿到一条有来源、现在就能用的结论`,
+      methodHint: `先找可信来源核对「${topic}」，再用一条具体结论检查它是否真的可用`,
       maxTurns: 2,
       toolPolicy: tool.policy,
       toolHint: tool.kind,
@@ -85,6 +89,7 @@ export function buildTaskContract(input: string, title?: string | null): TaskCon
     return {
       executionMode: "produce",
       doneWhen: `围绕「${topic}」产出一份具体结果，别人能直接看到或使用`,
+      methodHint: `先定「${topic}」的输出结构和判断标准，再完成一版能被人直接检查的内容`,
       maxTurns: 2,
       toolPolicy: "none",
       toolHint: "none",
@@ -94,6 +99,7 @@ export function buildTaskContract(input: string, title?: string | null): TaskCon
   return {
     executionMode: "quick",
     doneWhen: `围绕「${topic}」得到一个现在就能用的答案`,
+    methodHint: `先明确「${topic}」的判断标准和边界，再给出一条现在就能用的答案`,
     maxTurns: 1,
     toolPolicy: "none",
     toolHint: "none",

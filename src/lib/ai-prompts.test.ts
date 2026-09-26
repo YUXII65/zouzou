@@ -5,6 +5,7 @@ import {
   PLAN_SYSTEM_PROMPT,
   SOCRATIC_CLARIFY_SYSTEM_PROMPT,
   buildPlanUserPayload,
+  buildSocraticClarifyUserPayload,
 } from "@/lib/ai-prompts";
 
 /**
@@ -22,6 +23,10 @@ test("计划提示词写清了执行合同的取值约束", () => {
     "toolPolicy",
     "confirm-write",
     "doneWhen",
+    "methodHint",
+    "recommendation",
+    "executionSteps",
+    "fallback",
     "shortTitle",
   ]) {
     assert.ok(
@@ -79,6 +84,9 @@ test("user 消息保留显式传入的可选字段", () => {
       memorySummary: "用户偏好两件任务",
       dimensionChoices: ["先看反馈"],
       contextEvidence: ["项目 P 已 5 天没推进"],
+      clarificationFrame: { coreNeedHypothesis: "先验证需求" },
+      clarificationSession: { recommendation: "先做三个访谈" },
+      decisionMemory: ["延期：整理访谈记录；下次缩小范围"],
       maxTasks: 2,
     }),
   );
@@ -86,6 +94,11 @@ test("user 消息保留显式传入的可选字段", () => {
   assert.equal(payload.memorySummary, "用户偏好两件任务");
   assert.deepEqual(payload.dimensionChoices, ["先看反馈"]);
   assert.deepEqual(payload.contextEvidence, ["项目 P 已 5 天没推进"]);
+  assert.deepEqual(payload.clarificationFrame, { coreNeedHypothesis: "先验证需求" });
+  assert.deepEqual(payload.clarificationSession, { recommendation: "先做三个访谈" });
+  assert.deepEqual(payload.decisionMemory, [
+    "延期：整理访谈记录；下次缩小范围",
+  ]);
   assert.equal(payload.maxTasks, 2);
 });
 
@@ -94,6 +107,48 @@ test("苏格拉底澄清提示词一次只问一个并允许提前停止", () =>
   assert.ok(SOCRATIC_CLARIFY_SYSTEM_PROMPT.includes("不能提前给出一整套问卷"));
   assert.ok(SOCRATIC_CLARIFY_SYSTEM_PROMPT.includes("信息已经足够"));
   assert.ok(SOCRATIC_CLARIFY_SYSTEM_PROMPT.includes("reflection"));
+  assert.ok(SOCRATIC_CLARIFY_SYSTEM_PROMPT.includes("coreNeedHypothesis"));
+  assert.ok(SOCRATIC_CLARIFY_SYSTEM_PROMPT.includes("decisiveUnknown"));
+  assert.ok(SOCRATIC_CLARIFY_SYSTEM_PROMPT.includes("workingAssumption"));
+  assert.ok(SOCRATIC_CLARIFY_SYSTEM_PROMPT.includes("会改变计划"));
+  assert.ok(SOCRATIC_CLARIFY_SYSTEM_PROMPT.includes("最多 6 个"));
+  assert.ok(SOCRATIC_CLARIFY_SYSTEM_PROMPT.includes("inputAssessmentHint"));
+  assert.ok(SOCRATIC_CLARIFY_SYSTEM_PROMPT.includes("completionPrompt"));
+  assert.ok(SOCRATIC_CLARIFY_SYSTEM_PROMPT.includes("needs_meaning"));
+});
+
+test("澄清 user 消息带上项目上下文和上一轮推进判断", () => {
+  const payload = JSON.parse(
+    buildSocraticClarifyUserPayload({
+      originalIdea: "想做个人网站",
+      contextSummary: "之前做过 landing page",
+      contextEvidence: ["用户有一个待办项目"],
+      projectContext: [{ name: "个人网站" }],
+      decisionMemory: ["已完成：整理作品素材"],
+      previousFrame: { coreNeedHypothesis: "先服务招聘方" },
+      inputAssessmentHint: { readiness: "needs_context", missingSlots: ["具体对象"] },
+      history: [
+        {
+          key: "goal",
+          question: "第一版最需要服务谁？",
+          answers: ["招聘方"],
+          reflection: null,
+        },
+      ],
+      askedCount: 1,
+      maxQuestions: 2,
+    }),
+  );
+
+  assert.equal(payload.originalIdea, "想做个人网站");
+  assert.deepEqual(payload.projectContext, [{ name: "个人网站" }]);
+  assert.deepEqual(payload.decisionMemory, ["已完成：整理作品素材"]);
+  assert.deepEqual(payload.previousFrame, { coreNeedHypothesis: "先服务招聘方" });
+  assert.deepEqual(payload.inputAssessmentHint, {
+    readiness: "needs_context",
+    missingSlots: ["具体对象"],
+  });
+  assert.equal(payload.history[0].question, "第一版最需要服务谁？");
 });
 
 test("计划 user 消息保留结构化澄清历史", () => {

@@ -84,6 +84,15 @@
           </view>
         </view>
 
+        <view
+          class="pending-confirm {{submittingClarifyId ? 'pending-confirm-disabled' : ''}}"
+          wx:if="{{pending.clarifyStatus === 'done' && pending.planTasks.length === 0}}"
+          data-item-index="{{itemIndex}}"
+          bindtap="onGeneratePlan"
+        >
+          {{submittingClarifyId === pending.id ? '正在整理...' : '信息够了，给我下一步'}}
+        </view>
+
         <view class="pending-plan" wx:if="{{pending.planTasks.length > 0}}">
           <view class="plan-project" wx:if="{{pending.showProjectFields}}">
             <view class="plan-field">
@@ -110,6 +119,10 @@
             <view class="plan-field">
               <text class="plan-label">内容</text>
               <textarea class="plan-textarea" value="{{task.notes}}" data-item-index="{{itemIndex}}" data-task-index="{{taskIndex}}" data-field="notes" bindinput="onPlanTaskInput"></textarea>
+            </view>
+            <view class="plan-field">
+              <text class="plan-label">做法</text>
+              <input class="plan-input" value="{{task.methodHint}}" data-item-index="{{itemIndex}}" data-task-index="{{taskIndex}}" data-field="methodHint" bindinput="onPlanTaskInput" />
             </view>
             <view class="plan-field">
               <text class="plan-label">执行</text>

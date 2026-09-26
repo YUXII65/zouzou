@@ -1,10 +1,11 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Check, CornerDownLeft, Send, Sparkles } from "lucide-react";
+import { Check, CornerDownLeft, Loader2, Send, Sparkles } from "lucide-react";
 import { useRotatingText } from "@/components/rotating-text";
 import type {
   InboxClarificationDimension,
+  InboxClarificationFrame,
   InboxClarificationHistoryItem,
 } from "@/lib/ai";
 
@@ -12,11 +13,11 @@ type Props = {
   dimensions: InboxClarificationDimension[];
   supplementPlaceholder: string;
   busy?: boolean;
-  liveText?: string;
   submitLabel?: string;
   initialHistory?: InboxClarificationHistoryItem[];
   clarificationStatus?: "asking" | "done";
   summaryText?: string;
+  frame?: InboxClarificationFrame | null;
   onNext?: (payload: {
     answer: string[];
     history: InboxClarificationHistoryItem[];
@@ -39,7 +40,13 @@ type Turn = {
 };
 
 const TYPING_MS = 600;
-const WAITING_LABELS = [
+const CLARIFY_WAITING_LABELS = [
+  "正在理解你的回答...",
+  "正在更新推进判断...",
+  "正在找一个会改变计划的问题...",
+  "马上给你下一问...",
+];
+const PLAN_WAITING_LABELS = [
   "正在把你的选择合在一起...",
   "正在判断这次推进的重点...",
   "正在把任务写具体...",
@@ -95,45 +102,14 @@ function buildInitialTurns(
   return turns;
 }
 
-function closingFor(answers: string[]) {
-  const signal = answers.join(" ");
-
-  if (/父母|爸妈|家人|体检|健康|医院|医生/.test(signal)) {
-    return "家人的顾虑、能配合的时间和你能承担的部分都摆出来了，现在可以往下定具体安排。";
-  }
-  if (/室友|同事|朋友|伴侣|沟通|关系|边界/.test(signal)) {
-    return "你既在解决事情，也在顾及关系怎么继续，这个分寸够用了，往下可以定具体说法。";
-  }
-  if (/考研|换城市|转行|选择|取舍|要不要/.test(signal)) {
-    return "期待、顾虑和现实条件都摆出来了，剩下的是补哪条信息，我按这个往下整理。";
-  }
-  if (/卡|难|累|焦虑|压力|害怕|不确定|迷茫|拖延/.test(signal)) {
-    return "困难和你现在还能往前走的程度都说清楚了，不用硬撑，我按这个力度往下收。";
-  }
-  if (/验证|用户|需求|反馈|市场|别人|聊天|沟通|访谈/.test(signal)) {
-    return "哪些是自己的判断、哪些需要拿出去验证，已经分开了，接下来按这个顺序走。";
-  }
-  if (/上线|发布|作品|原型|小样|展示|完成|产出/.test(signal)) {
-    return "做到什么程度算这一步够了，已经明确，我把它收成一段可以开始的工作。";
-  }
-  if (/稳定|习惯|持续|节奏|坚持/.test(signal)) {
-    return "你在意的是能不能一直做下去，也照顾了现实节奏，我按能持续的方式安排。";
-  }
-  if (/研究|学习|了解|调研|资料|参考/.test(signal)) {
-    return "要补的信息和现在还不确定的地方都对上了，接下来只做必要的部分。";
-  }
-
-  return "你愿意投入多少、要避开什么，都已经说到了，我按这个边界往下收。";
-}
-
 export function ChatClarify({
   dimensions,
   busy = false,
-  liveText = "",
   submitLabel = "看看怎么走",
   initialHistory = [],
   clarificationStatus,
   summaryText = "",
+  frame = null,
   onNext,
   onSubmit,
 }: Props) {
@@ -154,7 +130,11 @@ export function ChatClarify({
   const [typed, setTyped] = useState("");
   const [directInput, setDirectInput] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
-  const waitingLabel = useRotatingText(busy, WAITING_LABELS);
+  const waitingLabel = useRotatingText(busy, PLAN_WAITING_LABELS);
+  const clarifyWaitingLabel = useRotatingText(
+    thinking && Boolean(onNext),
+    CLARIFY_WAITING_LABELS,
+  );
 
   const answeredCount = answers.length;
   const lastTurn = turns[turns.length - 1];
@@ -162,11 +142,24 @@ export function ChatClarify({
   const showOptions = Boolean(
     lastTurn?.role === "ai" && lastTurn.options?.length && !done,
   );
+  const readiness = frame?.readiness ?? "ready";
+  const headerTitle = done
+    ? "已经够清楚了"
+    : readiness === "needs_meaning"
+      ? "先把这件事说完整"
+      : readiness === "needs_context"
+        ? "先补一个关键信息"
+        : "先确认一件事";
+  const headerHint = done
+    ? "可以生成下一步了"
+    : readiness === "ready"
+      ? "只问会改变计划的问题"
+      : "补全后再判断真正卡点";
 
   useEffect(() => {
     const node = scrollRef.current;
     if (node) node.scrollTop = node.scrollHeight;
-  }, [turns, thinking, done, busy, liveText]);
+  }, [turns, thinking, done, busy]);
 
   function toggle(option: string) {
     if (busy || thinking) return;
@@ -205,7 +198,7 @@ export function ChatClarify({
             ...current,
             {
               role: "ai",
-              text: result.summaryText || closingFor(all.flat()),
+              text: result.summaryText || "信息够了，我按刚才确认的边界往下整理。",
             },
           ]);
         } else if (result.question) {
@@ -266,7 +259,7 @@ export function ChatClarify({
           ...current,
           {
             role: "ai",
-            text: closingFor(all.flat()),
+            text: "信息够了，我按刚才确认的边界往下整理。",
           },
         ]);
       }
@@ -294,11 +287,40 @@ export function ChatClarify({
   }
 
   return (
-    <div className="zouzou-panel overflow-hidden rounded-xl">
+    <div className="zouzou-panel overflow-hidden rounded-2xl border-border/80 bg-surface">
+      <div className="flex items-center justify-between gap-3 border-b border-border/60 px-4 py-3">
+        <div className="flex min-w-0 items-center gap-2.5">
+          <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-accent-soft text-accent-strong">
+            <Sparkles className="size-4" />
+          </span>
+          <div className="min-w-0">
+            <p className="truncate text-sm font-semibold text-ink">{headerTitle}</p>
+            <p className="mt-0.5 text-[11px] text-ink-muted">{headerHint}</p>
+          </div>
+        </div>
+        {!done ? (
+          <span className="shrink-0 rounded-full border border-border bg-surface-muted px-2.5 py-1 text-[11px] font-medium text-ink-secondary">
+            第 {answeredCount + 1} 问
+          </span>
+        ) : null}
+      </div>
       <div
         ref={scrollRef}
         className="max-h-[420px] space-y-3 overflow-y-auto px-4 py-4"
       >
+        {!done && frame?.readiness !== "ready" && frame?.missingSlots?.length ? (
+          <div className="flex flex-wrap items-center gap-1.5 pb-1">
+            <span className="text-[11px] text-ink-muted">还缺</span>
+            {frame.missingSlots.map((slot) => (
+              <span
+                key={slot}
+                className="rounded-full bg-warning/10 px-2 py-0.5 text-[11px] font-medium text-warning"
+              >
+                {slot}
+              </span>
+            ))}
+          </div>
+        ) : null}
         {turns.map((turn, index) =>
           turn.role === "user" ? (
             <div
@@ -386,31 +408,20 @@ export function ChatClarify({
         )}
 
         {thinking ? (
-          <div className="flex items-start gap-2">
-            <span className="mt-1 flex size-6 shrink-0 items-center justify-center rounded-md bg-accent-soft text-accent-strong">
-              <Sparkles className="size-3.5" />
-            </span>
-            <div className="max-w-[86%] rounded-xl rounded-tl-sm border border-border/70 bg-surface px-3 py-2.5 text-sm leading-6 text-ink-secondary">
-              {liveText ? (
-                <span className="whitespace-pre-wrap">
-                  {liveText}
-                  <span
-                    className="ml-0.5 inline-block animate-pulse text-accent"
-                    aria-hidden
-                  >
-                    |
-                  </span>
-                </span>
-              ) : (
-                <span className="inline-flex items-center gap-2">
-                  <span className="flex gap-1">
-                    <span className="size-1.5 animate-[zouzou-soft-pulse_1s_ease-in-out_infinite] rounded-full bg-ink-muted" />
-                    <span className="size-1.5 animate-[zouzou-soft-pulse_1s_ease-in-out_infinite] rounded-full bg-ink-muted [animation-delay:150ms]" />
-                    <span className="size-1.5 animate-[zouzou-soft-pulse_1s_ease-in-out_infinite] rounded-full bg-ink-muted [animation-delay:300ms]" />
-                  </span>
-                  {onNext ? "正在顺着你的回答判断..." : waitingLabel}
-                </span>
-              )}
+          <div className="rounded-xl border border-dashed border-accent/25 bg-accent-soft/35 px-3.5 py-3">
+            <div className="flex items-center gap-2.5">
+              <Loader2 className="size-4 shrink-0 animate-spin text-accent" />
+              <div className="min-w-0">
+                <p className="text-sm font-medium text-ink">
+                  {onNext ? "正在顺着你的回答判断" : "正在把想法收拢"}
+                </p>
+                <p className="mt-0.5 text-xs text-ink-muted">
+                  {onNext ? clarifyWaitingLabel : waitingLabel}
+                </p>
+              </div>
+            </div>
+            <div className="mt-3 h-1 overflow-hidden rounded-full bg-accent/10">
+              <div className="h-full w-1/2 animate-[zouzou-progress_1.6s_ease-in-out_infinite] rounded-full bg-accent/70" />
             </div>
           </div>
         ) : null}

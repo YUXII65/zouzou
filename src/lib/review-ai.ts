@@ -94,6 +94,7 @@ export async function createReviewDraft(input: {
       },
       aiContext.evidence,
       input.onDelta,
+      aiContext.decisionMemory,
     ),
   );
 
@@ -107,6 +108,7 @@ export async function createReviewDraft(input: {
     update: {
       summary: draft.summary,
       nextActions: draft.nextActions,
+      decisionJson: null,
       status: "draft",
     },
     create: {

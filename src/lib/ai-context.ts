@@ -41,6 +41,7 @@ export type AiContext = {
   feedbackSummary: string;
   reviewSummary: string;
   taskHistorySummary: string;
+  decisionMemory: string[];
   projectFacts: ProjectPlanFact[];
 };
 
@@ -67,8 +68,14 @@ export async function buildAiContext(
   input: AiContextInput,
 ): Promise<AiContext> {
   const { userId } = input;
-  const [preferences, feedbackEvents, reviews, activeProjects, focusedTask] =
-    await Promise.all([
+  const [
+    preferences,
+    feedbackEvents,
+    reviews,
+    activeProjects,
+    focusedTask,
+    recentStickyNotes,
+  ] = await Promise.all([
       prisma.userPreference.findMany({
         where: { userId },
         orderBy: [{ updatedAt: "desc" }, { id: "asc" }],
@@ -91,6 +98,7 @@ export async function buildAiContext(
           reviewDate: true,
           summary: true,
           nextActions: true,
+          decisionJson: true,
         },
       }),
       prisma.project.findMany({
@@ -153,6 +161,16 @@ export async function buildAiContext(
             },
           })
         : null,
+      prisma.taskStickyNote.findMany({
+        where: { userId },
+        orderBy: [{ createdAt: "desc" }, { id: "asc" }],
+        take: 6,
+        select: {
+          title: true,
+          nextStep: true,
+          createdAt: true,
+        },
+      }),
     ]);
 
   const preferenceLines = preferences.map((item) => {
@@ -225,6 +243,61 @@ export async function buildAiContext(
   const feedbackSummary = feedbackCountText
     ? `${feedbackCountText}。最近：${recentFeedback.join("；")}`
     : "暂无 AI 反馈记录";
+
+  const decisionMemory = [
+    ...feedbackEvents.slice(0, 12).flatMap((event) => {
+      const target =
+        event.task?.title ?? event.inboxItem?.content ?? "未知对象";
+      switch (event.action) {
+        case "task_completed":
+          return [`已完成：${truncate(target, 60)}`];
+        case "task_delayed":
+          return [`延期：${truncate(target, 60)}；下次降低密度或缩小范围`];
+        case "task_cancelled":
+          return [`取消：${truncate(target, 60)}；不要继续推荐同类高压任务`];
+        case "plan_ignored":
+          return [`忽略计划：${truncate(target, 60)}`];
+        case "plan_edited":
+          return [`修改计划：${truncate(target, 60)}；原方案不完全可执行`];
+        case "suggestion_useful":
+          return [
+            `建议有效：${truncate(target, 60)}${
+              event.detail ? `；${truncate(event.detail, 100)}` : ""
+            }`,
+          ];
+        case "suggestion_useless":
+          return [
+            `建议无效：${truncate(target, 60)}${
+              event.detail ? `；${truncate(event.detail, 100)}` : ""
+            }`,
+          ];
+        default:
+          return [];
+      }
+    }),
+    ...recentStickyNotes.map(
+      (note) =>
+        `最近执行动作：${truncate(note.title, 30)} → ${truncate(note.nextStep, 60)}`,
+    ),
+    ...reviews.map((review) => {
+      if (review.decisionJson) {
+        try {
+          const decision = JSON.parse(review.decisionJson) as {
+            recommendation?: string;
+            nextAction?: string;
+          };
+          return `复盘结论：${truncate(decision.recommendation ?? review.summary, 80)}${
+            decision.nextAction
+              ? `；下一步：${truncate(decision.nextAction, 60)}`
+              : ""
+          }`;
+        } catch {
+          // Fall back to the review text when old data is malformed.
+        }
+      }
+      return `复盘结论：${truncate(review.summary, 80)}`;
+    }),
+  ].slice(0, 10);
 
   const preferenceMap = new Map<string, string>();
   for (const preference of preferences) {
@@ -342,6 +415,7 @@ export async function buildAiContext(
     feedbackSummary,
     reviewSummary,
     taskHistorySummary,
+    decisionMemory,
     projectFacts,
   };
 }

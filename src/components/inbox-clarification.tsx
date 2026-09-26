@@ -8,6 +8,7 @@ import { consumeAiStream } from "@/lib/ai-stream-client";
 import type {
   InboxClarification as InboxClarificationData,
   InboxClarificationDimension,
+  InboxClarificationFrame,
   InboxClarificationHistoryItem,
   InboxClarificationSummary,
   InboxPlan,
@@ -22,17 +23,17 @@ function formatSummary(summary?: InboxClarificationSummary | null) {
   ]
     .filter(Boolean)
     .slice(0, 3);
-  const unknown = [
+  const assumption = [
+    summary.workingAssumption,
     ...summary.unverifiedAssumptions,
     summary.keyVariable,
-  ].filter(Boolean).slice(0, 2);
+  ].find(Boolean);
 
   return [
-    `你最开始说的是：${summary.originalIdea}`,
-    `我理解真正要解决的是：${summary.realProblem}`,
-    confirmed.length ? `已经比较确定：${confirmed.join("；")}` : "",
-    unknown.length ? `还需要验证：${unknown.join("；")}` : "",
-    `接下来最值得确认：${summary.newQuestion}`,
+    `我目前的判断：${summary.realProblem}`,
+    confirmed.length ? `已经确认：${confirmed.join("；")}` : "",
+    assumption ? `先按这个假设往下走：${assumption}` : "",
+    summary.ifWrongThen ? `如果它不成立：${summary.ifWrongThen}` : "",
   ]
     .filter(Boolean)
     .join("\n\n");
@@ -47,6 +48,7 @@ export function InboxClarification({
   status,
   history = [],
   summary = null,
+  frame = null,
 }: {
   itemId: string;
   content: string;
@@ -56,13 +58,13 @@ export function InboxClarification({
   status?: "asking" | "done";
   history?: InboxClarificationHistoryItem[];
   summary?: InboxClarificationSummary | null;
+  frame?: InboxClarificationFrame | null;
 }) {
   const [apiKey, setApiKey] = useState("");
   const [model, setModel] = useState("deepseek-v4-flash");
   const [baseUrl, setBaseUrl] = useState("https://api.deepseek.com");
   const [pending, setPending] = useState(false);
   const [planReady, setPlanReady] = useState(false);
-  const [streamPreview, setStreamPreview] = useState("");
   const [error, setError] = useState("");
   const router = useRouter();
 
@@ -82,7 +84,6 @@ export function InboxClarification({
     history: InboxClarificationHistoryItem[];
   }) {
     setError("");
-    setStreamPreview("");
     const response = await fetch("/api/ai/inbox/clarify", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -98,10 +99,9 @@ export function InboxClarification({
     const result = await consumeAiStream<{
       itemId: string;
       clarification: InboxClarificationData;
-    }>(response, setStreamPreview);
+    }>(response, () => {});
     const clarification = result.clarification;
     const current = clarification.history?.at(-1);
-    setStreamPreview("");
     return {
       status: clarification.status === "done" ? ("done" as const) : ("asking" as const),
       question:
@@ -123,8 +123,6 @@ export function InboxClarification({
     setPending(true);
     setPlanReady(false);
     setError("");
-    setStreamPreview("");
-    let keepPreview = false;
     try {
       const response = await fetch("/api/ai/inbox/plan", {
         method: "POST",
@@ -139,8 +137,7 @@ export function InboxClarification({
           baseUrl,
         }),
       });
-      await consumeAiStream<InboxPlan>(response, setStreamPreview);
-      keepPreview = true;
+      await consumeAiStream<InboxPlan>(response, () => {});
       setPlanReady(true);
       router.refresh();
       window.setTimeout(() => setPlanReady(false), 4000);
@@ -148,7 +145,6 @@ export function InboxClarification({
       setError("这次没有整理出来，再试一次");
     } finally {
       setPending(false);
-      if (!keepPreview) setStreamPreview("");
     }
   }
 
@@ -163,9 +159,9 @@ export function InboxClarification({
           initialHistory={history}
           clarificationStatus={status}
           summaryText={formatSummary(summary)}
+          frame={frame}
           onNext={hasSocraticState ? next : undefined}
           busy={pending || planReady}
-          liveText={streamPreview}
           submitLabel="就是这个问题，给我下一步"
           onSubmit={submit}
         />

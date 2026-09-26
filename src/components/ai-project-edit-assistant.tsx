@@ -137,6 +137,11 @@ export function AiProjectEditAssistant({
           <p className="text-sm leading-6 text-ink">
             <TypewriterText text={suggestion.reason} />
           </p>
+          {suggestion.decision?.explanation ? (
+            <p className="mt-1 text-[11px] leading-5 text-ai">
+              调整依据：{suggestion.decision.explanation}
+            </p>
+          ) : null}
           <button
             type="button"
             onClick={apply}

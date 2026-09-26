@@ -113,6 +113,7 @@ export function AiTaskPlanner({
                       status={clarification.status}
                       history={clarification.history}
                       summary={clarification.summary}
+                      frame={clarification.frame}
                     />
                   </>
                 ) : (
