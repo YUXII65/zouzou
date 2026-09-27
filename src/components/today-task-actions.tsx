@@ -2,26 +2,43 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Loader2 } from "lucide-react";
+import { CheckCircle2, Circle, Loader2, Play } from "lucide-react";
 import { setTaskStatus } from "@/app/actions";
 import { markFirstTaskGroupDone, notifyTourStep } from "@/lib/first-run-hints";
 import { trackEvent } from "@/lib/track";
 
-const STATUS_OPTIONS = [
-  { value: "todo", label: "待办" },
-  { value: "in_progress", label: "进行" },
-  { value: "done", label: "完成" },
-] as const;
+const ORDER = ["todo", "in_progress", "done"] as const;
 
-function activeClass(value: string) {
-  if (value === "done") return "bg-success/15 text-success";
-  if (value === "in_progress") return "bg-accent-soft text-accent-strong";
-  return "bg-surface-muted text-ink";
+const LABELS: Record<string, string> = {
+  todo: "待办",
+  in_progress: "进行",
+  done: "完成",
+};
+
+function nextStatus(status: string) {
+  const index = ORDER.indexOf(status as (typeof ORDER)[number]);
+  return index === -1 ? ORDER[0] : ORDER[(index + 1) % ORDER.length];
+}
+
+function statusClass(status: string) {
+  if (status === "done") {
+    return "border-success/30 bg-success/10 text-success hover:bg-success/20";
+  }
+  if (status === "in_progress") {
+    return "border-accent bg-accent-soft text-accent-strong hover:bg-accent/20";
+  }
+  return "border-border bg-surface text-ink-secondary hover:border-accent hover:text-accent";
+}
+
+function statusIcon(status: string) {
+  if (status === "done") return <CheckCircle2 className="size-3.5" />;
+  if (status === "in_progress") return <Play className="size-3.5" />;
+  return <Circle className="size-3.5" />;
 }
 
 /**
- * 任务行右侧只留三个状态按钮：待办 / 进行 / 完成。
- * 不再显示状态徽章、便利贴按钮和设置菜单——便利贴点开任务就能看，编辑删除也在展开区里。
+ * 任务状态就是一个按钮：点一下在 待办 → 进行 → 完成 之间循环，
+ * 字样和颜色跟着当前状态变。不要拆成三个并排按钮。
  */
 export function TodayTaskActions({
   taskId,
@@ -38,9 +55,11 @@ export function TodayTaskActions({
     setCurrent(status);
   }, [status]);
 
-  async function change(next: string) {
-    if (updating || next === current) return;
+  async function cycle() {
+    if (updating) return;
     const previous = current;
+    const next = nextStatus(previous);
+    if (next === previous) return;
     setCurrent(next);
     setUpdating(true);
     if (next === "in_progress") notifyTourStep("3");
@@ -60,34 +79,23 @@ export function TodayTaskActions({
   }
 
   return (
-    <div
-      role="group"
-      aria-label="任务状态"
-      className="inline-flex overflow-hidden rounded-lg border border-border bg-surface"
+    <button
+      type="button"
+      data-tour="task-next"
+      onClick={() => void cycle()}
+      disabled={updating}
+      title="点一下切换：待办 → 进行 → 完成"
+      aria-label={`任务状态：${LABELS[current] ?? current}，点击切换`}
+      className={`inline-flex h-8 min-w-[4.5rem] items-center justify-center gap-1.5 rounded-lg border px-3 text-xs font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-60 ${statusClass(
+        current,
+      )}`}
     >
-      {STATUS_OPTIONS.map((option) => {
-        const active = current === option.value;
-        return (
-          <button
-            key={option.value}
-            type="button"
-            data-tour={option.value === "in_progress" ? "task-next" : undefined}
-            onClick={() => void change(option.value)}
-            disabled={updating}
-            aria-pressed={active}
-            className={`inline-flex h-8 items-center justify-center px-2.5 text-xs font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-60 ${
-              active
-                ? activeClass(option.value)
-                : "text-ink-secondary hover:bg-surface-muted hover:text-ink"
-            }`}
-          >
-            {updating && active ? (
-              <Loader2 className="mr-1 size-3 animate-spin" />
-            ) : null}
-            {option.label}
-          </button>
-        );
-      })}
-    </div>
+      {updating ? (
+        <Loader2 className="size-3.5 animate-spin" />
+      ) : (
+        statusIcon(current)
+      )}
+      {LABELS[current] ?? current}
+    </button>
   );
 }

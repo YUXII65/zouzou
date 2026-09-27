@@ -5,7 +5,6 @@ import {
   Clock3,
   Focus,
   ListTodo,
-  StickyNote,
 } from "lucide-react";
 import { CalendarDatePanel } from "@/components/calendar-date-panel";
 import { FirstRunTour } from "@/components/first-run-tour";
@@ -277,12 +276,7 @@ function AgendaTaskRow({
               status={task.status}
               initialNotes={task.stickyNotes.map(serializeTaskStickyNote)}
             />
-            {task.stickyNotes[0]?.nextStep ? (
-              <p className="mt-1.5 flex items-start gap-1.5 text-xs leading-5 text-ai">
-                <StickyNote className="mt-0.5 size-3.5 shrink-0" />
-                <span className="line-clamp-2">{task.stickyNotes[0].nextStep}</span>
-              </p>
-            ) : null}
+
           </div>
         </div>
         <p className="mt-1 truncate text-xs text-ink-secondary">

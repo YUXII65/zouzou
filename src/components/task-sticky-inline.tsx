@@ -1,8 +1,8 @@
 "use client";
 
 import { useEffect, useState, type FormEvent } from "react";
-import { Loader2, StickyNote, Trash2 } from "lucide-react";
-import { createTaskStickyNote, deleteTaskStickyNote } from "@/app/actions";
+import { Loader2, StickyNote } from "lucide-react";
+import { createTaskStickyNote } from "@/app/actions";
 import { useRotatingText } from "@/components/rotating-text";
 import { trackEvent } from "@/lib/track";
 import type { TaskStickyNoteData } from "@/lib/task-sticky";
@@ -18,7 +18,7 @@ const WAITING_LABELS = [
 
 /**
  * 任务展开后直接显示的便利贴内容。
- * 不再是弹层、也不再有"便利贴按钮"：点开任务就能看到做法、步骤和下一步。
+ * 只保留主体：1 / 2 / 3 的执行步骤。标题、解释、"现在可以做"、删除按钮都不显示。
  */
 export function TaskStickyInline({
   taskId,
@@ -69,11 +69,6 @@ export function TaskStickyInline({
     }
   }
 
-  async function removeNote(noteId: string) {
-    setSavedNotes((current) => current.filter((note) => note.id !== noteId));
-    await deleteTaskStickyNote(noteId).catch(() => {});
-  }
-
   function submitSupplement(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const nextMessage = message.trim();
@@ -89,54 +84,27 @@ export function TaskStickyInline({
           {waitingLabel}
         </p>
       ) : savedNotes.length ? (
-        <div className="space-y-2">
-          {savedNotes.map((note) => (
-            <div
-              key={note.id}
-              className="rounded-lg border border-warning/25 bg-warning/10 p-3"
-            >
-              <div className="flex items-start justify-between gap-2">
-                <p className="text-sm font-semibold text-ink">{note.title}</p>
-                <button
-                  type="button"
-                  onClick={() => void removeNote(note.id)}
-                  aria-label="删除这张便利贴"
-                  title="删除这张便利贴"
-                  className="flex size-6 shrink-0 items-center justify-center rounded text-ink-muted transition-colors hover:bg-danger/10 hover:text-danger"
-                >
-                  <Trash2 className="size-3.5" />
-                </button>
-              </div>
-
-              {note.encouragement ? (
-                <p className="mt-1.5 whitespace-pre-line text-xs leading-5 text-ink-secondary">
-                  {note.encouragement}
-                </p>
-              ) : null}
-
-              {note.steps.length ? (
-                <ol className="mt-2 space-y-1.5">
-                  {note.steps.map((step, stepIndex) => (
-                    <li
-                      key={`${step}-${stepIndex}`}
-                      className="flex items-start gap-2 text-sm leading-6 text-ink"
-                    >
-                      <span className="mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-full bg-surface/80 text-xs font-medium text-ink-secondary">
-                        {stepIndex + 1}
-                      </span>
-                      <span>{step}</span>
-                    </li>
-                  ))}
-                </ol>
-              ) : null}
-
-              {note.nextStep ? (
-                <p className="mt-2 rounded-md bg-surface/75 px-3 py-2 text-sm leading-6 text-ink">
-                  现在可以做：{note.nextStep}
-                </p>
-              ) : null}
-            </div>
-          ))}
+        <div className="space-y-3">
+          {savedNotes.map((note) => {
+            const steps = (note.steps.length ? note.steps : [note.nextStep]).filter(
+              Boolean,
+            );
+            return (
+              <ol key={note.id} className="space-y-1.5">
+                {steps.map((step, stepIndex) => (
+                  <li
+                    key={`${note.id}-${stepIndex}`}
+                    className="flex items-start gap-2 text-sm leading-6 text-ink"
+                  >
+                    <span className="mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-full bg-surface/80 text-xs font-medium text-ink-secondary">
+                      {stepIndex + 1}
+                    </span>
+                    <span>{step}</span>
+                  </li>
+                ))}
+              </ol>
+            );
+          })}
         </div>
       ) : (
         <p className="text-xs leading-5 text-ink-secondary">
@@ -150,8 +118,8 @@ export function TaskStickyInline({
             <input
               value={message}
               onChange={(event) => setMessage(event.target.value)}
-              placeholder="你有什么想法补充"
-              aria-label="你有什么想法补充"
+              placeholder="有卡顿？说说想法"
+              aria-label="有卡顿？说说想法"
               className="zouzou-input w-full rounded-lg px-3 py-2 text-sm text-ink"
             />
           </form>

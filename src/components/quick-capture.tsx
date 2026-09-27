@@ -141,14 +141,14 @@ export function QuickCapture({
         placeholder="写一件具体的事：对象、想改变的结果、现在卡在哪里。说不清也可以直接写"
         className="zouzou-input relative min-h-72 w-full resize-none border-accent/20 bg-surface/90 px-4 py-3 text-base leading-7 text-ink shadow-sm"
       />
-      {/* 演示内容统一 3 行：高度固定成 3 行文本 + padding，长短不一也整齐 */}
-      <div className="relative mt-3 grid gap-2 sm:grid-cols-3">
+      {/* 演示内容：三条竖着排，一行一条 */}
+      <div className="relative mt-3 flex flex-col gap-1.5">
         {samples.map((sample) => (
           <button
             key={sample}
             type="button"
             onClick={() => setContent(sample)}
-            className="line-clamp-3 h-[5.25rem] rounded-lg border border-border/80 bg-surface/90 px-3 py-1.5 text-left text-xs leading-6 text-ink-secondary transition-colors hover:border-accent/30 hover:bg-accent-soft hover:text-accent-strong"
+            className="w-full truncate rounded-lg border border-border/80 bg-surface/90 px-3 py-2 text-left text-xs leading-5 text-ink-secondary transition-colors hover:border-accent/30 hover:bg-accent-soft hover:text-accent-strong"
           >
             {sample}
           </button>

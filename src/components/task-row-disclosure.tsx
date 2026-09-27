@@ -1,18 +1,14 @@
 "use client";
 
-import { useState } from "react";
-import Link from "next/link";
-import { ChevronDown, PencilLine, Trash2 } from "lucide-react";
-import { deleteTask } from "@/app/actions";
-import { ConfirmActionButton } from "@/components/confirm-action-button";
+import { ChevronDown } from "lucide-react";
 import { TaskStickyInline } from "@/components/task-sticky-inline";
 import { TaskTitleButton } from "@/components/task-title-button";
+import { useClickOutside } from "@/lib/use-click-outside";
 import type { TaskStickyNoteData } from "@/lib/task-sticky";
 
 /**
  * 任务行里可点开的部分：标题 + 展开后的便利贴内容。
- * 便利贴不再是右边一个按钮，点开任务就能直接看到；编辑/删除也收进展开区，
- * 这样任务行右侧只留状态切换。
+ * 点标题展开；点便利贴以外任意区域（或按 Esc）收回。
  */
 export function TaskRowDisclosure({
   taskId,
@@ -31,10 +27,11 @@ export function TaskRowDisclosure({
   status?: string;
   initialNotes?: TaskStickyNoteData[];
 }) {
-  const [expanded, setExpanded] = useState(false);
+  const { ref, open: expanded, setOpen: setExpanded } =
+    useClickOutside<HTMLDivElement>();
 
   return (
-    <>
+    <div ref={ref} className="min-w-0">
       <button
         type="button"
         data-tour="task-sticky"
@@ -60,35 +57,15 @@ export function TaskRowDisclosure({
       </button>
 
       {expanded ? (
-        <>
-          <TaskStickyInline
-            taskId={taskId}
-            title={title}
-            notes={notes}
-            projectName={projectName}
-            status={status}
-            initialNotes={initialNotes}
-          />
-          <div className="mt-2 flex items-center gap-3 text-xs">
-            <Link
-              href={`/workspace?edit=${taskId}`}
-              className="inline-flex items-center gap-1 text-ink-secondary transition-colors hover:text-accent"
-            >
-              <PencilLine className="size-3.5" />
-              编辑任务
-            </Link>
-            <ConfirmActionButton
-              action={deleteTask}
-              id={taskId}
-              confirmText="确定删除这个任务？"
-              className="inline-flex items-center gap-1 text-danger transition-colors hover:text-danger/80"
-            >
-              <Trash2 className="size-3.5" />
-              删除
-            </ConfirmActionButton>
-          </div>
-        </>
+        <TaskStickyInline
+          taskId={taskId}
+          title={title}
+          notes={notes}
+          projectName={projectName}
+          status={status}
+          initialNotes={initialNotes}
+        />
       ) : null}
-    </>
+    </div>
   );
 }

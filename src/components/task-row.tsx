@@ -3,7 +3,6 @@
 import { StatusBadge } from "@/components/status-badge";
 import { TaskRowDisclosure } from "@/components/task-row-disclosure";
 import { TodayTaskActions } from "@/components/today-task-actions";
-import { StickyNote } from "lucide-react";
 import { formatDate, isSameDay } from "@/lib/date";
 import { taskModeLabel } from "@/lib/task-contract";
 import type { TaskStickyNoteData } from "@/lib/task-sticky";
@@ -55,12 +54,7 @@ export function TaskRow({
           status={task.status}
           initialNotes={task.stickyNotes ?? []}
         />
-        {task.stickyNotes?.[0]?.nextStep ? (
-          <p className="mt-1.5 flex items-start gap-1.5 text-xs leading-5 text-ai">
-            <StickyNote className="mt-0.5 size-3.5 shrink-0" />
-            <span className="line-clamp-2">{task.stickyNotes[0].nextStep}</span>
-          </p>
-        ) : null}
+
         <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-ink-secondary">
           <span className="rounded-full border border-border bg-surface-muted px-2 py-0.5 text-[11px] font-medium text-ink-secondary">
             {taskModeLabel(task.executionMode)}
