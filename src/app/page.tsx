@@ -146,7 +146,26 @@ export default async function TodayPage() {
     return false;
   });
 
-  const todayTasks = (todayRelevant.length ? todayRelevant : agenda).slice(0, 3);
+  // 今天完成的也留在「今天要做」里：按 completedAt 落在今天判断，
+  // 过了 0 点自然就不在今天，等于每天自动清空。
+  const completedTodayTasks = tasks
+    .filter(
+      (task) =>
+        task.status === "done" &&
+        task.completedAt &&
+        task.completedAt >= dayStart &&
+        task.completedAt <= dayEnd,
+    )
+    .sort(
+      (a, b) =>
+        (b.completedAt?.getTime() ?? 0) - (a.completedAt?.getTime() ?? 0),
+    )
+    .slice(0, 5);
+
+  const todayTasks = [
+    ...(todayRelevant.length ? todayRelevant : agenda).slice(0, 3),
+    ...completedTodayTasks,
+  ];
   const firstGroupReviewEligible =
     reviewCount === 0 && (await isFirstPlanGroupComplete(user.id));
 
