@@ -1265,6 +1265,8 @@ export async function confirmInboxPlan(formData: FormData) {
       projectName,
       projectObjective,
       projectMilestone,
+      // 只有计划明确说"归入已有项目"时才允许按名字复用，否则一律新建。
+      reuseExistingProject: plan.action === "existing_project",
       fallbackTaskTitle: firstTask.title,
       fallbackTaskShortTitle: firstTask.shortTitle,
       fallbackDoneWhen: firstTask.doneWhen,

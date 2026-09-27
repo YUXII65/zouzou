@@ -13,6 +13,11 @@ type EnsureInboxProjectInput = {
   projectName?: string | null;
   projectObjective?: string | null;
   projectMilestone?: string | null;
+  /**
+   * 只有 AI（或用户）明确判断"这就是已有项目在做的那件事"时才为 true。
+   * 默认 false：宁可新建一个项目，也不要把不相关的想法并进别人的项目。
+   */
+  reuseExistingProject?: boolean;
   fallbackTaskTitle?: string | null;
   fallbackTaskShortTitle?: string | null;
   fallbackDoneWhen?: string | null;
@@ -56,7 +61,9 @@ export async function ensureInboxProject(
   if (linked) return linked.id;
 
   const requestedName = compact(input.projectName, 80);
-  if (requestedName) {
+  // 按名字复用必须由调用方显式要求。之前这里无条件按名字匹配，导致两条不相关
+  // 的想法只要生成的项目名撞上，就悄悄并进同一个项目（用户实测：年度计划 + 打游戏）。
+  if (requestedName && input.reuseExistingProject) {
     const sameName = await tx.project.findFirst({
       where: { userId: input.userId, name: requestedName },
       select: { id: true },

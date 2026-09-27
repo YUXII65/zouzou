@@ -13,9 +13,8 @@ import { Panel, PanelHeader } from "@/components/panel";
 import { EmptyState } from "@/components/empty-state";
 import { StatusBadge } from "@/components/status-badge";
 import { TodayTaskActions } from "@/components/today-task-actions";
-import { TaskTitleButton } from "@/components/task-title-button";
+import { TaskRowDisclosure } from "@/components/task-row-disclosure";
 import { AiTaskPlanner } from "@/components/ai-task-planner";
-import { DecisionHistoryPanel } from "@/components/decision-history-panel";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
 import {
@@ -28,7 +27,6 @@ import {
   formatDate,
   isSameDay,
   startOfDay,
-  toDateInputValue,
 } from "@/lib/date";
 
 const priorityOrder: Record<string, number> = {
@@ -79,7 +77,7 @@ export default async function TodayPage() {
   const now = new Date();
   const dayStart = startOfDay(now);
   const dayEnd = endOfDay(now);
-  const [firstRun, tasks, pendingInbox, reviewCount, recentReviews] =
+  const [firstRun, tasks, pendingInbox, reviewCount] =
     await Promise.all([
       getFirstRunState(user.id, user.createdAt),
       prisma.task.findMany({
@@ -108,44 +106,13 @@ export default async function TodayPage() {
         take: 10,
       }),
       prisma.review.count({ where: { userId: user.id } }),
-      prisma.review.findMany({
-        where: { userId: user.id },
-        select: { reviewDate: true },
-        orderBy: { reviewDate: "desc" },
-        take: 60,
-      }),
     ]);
 
-  const activityDates = new Set<string>();
-  for (const task of tasks) {
-    if (task.completedAt) activityDates.add(toDateInputValue(task.completedAt));
-  }
-  for (const review of recentReviews) {
-    activityDates.add(toDateInputValue(review.reviewDate));
-  }
-
-  const streak = computeStreak(activityDates, now);
-  const weekStart = startOfDay(
-    new Date(now.getTime() - 6 * 24 * 60 * 60 * 1000),
-  );
-  const weekDone = tasks.filter(
-    (task) =>
-      task.status === "done" &&
-      task.completedAt &&
-      task.completedAt >= weekStart,
-  ).length;
 
   const openTasks = tasks.filter(
     (task) => task.status !== "done" && task.status !== "cancelled",
   );
-  const completedToday = tasks.filter(
-    (task) =>
-      task.status === "done" &&
-      task.completedAt &&
-      task.completedAt >= dayStart &&
-      task.completedAt <= dayEnd,
-  ).length;
-  const totalToday = completedToday + openTasks.length;
+
   const agenda = [...openTasks].sort((a, b) => {
     function rank(task: AgendaTask) {
       if (task.focusDate && isSameDay(task.focusDate, now)) return 0;
@@ -194,13 +161,7 @@ export default async function TodayPage() {
           reviewEligible={firstGroupReviewEligible}
         />
       ) : null}
-      <CalendarDatePanel
-        now={now}
-        completedToday={completedToday}
-        totalToday={totalToday}
-        streak={streak}
-        weekDone={weekDone}
-      />
+      <CalendarDatePanel now={now} />
 
       <Panel>
         <AiTaskPlanner
@@ -211,8 +172,6 @@ export default async function TodayPage() {
           )}
         />
       </Panel>
-
-      <DecisionHistoryPanel />
 
       <Panel className="mt-6">
         <PanelHeader
@@ -267,18 +226,6 @@ export default async function TodayPage() {
   );
 }
 
-function computeStreak(dates: Set<string>, now: Date) {
-  let cursor = startOfDay(now);
-  if (!dates.has(toDateInputValue(cursor))) {
-    cursor = new Date(cursor.getTime() - 24 * 60 * 60 * 1000);
-  }
-  let streak = 0;
-  while (dates.has(toDateInputValue(cursor))) {
-    streak += 1;
-    cursor = new Date(cursor.getTime() - 24 * 60 * 60 * 1000);
-  }
-  return streak;
-}
 
 function AgendaTaskRow({
   task,
@@ -321,13 +268,14 @@ function AgendaTaskRow({
             </span>
           ) : null}
           <div className="min-w-0 flex-1">
-            <TaskTitleButton
+            <TaskRowDisclosure
               taskId={task.id}
               title={task.title}
               shortTitle={task.shortTitle}
               notes={task.notes}
               projectName={task.project?.name ?? null}
               status={task.status}
+              initialNotes={task.stickyNotes.map(serializeTaskStickyNote)}
             />
             {task.stickyNotes[0]?.nextStep ? (
               <p className="mt-1.5 flex items-start gap-1.5 text-xs leading-5 text-ai">
@@ -346,16 +294,7 @@ function AgendaTaskRow({
       </div>
       <div className="flex w-full flex-wrap items-center justify-end gap-2 lg:ml-auto lg:w-auto">
         <StatusBadge status={task.priority} />
-        <TodayTaskActions
-          taskId={task.id}
-          status={task.status}
-          focused={Boolean(isFocused)}
-          title={task.title}
-          notes={task.notes}
-          projectName={task.project?.name ?? null}
-          initialStickyNotes={task.stickyNotes.map(serializeTaskStickyNote)}
-          showLabels={showLabels}
-        />
+        <TodayTaskActions taskId={task.id} status={task.status} />
       </div>
     </div>
   );

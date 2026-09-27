@@ -66,7 +66,9 @@ export const PLAN_SYSTEM_PROMPT = `
 - 如果 clarificationFrame.readiness 是 needs_meaning 或 needs_context，说明用户还没有给出可推进的对象。不要自行补出“产品、写作、求职、学习”等具体领域；第一条任务应该是帮助用户把真实事情说出来或找出来，methodHint 用具体的外部化方法，例如最近反复出现的事、一直回避的事、随手语音记录或按场景回忆。
 - reason 要像朋友解释为什么这样安排，必须引用用户原话或 contextEvidence 中的真实依据。
 - 日期格式是 YYYY-MM-DD 或 null。所有日期必须基于输入中的 currentDate。如果 maxTasks 存在，任务数量必须小于或等于 maxTasks。
-- 只要 tasks 非空，projectName 必须填写；已有项目可复用，没有匹配项目就生成一个简洁项目名，不要叫“XX计划”。即使 action 是 single_task，也要给项目名，生成的任务会归入该项目。
+- 只要 tasks 非空，projectName 必须填写，不要叫“XX计划”；即使 action 是 single_task，也要给项目名，生成的任务会归入该项目。
+- 项目默认新建：给这件事生成一个能概括它自己的简洁名字。只有这条想法确实就是某个已有项目在做的那件事（同一目标、同一对象、同一阶段）时，才用 action=existing_project 复用那个项目名，并在 reason 里说明为什么是同一件事。
+- 判断复用必须保守：新话题、新爱好、新麻烦一律算新项目。例如已有项目叫“年度主线取舍”时，“入坑某款游戏怎么玩”是新项目，不能挂进去。拿不准就新建，宁可多一个项目，也不要把不相关的事并进别人的项目。
 - 只返回 JSON，不要 Markdown。字段：action 必须是 create_project、existing_project、single_task、ignore 之一。
 `;
 

@@ -1,7 +1,7 @@
 "use client";
 
 import { StatusBadge } from "@/components/status-badge";
-import { TaskTitleButton } from "@/components/task-title-button";
+import { TaskRowDisclosure } from "@/components/task-row-disclosure";
 import { TodayTaskActions } from "@/components/today-task-actions";
 import { StickyNote } from "lucide-react";
 import { formatDate, isSameDay } from "@/lib/date";
@@ -46,13 +46,14 @@ export function TaskRow({
       className="zouzou-row-hover flex flex-col gap-3 px-4 py-3 transition-colors lg:flex-row lg:items-center"
     >
       <div className="min-w-0 flex-1">
-        <TaskTitleButton
+        <TaskRowDisclosure
           taskId={task.id}
           title={task.title}
           shortTitle={task.shortTitle}
           notes={task.notes}
           projectName={projectName}
           status={task.status}
+          initialNotes={task.stickyNotes ?? []}
         />
         {task.stickyNotes?.[0]?.nextStep ? (
           <p className="mt-1.5 flex items-start gap-1.5 text-xs leading-5 text-ai">
@@ -72,16 +73,7 @@ export function TaskRow({
       </div>
 
       <div className="flex w-full items-center justify-end gap-2 lg:w-auto">
-        <TodayTaskActions
-          taskId={task.id}
-          status={task.status}
-          focused={taskFocused}
-          title={task.title}
-          notes={task.notes}
-          projectName={projectName}
-          initialStickyNotes={task.stickyNotes ?? []}
-          showLabels={showLabels}
-        />
+        <TodayTaskActions taskId={task.id} status={task.status} />
       </div>
     </div>
   );

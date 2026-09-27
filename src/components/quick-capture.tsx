@@ -137,17 +137,18 @@ export function QuickCapture({
         required
         value={content}
         onChange={(event) => setContent(event.target.value)}
-        rows={compact ? 4 : 6}
+        rows={compact ? 8 : 11}
         placeholder="写一件具体的事：对象、想改变的结果、现在卡在哪里。说不清也可以直接写"
-        className="zouzou-input relative min-h-40 w-full resize-none border-accent/20 bg-surface/90 px-4 py-3 text-base leading-7 text-ink shadow-sm"
+        className="zouzou-input relative min-h-72 w-full resize-none border-accent/20 bg-surface/90 px-4 py-3 text-base leading-7 text-ink shadow-sm"
       />
-      <div className="relative mt-3 flex flex-wrap gap-2">
+      {/* 演示内容统一 3 行：高度固定成 3 行文本 + padding，长短不一也整齐 */}
+      <div className="relative mt-3 grid gap-2 sm:grid-cols-3">
         {samples.map((sample) => (
           <button
             key={sample}
             type="button"
             onClick={() => setContent(sample)}
-            className="max-w-full truncate rounded-full border border-border/80 bg-surface/90 px-3 py-1.5 text-xs font-medium text-ink-secondary transition-colors hover:border-accent/30 hover:bg-accent-soft hover:text-accent-strong"
+            className="line-clamp-3 h-[5.25rem] rounded-lg border border-border/80 bg-surface/90 px-3 py-1.5 text-left text-xs leading-6 text-ink-secondary transition-colors hover:border-accent/30 hover:bg-accent-soft hover:text-accent-strong"
           >
             {sample}
           </button>
