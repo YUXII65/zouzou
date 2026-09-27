@@ -128,6 +128,13 @@ export function InboxPlanEditor({
               />
             </label>
 
+            {/* 单条任务默认只露 标题 + 执行/优先级/截止日期。
+                做法、推荐、步骤这些是 AI 已经替用户定好的，需要改再展开。 */}
+            <details className="mt-3 rounded-lg border border-border bg-surface-muted/40 px-3 py-2">
+              <summary className="cursor-pointer text-xs font-medium text-ink-secondary transition-colors hover:text-accent">
+                调整做法（内容 / 做法 / 推荐 / 步骤 / 替代）
+              </summary>
+              <div>
             <label className="mt-3 block">
               <span className="mb-1.5 block text-xs font-medium text-ink-secondary">
                 内容
@@ -185,6 +192,8 @@ export function InboxPlanEditor({
                 className={`${inputClass} text-ink-secondary`}
               />
             </label>
+              </div>
+            </details>
 
             <div className="mt-3 grid gap-3 sm:grid-cols-3">
               <label className="block">

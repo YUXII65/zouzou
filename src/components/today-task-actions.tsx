@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
 import { CheckCircle2, Circle, Loader2, Play } from "lucide-react";
 import { setTaskStatus } from "@/app/actions";
 import { markFirstTaskGroupDone, notifyTourStep } from "@/lib/first-run-hints";
@@ -47,7 +46,6 @@ export function TodayTaskActions({
   taskId: string;
   status: string;
 }) {
-  const router = useRouter();
   const [current, setCurrent] = useState(status);
   const [updating, setUpdating] = useState(false);
 
@@ -70,7 +68,8 @@ export function TodayTaskActions({
       formData.set("status", next);
       const result = await setTaskStatus(formData);
       if (result?.reviewHintEligible) markFirstTaskGroupDone();
-      router.refresh();
+      // 这里不 router.refresh()：刷新会让「完成」的任务立刻被移出当前列表，
+      // 用户就再也点不回来了。保持行在原位，字样和颜色即时切换，下次进入页面再归组。
     } catch {
       setCurrent(previous);
     } finally {
