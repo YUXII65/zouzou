@@ -25,12 +25,12 @@ export async function POST(request: Request) {
   let body: { taskId?: string; message?: string };
   try { body = (await request.json()) as typeof body; } catch { return NextResponse.json({ error: "invalid_json" }, { status: 400 }); }
   const taskId = body.taskId?.trim();
-  const task = taskId ? await prisma.task.findFirst({ where: { id: taskId, userId: user.id }, select: { id: true, title: true, notes: true, status: true, project: { select: { name: true } } } }) : null;
+  const task = taskId ? await prisma.task.findFirst({ where: { id: taskId, userId: user.id }, select: { id: true, title: true, notes: true, status: true, executionMode: true, doneWhen: true, methodHint: true, project: { select: { name: true, mode: true } } } }) : null;
   if (!task) return NextResponse.json({ error: "not_found" }, { status: 404 });
   const message = body.message?.trim() || "这个任务我还没有头绪，请给我一个能直接开始的行动方案";
   const aiContext = await buildAiContext({ kind: "task_coach", taskId: task.id, userId: user.id });
   try {
-    const advice = await withAiQuota("task_coach", () => generateTaskCoachAdvice({ title: task.title, notes: task.notes, projectName: task.project?.name ?? null, status: task.status, message }, aiContext.summary, aiContext.evidence));
+    const advice = await withAiQuota("task_coach", () => generateTaskCoachAdvice({ title: task.title, notes: task.notes, projectName: task.project?.name ?? null, status: task.status, message, projectMode: task.project?.mode ?? null, executionMode: task.executionMode, doneWhen: task.doneWhen, methodHint: task.methodHint }, aiContext.summary, aiContext.evidence), user.id);
     const note = await prisma.taskStickyNote.create({ data: { userId: user.id, taskId: task.id, sourceMessage: message, title: advice.title, encouragement: advice.encouragement, stepsJson: JSON.stringify(advice.steps), nextStep: advice.nextStep } });
     const overflow = await prisma.taskStickyNote.findMany({ where: { userId: user.id, taskId: task.id, id: { not: note.id } }, orderBy: { createdAt: "desc" }, skip: 9, select: { id: true } });
     if (overflow.length) await prisma.taskStickyNote.deleteMany({ where: { id: { in: overflow.map((item) => item.id) } } });

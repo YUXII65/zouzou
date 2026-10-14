@@ -24,6 +24,17 @@
     0 18px 50px rgba(52, 92, 160, 0.12);
   --z-shadow-pop:
     0 24px 70px rgba(52, 92, 160, 0.16);
+
+  /* v3.3 推进模式配色：普通=浅蓝 / 长期=深蓝 / 探索=紫 */
+  --mode-normal: #4a9ae8;
+  --mode-normal-soft: #e3f1fd;
+  --mode-normal-ink: #1667b8;
+  --mode-longterm: #1e3f9c;
+  --mode-longterm-soft: #dce6f9;
+  --mode-longterm-ink: #1a3480;
+  --mode-explore: #7b4fd6;
+  --mode-explore-soft: #ece4fc;
+  --mode-explore-ink: #5f31b8;
 }
 
 .dark {
@@ -51,6 +62,16 @@
     0 24px 60px rgba(0, 0, 0, 0.28);
   --z-shadow-pop:
     0 32px 80px rgba(0, 0, 0, 0.34);
+
+  --mode-normal: #6fb6f5;
+  --mode-normal-soft: #14324c;
+  --mode-normal-ink: #9fd0fa;
+  --mode-longterm: #7d99f2;
+  --mode-longterm-soft: #1a2650;
+  --mode-longterm-ink: #aebeff;
+  --mode-explore: #a988f2;
+  --mode-explore-soft: #2c1f4a;
+  --mode-explore-ink: #c9b2ff;
 }
 
 @theme inline {
@@ -72,6 +93,15 @@
   --color-warning: var(--warning);
   --color-danger: var(--danger);
   --color-overlay: var(--overlay);
+  --color-mode-normal: var(--mode-normal);
+  --color-mode-normal-soft: var(--mode-normal-soft);
+  --color-mode-normal-ink: var(--mode-normal-ink);
+  --color-mode-longterm: var(--mode-longterm);
+  --color-mode-longterm-soft: var(--mode-longterm-soft);
+  --color-mode-longterm-ink: var(--mode-longterm-ink);
+  --color-mode-explore: var(--mode-explore);
+  --color-mode-explore-soft: var(--mode-explore-soft);
+  --color-mode-explore-ink: var(--mode-explore-ink);
   --shadow-card: var(--z-shadow-card);
   --shadow-pop: var(--z-shadow-pop);
   --radius-md: 0.625rem;

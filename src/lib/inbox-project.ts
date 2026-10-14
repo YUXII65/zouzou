@@ -1,4 +1,6 @@
+import type { InboxPlanTrack } from "@/lib/ai";
 import { prisma } from "@/lib/prisma";
+import { normalizeProjectMode } from "@/lib/work-mode";
 
 type ProjectTransaction = Omit<
   typeof prisma,
@@ -18,6 +20,8 @@ type EnsureInboxProjectInput = {
    * 默认 false：宁可新建一个项目，也不要把不相关的想法并进别人的项目。
    */
   reuseExistingProject?: boolean;
+  /** 这个想法最终归到哪种推进模式（v3.3 文件页分类） */
+  mode?: string | null;
   fallbackTaskTitle?: string | null;
   fallbackTaskShortTitle?: string | null;
   fallbackDoneWhen?: string | null;
@@ -93,6 +97,7 @@ export async function ensureInboxProject(
       userId: input.userId,
       name: projectName,
       objective,
+      mode: normalizeProjectMode(input.mode),
       currentMilestone: milestone,
       createdFromInboxItemId: input.inboxItemId,
       notes: input.content,
@@ -161,4 +166,59 @@ export async function repairUnassignedInboxProjects(userId: string) {
       });
     });
   }
+}
+
+/**
+ * 幂等写入探索线路，返回「线路名 → trackId」。
+ *
+ * 复用已有项目时同名线路直接沿用，不会因为再次确认计划重复建线。
+ */
+export async function ensureProjectTracks(
+  tx: ProjectTransaction,
+  input: { userId: string; projectId: string; tracks: InboxPlanTrack[] },
+): Promise<Map<string, string>> {
+  const map = new Map<string, string>();
+  if (!input.tracks.length) return map;
+
+  const existing = await tx.projectTrack.findMany({
+    where: { userId: input.userId, projectId: input.projectId },
+    orderBy: [{ order: "asc" }, { id: "asc" }],
+    select: { id: true, name: true },
+  });
+  for (const track of existing) map.set(track.name, track.id);
+
+  let nextOrder = existing.length;
+  for (const track of input.tracks) {
+    if (map.has(track.name)) continue;
+    const created = await tx.projectTrack.create({
+      data: {
+        userId: input.userId,
+        projectId: input.projectId,
+        order: nextOrder,
+        name: track.name,
+        intent: track.intent,
+        role: track.role,
+        status: "active",
+      },
+      select: { id: true },
+    });
+    nextOrder += 1;
+    map.set(track.name, created.id);
+  }
+  return map;
+}
+
+/** 记录某条线最近一次推进：更新时间戳，必要时刷新当前焦点。 */
+export async function touchProjectTrack(
+  tx: ProjectTransaction,
+  input: { userId: string; trackId: string; currentFocus?: string | null },
+) {
+  const currentFocus = input.currentFocus?.trim().slice(0, 300);
+  await tx.projectTrack.updateMany({
+    where: { id: input.trackId, userId: input.userId },
+    data: {
+      lastEventAt: new Date(),
+      ...(currentFocus ? { currentFocus } : {}),
+    },
+  });
 }

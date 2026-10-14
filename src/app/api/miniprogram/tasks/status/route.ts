@@ -1,6 +1,9 @@
 import { NextResponse } from "next/server";
 import { getMiniProgramUser } from "@/lib/miniprogram-auth";
 import { prisma } from "@/lib/prisma";
+import { syncProjectStageGate } from "@/lib/project-stage";
+import { advanceExploreAfterTask } from "@/lib/project-progress-agent";
+import { after } from "next/server";
 
 export const dynamic = "force-dynamic";
 
@@ -28,7 +31,7 @@ export async function POST(request: Request) {
 
   const task = await prisma.task.findFirst({
     where: { id: taskId, userId: user.id },
-    select: { id: true },
+    select: { id: true, projectId: true },
   });
   if (!task) {
     return NextResponse.json({ error: "not_found" }, { status: 404 });
@@ -55,6 +58,16 @@ export async function POST(request: Request) {
       data: { status: reviewNextStatus },
     }),
   ]);
+
+  if (task.projectId) {
+    await syncProjectStageGate(prisma, {
+      userId: user.id,
+      projectId: task.projectId,
+    });
+  }
+  if (status === "done" || status === "cancelled") {
+    after(() => advanceExploreAfterTask({ userId: user.id, taskId: task.id }));
+  }
 
   return NextResponse.json({ ok: true, status });
 }

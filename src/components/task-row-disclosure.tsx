@@ -1,5 +1,6 @@
 "use client";
 
+import type { ReactNode } from "react";
 import { ChevronDown } from "lucide-react";
 import { TaskStickyInline } from "@/components/task-sticky-inline";
 import { TaskTitleButton } from "@/components/task-title-button";
@@ -18,6 +19,7 @@ export function TaskRowDisclosure({
   projectName,
   status,
   initialNotes = [],
+  children,
 }: {
   taskId: string;
   title: string;
@@ -26,6 +28,7 @@ export function TaskRowDisclosure({
   projectName?: string | null;
   status?: string;
   initialNotes?: TaskStickyNoteData[];
+  children?: ReactNode;
 }) {
   const { ref, open: expanded, setOpen: setExpanded } =
     useClickOutside<HTMLDivElement>();
@@ -37,7 +40,7 @@ export function TaskRowDisclosure({
         data-tour="task-sticky"
         onClick={() => setExpanded((value) => !value)}
         aria-expanded={expanded}
-        className="flex w-full min-w-0 items-start gap-1.5 text-left"
+        className="grid w-full min-w-0 grid-cols-[minmax(0,1fr)_auto] items-start gap-x-1.5 text-left"
       >
         <span className="min-w-0 flex-1">
           <TaskTitleButton
@@ -54,6 +57,9 @@ export function TaskRowDisclosure({
             expanded ? "rotate-180" : ""
           }`}
         />
+        {children ? (
+          <span className="col-span-2 block w-full">{children}</span>
+        ) : null}
       </button>
 
       {expanded ? (

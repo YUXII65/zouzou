@@ -66,6 +66,21 @@ export const getCurrentUser = cache(async function getCurrentUser() {
   });
 });
 
+/**
+ * 只要 userId 的路径用它。
+ *
+ * session cookie 本身就是 HMAC 签名 + 带过期时间，直接解就能拿到 userId；
+ * 没必要像 getCurrentUser() 那样再查一次 users（跨洋 ~200~700ms）。
+ * 区别是它不校验用户是否还存在——后续针对该 userId 的读写会自然失败，
+ * 对这种"解析参数就往下走"的接口足够。
+ */
+export async function readSessionUserId(): Promise<string | null> {
+  const cookieStore = await cookies();
+  const token = cookieStore.get(SESSION_COOKIE)?.value;
+  if (!token) return null;
+  return readSessionToken(token);
+}
+
 export async function requireUser() {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
@@ -76,6 +91,7 @@ export async function createUserSession(userId: string) {
   const cookieStore = await cookies();
   cookieStore.set(SESSION_COOKIE, issueSessionToken(userId), {
     httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
     sameSite: "lax",
     path: "/",
     maxAge: SESSION_MAX_AGE_SECONDS,

@@ -1,4 +1,4 @@
-import { getCurrentUser } from "@/lib/auth";
+import { readSessionUserId } from "@/lib/auth";
 import { buildAiStreamPreview } from "@/lib/ai-stream-preview";
 import { createNdjsonResponse } from "@/lib/ndjson-response";
 import { createReviewDraft } from "@/lib/review-ai";
@@ -20,14 +20,14 @@ function parseDateInput(value: string | undefined) {
 }
 
 export async function POST(request: Request) {
-  const user = await getCurrentUser();
-  if (!user) {
+  const userId = await readSessionUserId();
+  if (!userId) {
     return Response.json({ error: "请先登录" }, { status: 401 });
   }
 
-  let body: { reviewDate?: string };
+  let body: { reviewDate?: string; projectId?: string };
   try {
-    body = (await request.json()) as { reviewDate?: string };
+    body = (await request.json()) as { reviewDate?: string; projectId?: string };
   } catch {
     return Response.json({ error: "请求内容不正确" }, { status: 400 });
   }
@@ -38,12 +38,16 @@ export async function POST(request: Request) {
   }
 
   return createNdjsonResponse(async (send) => {
-    send({ type: "preview", text: "正在回看这一天的任务..." });
+    send({
+      type: "preview",
+      text: body.projectId ? "正在回看这个项目的进展..." : "正在回看这一天的任务...",
+    });
     let raw = "";
     let lastPreview = "";
     const result = await createReviewDraft({
-      userId: user.id,
+      userId: userId,
       reviewDate,
+      projectId: body.projectId?.trim() || null,
       onDelta: (delta) => {
         raw += delta;
         const preview = buildAiStreamPreview(raw, "review");

@@ -20,7 +20,7 @@
 ```
 format / version / createdAt / source（只记 host 和库名，不含密码）
 counts    每张表的行数
-data      13 张表的全部行
+data      当前全部业务表的行数据
 ```
 
 覆盖的表：`User` `Project` `InboxItem` `Task` `TaskStickyNote` `AiPlanFeedback`
@@ -67,7 +67,7 @@ pnpm db:verify:restore:fixture      # 用内置小样本，不需要备份文件
 带 `@updatedAt`。只查行数时一切正常，但 `updatedAt` 已经被刷成了恢复时刻 ——
 项目列表按它排序，"停滞多少天"的判断会跟着错。
 
-这个问题就是逐字段比对抓出来的。现在的结论是已验证：最新一份备份（13 张表 / 1780 行）
+这个问题就是逐字段比对抓出来的。现在的结论是已验证：最新一份备份（当前全部业务表 / 1780 行）
 恢复后逐字段与备份完全一致。
 
 ## 自动化

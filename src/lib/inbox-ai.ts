@@ -1,9 +1,13 @@
+import { randomUUID } from "node:crypto";
 import { revalidatePath } from "next/cache";
 import { buildAiContext } from "@/lib/ai-context";
+import {
+  isNormalAgentPlanEnabled,
+  planNormalWithAgents,
+} from "@/lib/agent-plan/normal";
 import { withAiQuota } from "@/lib/ai-quota";
 import { prisma } from "@/lib/prisma";
 import {
-  clarifyInbox,
   generateSocraticClarification,
   planInbox,
   type InboxClarification,
@@ -34,54 +38,6 @@ function parseSocraticState(value: string | null): InboxClarification | null {
   }
 }
 
-export async function createInboxClarification(input: {
-  userId: string;
-  content: string;
-  overrides?: AiOverrides;
-  onDelta?: (delta: string) => void;
-}): Promise<ClarifyInboxResult> {
-  const content = input.content.trim();
-  const item = await prisma.inboxItem.create({
-    data: {
-      userId: input.userId,
-      content,
-      source: "manual",
-    },
-  });
-
-  const aiContext = await buildAiContext({
-    kind: "inbox_plan",
-    inboxItemId: item.id,
-    userId: input.userId,
-  });
-
-  const clarification = await withAiQuota("inbox_clarify", () =>
-    clarifyInbox(
-      content,
-      aiContext.projectFacts.map((project) => project.name),
-      input.overrides?.apiKey,
-      input.overrides?.model,
-      input.overrides?.baseUrl,
-      aiContext.projectFacts,
-      aiContext.summary,
-      aiContext.evidence,
-      input.onDelta,
-    ),
-  );
-
-  await prisma.inboxItem.update({
-    where: { id: item.id, userId: input.userId },
-    data: {
-      aiSuggestionJson: JSON.stringify(clarification),
-      aiAnalyzedAt: new Date(),
-    },
-  });
-
-  revalidatePath("/");
-  revalidatePath("/workspace");
-  return { itemId: item.id, content, clarification };
-}
-
 export async function createSocraticInboxClarification(input: {
   userId: string;
   content: string;
@@ -89,39 +45,53 @@ export async function createSocraticInboxClarification(input: {
   onDelta?: (delta: string) => void;
 }): Promise<ClarifyInboxResult> {
   const content = input.content.trim();
-  const item = await prisma.inboxItem.create({
-    data: { userId: input.userId, content, source: "manual" },
-  });
+  // 这里不再"先建记录拿 id 再更新"（=两次跨洋写入，约 900ms）。
+  // 改成：自己生成 id → 先调模型 → 一次 create 写入全部字段；模型失败也要把用户写的内容留下来。
+  const itemId = randomUUID();
   const aiContext = await buildAiContext({
     kind: "inbox_plan",
-    inboxItemId: item.id,
+    inboxItemId: itemId,
     userId: input.userId,
   });
-  const clarification = await withAiQuota("inbox_clarify", () =>
-    generateSocraticClarification({
-      content,
-      history: [],
-      apiKey: input.overrides?.apiKey,
-      model: input.overrides?.model,
-      baseUrl: input.overrides?.baseUrl,
-      projectContext: aiContext.projectFacts,
-      memorySummary: aiContext.summary,
-      evidence: aiContext.evidence,
-      decisionMemory: aiContext.decisionMemory,
-      maxQuestions: 3,
-      onDelta: input.onDelta,
-    }),
-  );
-  await prisma.inboxItem.update({
-    where: { id: item.id, userId: input.userId },
+  let clarification: InboxClarification;
+  try {
+    clarification = await withAiQuota("inbox_clarify", () =>
+      generateSocraticClarification({
+        content,
+        history: [],
+        apiKey: input.overrides?.apiKey,
+        model: input.overrides?.model,
+        baseUrl: input.overrides?.baseUrl,
+        projectContext: aiContext.projectFacts,
+        memorySummary: aiContext.summary,
+        evidence: aiContext.evidence,
+        decisionMemory: aiContext.decisionMemory,
+        maxQuestions: 3,
+        onDelta: input.onDelta,
+      }),
+      input.userId,
+    );
+  } catch (error) {
+    await prisma.inboxItem.create({
+      data: { id: itemId, userId: input.userId, content, source: "manual" },
+    });
+    throw error;
+  }
+  await prisma.inboxItem.create({
     data: {
+      id: itemId,
+      userId: input.userId,
+      content,
+      source: "manual",
       aiSuggestionJson: JSON.stringify(clarification),
       aiAnalyzedAt: new Date(),
     },
   });
   revalidatePath("/");
-  revalidatePath("/workspace");
-  return { itemId: item.id, content, clarification };
+  revalidatePath("/files");
+
+  return { itemId, content, clarification };
+
 }
 
 export async function advanceSocraticInboxClarification(input: {
@@ -166,8 +136,10 @@ export async function advanceSocraticInboxClarification(input: {
       decisionMemory: aiContext.decisionMemory,
       maxQuestions: current.maxQuestions ?? 3,
       frame: current.frame ?? null,
+      translation: current.translation ?? null,
       onDelta: input.onDelta,
     }),
+    input.userId,
   );
   await prisma.inboxItem.update({
     where: { id: item.id, userId: input.userId },
@@ -189,13 +161,38 @@ export async function createInboxPlan(input: {
   dimensionChoices?: string[];
   overrides?: AiOverrides;
   onDelta?: (delta: string) => void;
+  /** 自动整理流程不需要让首页立刻重新请求，避免把本地完成态刷掉。 */
+  skipRevalidate?: boolean;
 }): Promise<InboxPlan | null> {
   const item = await prisma.inboxItem.findUnique({
     where: { id: input.itemId, userId: input.userId },
-    select: { id: true, content: true, status: true, aiSuggestionJson: true },
+    select: {
+      id: true,
+      content: true,
+      status: true,
+      aiSuggestionJson: true,
+      aiPlanJson: true,
+      mode: true,
+    },
   });
 
   if (!item || item.status !== "inbox") return null;
+
+  // 已有计划（例如澄清结束时已经后台预生成）就直接返回，不要再调一次模型。
+  // 但是降级/失败结果必须允许重试，不能把一次坏结果永久缓存。
+  if (item.aiPlanJson) {
+    try {
+      const existing = JSON.parse(item.aiPlanJson) as InboxPlan;
+      if (
+        existing.source !== "heuristic_fallback" &&
+        existing.source !== "agent_failed"
+      ) {
+        return existing;
+      }
+    } catch {
+      // 解析失败就照常重新生成
+    }
+  }
 
   const clarificationState = parseSocraticState(item.aiSuggestionJson);
   const aiContext = await buildAiContext({
@@ -203,8 +200,40 @@ export async function createInboxPlan(input: {
     inboxItemId: item.id,
     userId: input.userId,
   });
-  const plan = await withAiQuota("inbox_plan", () =>
-    planInbox(
+  const plan = await withAiQuota("inbox_plan", async () => {
+    if (isNormalAgentPlanEnabled()) {
+      const normalResult = await planNormalWithAgents({
+        content: item.content,
+        history: clarificationState?.history,
+        summary: clarificationState?.summary,
+        frame: clarificationState?.frame,
+        translation: clarificationState?.translation,
+        workMode: clarificationState?.workMode ?? null,
+        projectContext: aiContext.projectFacts,
+        memorySummary: aiContext.summary,
+        evidence: aiContext.evidence,
+        decisionMemory: aiContext.decisionMemory,
+        maxTasks: aiContext.maxPlanTasks,
+        apiKey: input.overrides?.apiKey,
+        model: input.overrides?.model,
+        baseUrl: input.overrides?.baseUrl,
+        onDelta: input.onDelta,
+      });
+
+      if (normalResult.status === "ok") return normalResult.plan;
+      if (normalResult.status === "failed") {
+        // 三段链失败时不要给用户一张空计划：退回旧的一次性计划链，
+        // 至少保证他拿到一条能走的路。（代价：质量降级，但不空手。）
+        console.warn(
+          "[inbox] chain failed, falling back to planInbox:",
+          normalResult.reason,
+          normalResult.issues,
+        );
+      }
+      // not_normal / failed / disabled 都继续走原来的计划链路。
+    }
+
+    return planInbox(
       item.content,
       aiContext.projectFacts.map((project) => project.name),
       input.overrides?.apiKey,
@@ -223,8 +252,9 @@ export async function createInboxPlan(input: {
       clarificationState?.frame,
       clarificationState?.session,
       aiContext.decisionMemory,
-    ),
-  );
+      item.mode ?? undefined,
+    );
+  }, input.userId);
 
   await prisma.inboxItem.update({
     where: { id: input.itemId, userId: input.userId },
@@ -234,7 +264,9 @@ export async function createInboxPlan(input: {
     },
   });
 
-  revalidatePath("/");
-  revalidatePath("/workspace");
+  if (!input.skipRevalidate) {
+    revalidatePath("/");
+    revalidatePath("/workspace");
+  }
   return plan;
 }

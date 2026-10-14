@@ -1,0 +1,576 @@
+{
+  "description": "三模式判断评测语料：paradigm = 应毫无争议的范式；contrast = 同一件事的三种说法；tricky = 字面容易误导、必须靠真实需求判断",
+  "modes": {
+    "normal": "封闭 + 当下，有终点，处理掉就结束（含做决定、谈一次、一次整理）",
+    "longterm": "封闭但跨天，有明确交付物和截止",
+    "explore": "开放、没有终点，只有路径（能力 / 习惯 / 长期状态）"
+  },
+  "cases": [
+    {
+      "id": "p01",
+      "group": "paradigm",
+      "expected": "normal",
+      "input": "两份 offer 周五前必须答复，想今天把判断做完。"
+    },
+    {
+      "id": "p02",
+      "group": "paradigm",
+      "expected": "normal",
+      "input": "明天跟主管提离职，想把话说清楚、不留尾巴。"
+    },
+    {
+      "id": "p03",
+      "group": "paradigm",
+      "expected": "normal",
+      "input": "和伴侣冷战三天了，想今天把话谈开。"
+    },
+    {
+      "id": "p04",
+      "group": "paradigm",
+      "expected": "normal",
+      "input": "想跟房东谈一次续租价格，今天把条件想清楚并开口。"
+    },
+    {
+      "id": "p05",
+      "group": "paradigm",
+      "expected": "normal",
+      "input": "朋友借钱半年没还，想今天把话说明白。"
+    },
+    {
+      "id": "p06",
+      "group": "paradigm",
+      "expected": "normal",
+      "input": "拖了两周的报销单，今天把单据和发票一次交掉。"
+    },
+    {
+      "id": "p07",
+      "group": "paradigm",
+      "expected": "normal",
+      "input": "明天要交的纸质作业，排版和打印今天弄完。"
+    },
+    {
+      "id": "p08",
+      "group": "paradigm",
+      "expected": "normal",
+      "input": "电脑和手机里的文件堆了三年，想今天先做一轮大清理。"
+    },
+    {
+      "id": "p09",
+      "group": "paradigm",
+      "expected": "normal",
+      "input": "手机相册满了，想今天把该备份的备份、该删的删。"
+    },
+    {
+      "id": "p10",
+      "group": "paradigm",
+      "expected": "normal",
+      "input": "想退掉三个月没用的几个订阅，今天全部处理掉。"
+    },
+    {
+      "id": "p11",
+      "group": "paradigm",
+      "expected": "normal",
+      "input": "医院复诊在明天，今天把挂号、材料、请假安排明白。"
+    },
+    {
+      "id": "p12",
+      "group": "paradigm",
+      "expected": "normal",
+      "input": "想把书桌和抽屉一次收拾干净，今天动手。"
+    },
+    {
+      "id": "p13",
+      "group": "paradigm",
+      "expected": "normal",
+      "input": "信用卡有两笔不认识的扣款，今天查清并处理。"
+    },
+    {
+      "id": "p14",
+      "group": "paradigm",
+      "expected": "normal",
+      "input": "上周答应同事的资料还没发，今天整理好发出去。"
+    },
+    {
+      "id": "p15",
+      "group": "paradigm",
+      "expected": "normal",
+      "input": "朋友婚礼在周末，礼金和行程今天定完。"
+    },
+    {
+      "id": "p16",
+      "group": "paradigm",
+      "expected": "normal",
+      "input": "车子年检下周到期，今天把预约和材料办好。"
+    },
+    {
+      "id": "p17",
+      "group": "paradigm",
+      "expected": "normal",
+      "input": "想给爸妈约一次体检，今天把套餐和时间定下来。"
+    },
+    {
+      "id": "p18",
+      "group": "paradigm",
+      "expected": "normal",
+      "input": "合同只差最后一步，今天确认条款发出去。"
+    },
+    {
+      "id": "p19",
+      "group": "paradigm",
+      "expected": "normal",
+      "input": "课程要选方向了，今天把两个选项比清楚并提交。"
+    },
+    {
+      "id": "p20",
+      "group": "paradigm",
+      "expected": "normal",
+      "input": "想跟导师把论文方向问清楚，今天写一封明确的邮件。"
+    },
+    {
+      "id": "p21",
+      "group": "paradigm",
+      "expected": "longterm",
+      "input": "三周内要交一份小组作业，四个人分工，想排出节奏按时交。"
+    },
+    {
+      "id": "p22",
+      "group": "paradigm",
+      "expected": "longterm",
+      "input": "下个月底要上线一个个人网站，域名、设计、内容都还没动。"
+    },
+    {
+      "id": "p23",
+      "group": "paradigm",
+      "expected": "longterm",
+      "input": "六周后要参加半马，现在只能跑三公里，想排一份训练安排。"
+    },
+    {
+      "id": "p24",
+      "group": "paradigm",
+      "expected": "longterm",
+      "input": "两个月后要交毕业论文初稿，现在只有开题报告。"
+    },
+    {
+      "id": "p25",
+      "group": "paradigm",
+      "expected": "longterm",
+      "input": "月底要办一场二十人的同学聚会，场地、预算、通知都得安排。"
+    },
+    {
+      "id": "p26",
+      "group": "paradigm",
+      "expected": "longterm",
+      "input": "三周后要交一份产品方案，需要先访谈五位用户再写。"
+    },
+    {
+      "id": "p27",
+      "group": "paradigm",
+      "expected": "longterm",
+      "input": "想在开学前把出租屋重新布置完，预算有限，只有两周。"
+    },
+    {
+      "id": "p28",
+      "group": "paradigm",
+      "expected": "longterm",
+      "input": "下个月考科目二，想在这四周里把练习和约车安排好。"
+    },
+    {
+      "id": "p29",
+      "group": "paradigm",
+      "expected": "longterm",
+      "input": "十天后要在行业活动上做分享，稿子和幻灯片还没开始。"
+    },
+    {
+      "id": "p30",
+      "group": "paradigm",
+      "expected": "longterm",
+      "input": "一个月内要把装修方案定下来并开工，家人意见还不统一。"
+    },
+    {
+      "id": "p31",
+      "group": "paradigm",
+      "expected": "longterm",
+      "input": "想在一个半月内把作品集做出来，用于秋招投递。"
+    },
+    {
+      "id": "p32",
+      "group": "paradigm",
+      "expected": "longterm",
+      "input": "下季度要向公司提交一份完整的项目复盘，需要收集半年的数据。"
+    },
+    {
+      "id": "p33",
+      "group": "paradigm",
+      "expected": "longterm",
+      "input": "想在两个月内减到目标体重，需要把饮食和训练排出节奏。"
+    },
+    {
+      "id": "p34",
+      "group": "paradigm",
+      "expected": "longterm",
+      "input": "三周后要交一份调研报告，访谈和问卷都还没开始。"
+    },
+    {
+      "id": "p35",
+      "group": "paradigm",
+      "expected": "longterm",
+      "input": "想在年底前读完这本书并写十二篇读书笔记。"
+    },
+    {
+      "id": "p36",
+      "group": "paradigm",
+      "expected": "longterm",
+      "input": "下周要带父母出一趟五天远门，行程和预算都还没定。"
+    },
+    {
+      "id": "p37",
+      "group": "paradigm",
+      "expected": "longterm",
+      "input": "想在两个月内把一门在线课程的证书考下来，共八个模块。"
+    },
+    {
+      "id": "p38",
+      "group": "paradigm",
+      "expected": "longterm",
+      "input": "一季度要完成一次团队流程改造，涉及三个环节的验收。"
+    },
+    {
+      "id": "p39",
+      "group": "paradigm",
+      "expected": "longterm",
+      "input": "想在十月底前把积压的三篇专栏写完并按期发出。"
+    },
+    {
+      "id": "p40",
+      "group": "paradigm",
+      "expected": "longterm",
+      "input": "两个月后要参加一场比赛，作品要从零做出来。"
+    },
+    {
+      "id": "p41",
+      "group": "paradigm",
+      "expected": "explore",
+      "input": "想学会用 Python 处理日常的数据，没有期限，想慢慢走下去。"
+    },
+    {
+      "id": "p42",
+      "group": "paradigm",
+      "expected": "explore",
+      "input": "想把英语真正用起来，不想再考完就忘。"
+    },
+    {
+      "id": "p43",
+      "group": "paradigm",
+      "expected": "explore",
+      "input": "想长期保持运动习惯，不想再靠意志力硬撑。"
+    },
+    {
+      "id": "p44",
+      "group": "paradigm",
+      "expected": "explore",
+      "input": "想练一手能拿得出手的字。"
+    },
+    {
+      "id": "p45",
+      "group": "paradigm",
+      "expected": "explore",
+      "input": "想学做菜，从只会煮面到能招待朋友。"
+    },
+    {
+      "id": "p46",
+      "group": "paradigm",
+      "expected": "explore",
+      "input": "想慢慢养成能持续写东西的状态，不追求发多少。"
+    },
+    {
+      "id": "p47",
+      "group": "paradigm",
+      "expected": "explore",
+      "input": "想长期维护几段重要的朋友关系，不想只在需要时才联系。"
+    },
+    {
+      "id": "p48",
+      "group": "paradigm",
+      "expected": "explore",
+      "input": "想练出能自己判断信息的习惯，不轻易被带节奏。"
+    },
+    {
+      "id": "p49",
+      "group": "paradigm",
+      "expected": "explore",
+      "input": "想学摄影，不是为了接单，是想把看到的拍下来。"
+    },
+    {
+      "id": "p50",
+      "group": "paradigm",
+      "expected": "explore",
+      "input": "想长期照顾好身体，把作息和饮食慢慢调整到合适的样子。"
+    },
+    {
+      "id": "p51",
+      "group": "paradigm",
+      "expected": "explore",
+      "input": "想培养一种不追求成果的爱好，让生活不只围着工作转。"
+    },
+    {
+      "id": "p52",
+      "group": "paradigm",
+      "expected": "explore",
+      "input": "想学会跟自己的情绪相处，而不是一难受就逃避。"
+    },
+    {
+      "id": "p53",
+      "group": "paradigm",
+      "expected": "explore",
+      "input": "想练出稳定的公开表达能力，慢慢来。"
+    },
+    {
+      "id": "p54",
+      "group": "paradigm",
+      "expected": "explore",
+      "input": "想长期读下去，把阅读变成日常的一部分。"
+    },
+    {
+      "id": "p55",
+      "group": "paradigm",
+      "expected": "explore",
+      "input": "想学一门乐器，没有考级目标，只是想能弹自己喜欢的曲子。"
+    },
+    {
+      "id": "p56",
+      "group": "paradigm",
+      "expected": "explore",
+      "input": "想慢慢建立自己的审美判断，不再跟着流行走。"
+    },
+    {
+      "id": "p57",
+      "group": "paradigm",
+      "expected": "explore",
+      "input": "想长期保持和家人的联系，不想只在节日打个电话。"
+    },
+    {
+      "id": "p58",
+      "group": "paradigm",
+      "expected": "explore",
+      "input": "想练出能沉下心做一件事的专注力。"
+    },
+    {
+      "id": "p59",
+      "group": "paradigm",
+      "expected": "explore",
+      "input": "想学理财，让钱的事不再靠感觉。"
+    },
+    {
+      "id": "p60",
+      "group": "paradigm",
+      "expected": "explore",
+      "input": "想慢慢学会给自己做决定，不再每次都问别人。"
+    },
+    {
+      "id": "c61",
+      "group": "contrast",
+      "expected": "normal",
+      "note": "当天交付",
+      "input": "今天把这份方案写出来"
+    },
+    {
+      "id": "c62",
+      "group": "contrast",
+      "expected": "longterm",
+      "note": "有截止、要分阶段",
+      "input": "三周内交一份方案，需要访谈五个人"
+    },
+    {
+      "id": "c63",
+      "group": "contrast",
+      "expected": "explore",
+      "note": "没有终点，只有路径",
+      "input": "想长期保持写作的状态"
+    },
+    {
+      "id": "c64",
+      "group": "contrast",
+      "expected": "explore",
+      "note": "能力，无止境",
+      "input": "想学 Python"
+    },
+    {
+      "id": "c65",
+      "group": "contrast",
+      "expected": "normal",
+      "note": "一次性交付",
+      "input": "用 Python 写个小工具处理这批数据"
+    },
+    {
+      "id": "c66",
+      "group": "contrast",
+      "expected": "longterm",
+      "note": "有交付和截止",
+      "input": "用一个月做出一个 Python 小工具去打比赛"
+    },
+    {
+      "id": "c67",
+      "group": "contrast",
+      "expected": "explore",
+      "note": "状态与习惯，没有终点",
+      "input": "想减肥"
+    },
+    {
+      "id": "c68",
+      "group": "contrast",
+      "expected": "longterm",
+      "note": "有明确目标和截止",
+      "input": "想在两个月内减到目标体重"
+    },
+    {
+      "id": "c69",
+      "group": "contrast",
+      "expected": "explore",
+      "note": "能力，没有终点",
+      "input": "想学摄影，把看到的东西拍下来"
+    },
+    {
+      "id": "c70",
+      "group": "contrast",
+      "expected": "normal",
+      "note": "一次性交付",
+      "input": "这周末帮朋友拍一组毕业照"
+    },
+    {
+      "id": "c71",
+      "group": "contrast",
+      "expected": "longterm",
+      "note": "有交付和截止",
+      "input": "下个月要办一场摄影展，需要准备 30 张作品"
+    },
+    {
+      "id": "c72",
+      "group": "contrast",
+      "expected": "explore",
+      "note": "能力，没有终点",
+      "input": "想把英语用起来，不想再考完就忘"
+    },
+    {
+      "id": "c73",
+      "group": "contrast",
+      "expected": "longterm",
+      "note": "有交付和截止",
+      "input": "下个月要考雅思，目标 7 分"
+    },
+    {
+      "id": "c74",
+      "group": "contrast",
+      "expected": "normal",
+      "note": "当天交付",
+      "input": "今天把这份英文邮件改到能发"
+    },
+    {
+      "id": "t75",
+      "group": "tricky",
+      "expected": "longterm",
+      "note": "字面是\"学\"，但真实需求有交付和截止，不是无止境的学",
+      "input": "想学 Python，三个月后要用它找到一份数据分析的工作",
+      "clarified": "他确实要在三个月内拿到一份数据分析的 offer，学 Python 只是手段"
+    },
+    {
+      "id": "t76",
+      "group": "tricky",
+      "expected": "explore",
+      "note": "\"报班\"是一次动作，真实需求是能力",
+      "input": "想报个班把英语学起来",
+      "clarified": "他不需要在某个时间点考出成绩，只想能日常用起来"
+    },
+    {
+      "id": "t77",
+      "group": "tricky",
+      "expected": "explore",
+      "note": "字面\"每天\"像长期，真实需求是习惯/状态",
+      "input": "每天都想写点东西，可总是坚持不下来",
+      "clarified": "他已经写了两年，现在的问题是坚持不下来，不是要交某一篇"
+    },
+    {
+      "id": "t78",
+      "group": "tricky",
+      "expected": "longterm",
+      "note": "有明确交付和截止（这周）",
+      "input": "这周把公众号那篇稿子写完发出去",
+      "clarified": "这篇稿子要写三天，中间还要等访谈回复，不是一次能写完的"
+    },
+    {
+      "id": "t79",
+      "group": "tricky",
+      "expected": "normal",
+      "note": "一次性交付",
+      "input": "想找个周末把家里彻底收拾一遍",
+      "clarified": "他就是想找个周末一口气弄完，没有别的打算"
+    },
+    {
+      "id": "t80",
+      "group": "tricky",
+      "expected": "explore",
+      "note": "状态，没有终点",
+      "input": "想把家里养成\"东西都有固定位置\"的状态"
+    },
+    {
+      "id": "t81",
+      "group": "tricky",
+      "expected": "longterm",
+      "note": "有明确目标和截止",
+      "input": "这个月要把两万块的账还清"
+    },
+    {
+      "id": "t82",
+      "group": "tricky",
+      "expected": "explore",
+      "note": "状态，没有终点",
+      "input": "想摆脱每个月都还不上账的状态",
+      "clarified": "他要的是能长期管住钱的状态，不是这个月要凑一笔"
+    },
+    {
+      "id": "t83",
+      "group": "tricky",
+      "expected": "normal",
+      "note": "今天要处理的一件事",
+      "input": "下周要交的那份实习申请，今天把材料凑齐"
+    },
+    {
+      "id": "t84",
+      "group": "tricky",
+      "expected": "explore",
+      "note": "开放，没有终点",
+      "input": "想认真做一次求职准备",
+      "clarified": "他不需要一份系统的求职方案，只想先弄清自己适合投哪一类岗位（没有截止，也没有交付物）"
+    },
+    {
+      "id": "t85",
+      "group": "tricky",
+      "expected": "normal",
+      "note": "当下要做的是一次取舍决定",
+      "input": "想学的太多了，报了三门课",
+      "clarified": "他确实只是想先做一次取舍：三门课里先留一门"
+    },
+    {
+      "id": "t86",
+      "group": "tricky",
+      "expected": "explore",
+      "note": "开放，无终点",
+      "input": "想把副业真正做起来",
+      "clarified": "他没有终点，只想慢慢把副业做成一件能持续做下去的事"
+    },
+    {
+      "id": "t87",
+      "group": "tricky",
+      "expected": "longterm",
+      "note": "有交付和截止",
+      "input": "想在三个月内让副业有第一笔收入"
+    },
+    {
+      "id": "t88",
+      "group": "tricky",
+      "expected": "normal",
+      "note": "一次性决定",
+      "input": "想跟爸妈把过年回不回家这事定下来",
+      "clarified": "他只想先把回不回家这个决定定下来"
+    }
+  ]
+}

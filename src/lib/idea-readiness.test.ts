@@ -27,3 +27,9 @@ test("具体对象加元问题不会被误判成凭空规划", () => {
   const result = assessIdeaReadiness("我准备了论文开题，但不知道从哪开始。");
   assert.equal(result.readiness, "ready");
 });
+
+test("设备或软件选择缺配置时，先补关键事实", () => {
+  const result = assessIdeaReadiness("想给电脑换一个好看的动态壁纸，但又怕占内存。");
+  assert.equal(result.readiness, "needs_context");
+  assert.ok(result.missingSlots.includes("设备/系统配置"));
+});

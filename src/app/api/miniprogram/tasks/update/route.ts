@@ -2,6 +2,9 @@ import { NextResponse } from "next/server";
 import { getMiniProgramUser } from "@/lib/miniprogram-auth";
 import { prisma } from "@/lib/prisma";
 import { buildTaskContract } from "@/lib/task-contract";
+import { syncProjectStageGate } from "@/lib/project-stage";
+import { advanceExploreAfterTask } from "@/lib/project-progress-agent";
+import { after } from "next/server";
 
 export const dynamic = "force-dynamic";
 
@@ -114,6 +117,13 @@ export async function POST(request: Request) {
       toolPolicy: contract.toolPolicy,
     },
   });
+
+  if (projectId) {
+    await syncProjectStageGate(prisma, { userId: user.id, projectId });
+  }
+  if (status === "done" || status === "cancelled") {
+    after(() => advanceExploreAfterTask({ userId: user.id, taskId: existing.id }));
+  }
 
   return NextResponse.json({ ok: true });
 }

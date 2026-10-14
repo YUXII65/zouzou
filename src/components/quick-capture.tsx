@@ -10,6 +10,8 @@ import {
 } from "@/lib/first-run-hints";
 import { consumeAiStream } from "@/lib/ai-stream-client";
 import { trackEvent } from "@/lib/track";
+import { cx } from "@/lib/utils";
+import { InboxClarification } from "@/components/inbox-clarification";
 import {
   pickRandomSampleIdeas,
   sampleIdeasForDate,
@@ -32,9 +34,15 @@ const CAPTURE_WAITING_LABELS = [
 export function QuickCapture({
   compact = false,
   pendingIds = [],
+  embedded = false,
+  suppressInput = false,
 }: {
   compact?: boolean;
   pendingIds?: string[];
+  /** 嵌在父级卡片里时不再自带边框和背景，让澄清和输入框看起来是同一个框 */
+  embedded?: boolean;
+  /** 正在对话（有待澄清的内容或刚提交）时，整块输入让位给澄清 */
+  suppressInput?: boolean;
 }) {
   const [content, setContent] = useState("");
   const [samples, setSamples] = useState(sampleIdeasForDate);
@@ -45,6 +53,9 @@ export function QuickCapture({
   const [submitError, setSubmitError] = useState("");
   const [settledItemId, setSettledItemId] = useState<string | null>(null);
   const [pendingContent, setPendingContent] = useState("");
+  const [streamPreview, setStreamPreview] = useState("");
+  // 澄清结果一到就先本地渲染，不等整页刷新（刷新在后台跑，用来把它换成服务端版本）
+  const [localClarification, setLocalClarification] = useState<CaptureResult | null>(null);
   const router = useRouter();
   const waitingLabel = useRotatingText(submitting, CAPTURE_WAITING_LABELS);
 
@@ -52,6 +63,8 @@ export function QuickCapture({
     if (settledItemId && pendingIds.includes(settledItemId)) {
       setSettledItemId(null);
       setPendingContent("");
+      setStreamPreview("");
+      setLocalClarification(null);
     }
   }, [pendingIds, settledItemId]);
 
@@ -91,6 +104,7 @@ export function QuickCapture({
     setSubmitError("");
     setSettledItemId(null);
     setPendingContent(idea);
+    setStreamPreview("");
     setContent("");
     markFirstAiQuestionAsked();
     notifyTourStep("2");
@@ -100,13 +114,21 @@ export function QuickCapture({
       const response = await fetch("/api/ai/inbox/clarify", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ content: idea, mode: "socratic", apiKey, model, baseUrl }),
+        body: JSON.stringify({
+          content: idea,
+          mode: "socratic",
+          apiKey,
+          model,
+          baseUrl,
+        }),
       });
+      // 服务端一边生成一边推「问题 + 选项」的可读文本，接住它，等待时就有真实反馈
       const result = await consumeAiStream<CaptureResult>(
         response,
-        () => {},
+        (preview) => setStreamPreview(preview),
       );
       setSettledItemId(result.itemId);
+      setLocalClarification(result);
       router.refresh();
     } catch {
       setSubmitError("没送出去，再试一次");
@@ -119,9 +141,15 @@ export function QuickCapture({
 
   return (
     <>
+    {!suppressInput && !pendingContent ? (
     <form
       data-tour="quick-capture"
-      className="relative overflow-hidden rounded-xl border border-accent/15 bg-gradient-to-br from-accent-soft/80 via-surface to-ai-soft/60 p-4 sm:p-5"
+      className={cx(
+        "relative",
+        embedded
+          ? ""
+          : "overflow-hidden rounded-xl border border-accent/15 bg-gradient-to-br from-accent-soft/80 via-surface to-ai-soft/60 p-4 sm:p-5",
+      )}
       onSubmit={submitCapture}
     >
       <div
@@ -137,38 +165,17 @@ export function QuickCapture({
         required
         value={content}
         onChange={(event) => setContent(event.target.value)}
-        rows={compact ? 8 : 11}
-        placeholder="写一件具体的事：对象、想改变的结果、现在卡在哪里。说不清也可以直接写"
-        className="zouzou-input relative min-h-72 w-full resize-none border-accent/20 bg-surface/90 px-4 py-3 text-base leading-7 text-ink shadow-sm"
+        rows={compact ? 6 : 7}
+        placeholder="思考与困惑，计划与执行，直接倒出你的想法"
+        className="zouzou-input relative min-h-44 w-full resize-none border-accent/20 bg-surface/90 px-4 py-3 text-base leading-7 text-ink shadow-sm"
       />
-      {/* 演示内容：三条竖着排，一行一条 */}
-      <div className="relative mt-3 flex flex-col gap-1.5">
-        {samples.map((sample) => (
-          <button
-            key={sample}
-            type="button"
-            onClick={() => setContent(sample)}
-            className="w-full truncate rounded-lg border border-border/80 bg-surface/90 px-3 py-2 text-left text-xs leading-5 text-ink-secondary transition-colors hover:border-accent/30 hover:bg-accent-soft hover:text-accent-strong"
-          >
-            {sample}
-          </button>
-        ))}
-      </div>
-      <div className="relative mt-4 flex flex-col-reverse gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <button
-          type="button"
-          onClick={refreshSamples}
-          aria-label="换一批示例想法"
-          title="换一批示例想法"
-          className="inline-flex h-9 w-auto self-start items-center justify-center gap-1.5 rounded-lg border border-border/80 bg-surface/90 px-3 text-xs font-medium text-ink-secondary transition-colors hover:border-accent/30 hover:text-accent-strong sm:self-auto"
-        >
-          <RefreshCw className="size-3.5" />
-          换一批
-        </button>
+
+      {/* 输入框下方：右下角进入下一步 */}
+      <div className="relative mt-2 flex justify-end">
         <button
           type="submit"
           disabled={submitting}
-          className="zouzou-primary-button inline-flex h-11 w-full items-center justify-center gap-2 rounded-lg bg-accent px-6 text-sm font-medium text-white shadow-lg shadow-accent/20 transition-colors hover:bg-accent-strong disabled:cursor-not-allowed disabled:opacity-70 sm:w-auto"
+          className="zouzou-primary-button inline-flex h-11 flex-1 items-center justify-center gap-2 rounded-lg bg-accent px-6 text-sm font-medium text-white shadow-lg shadow-accent/20 transition-colors hover:bg-accent-strong disabled:cursor-not-allowed disabled:opacity-70 sm:flex-none"
         >
           {submitting ? (
             <Loader2 className="size-4 animate-spin" />
@@ -178,17 +185,83 @@ export function QuickCapture({
           {submitting ? waitingLabel : "下一步"}
         </button>
       </div>
+
+      {pendingIds.length === 0 ? (
+        <>
+          {/* 演示内容：三条竖着排，一行一条 */}
+      <div className="relative mt-3 flex flex-col gap-1.5">
+        {samples.map((sample) => (
+          <button
+            key={sample.title}
+            type="button"
+            onClick={() => setContent(sample.content)}
+            className="w-full truncate rounded-lg border border-border/80 bg-surface/90 px-3 py-2 text-left text-xs leading-5 text-ink-secondary transition-colors hover:border-accent/30 hover:bg-accent-soft hover:text-accent-strong"
+          >
+            {sample.title}
+          </button>
+        ))}
+      </div>
+
+      <div className="relative mt-2 flex justify-end">
+        <button
+          type="button"
+          onClick={refreshSamples}
+          aria-label="换一批示例想法"
+          title="换一批示例想法"
+          className="inline-flex h-8 items-center justify-center gap-1.5 rounded-lg px-2.5 text-xs font-medium text-ink-muted transition-colors hover:bg-surface hover:text-accent-strong"
+        >
+          <RefreshCw className="size-3.5" />
+          换一批
+        </button>
+          </div>
+        </>
+      ) : null}
+
       {submitError ? (
         <p className="relative mt-3 text-xs text-danger">{submitError}</p>
       ) : null}
     </form>
+    ) : null}
     {pendingContent && !(settledItemId && pendingIds.includes(settledItemId)) ? (
-      <div className="mt-4 rounded-xl border border-accent/15 bg-surface p-4">
-        <p className="text-sm leading-6 text-ink">{pendingContent}</p>
-        <div className="mt-3 flex items-center gap-2 border-l-2 border-accent/30 pl-3 text-sm leading-7 text-ink-muted">
-          <Loader2 className="size-4 shrink-0 animate-spin text-accent/70" />
-          <span>{waitingLabel}</span>
-        </div>
+      <div className="relative">
+        {localClarification ? (
+          <InboxClarification
+            itemId={localClarification.itemId}
+            content={localClarification.content}
+            dimensions={localClarification.clarification.dimensions}
+            supplementPlaceholder={
+              localClarification.clarification.supplementPlaceholder
+            }
+            mode={localClarification.clarification.mode}
+            status={localClarification.clarification.status}
+            history={localClarification.clarification.history}
+
+            frame={localClarification.clarification.frame}
+          />
+        ) : (
+          <div className="space-y-3">
+            <div className="ml-auto max-w-[82%] rounded-xl rounded-tr-sm border border-border bg-surface-muted px-3 py-2 text-sm font-medium leading-6 text-ink">
+              {pendingContent}
+            </div>
+            <div className="flex items-start gap-2">
+              <span className="mt-1 flex size-6 shrink-0 items-center justify-center rounded-md bg-accent-soft text-accent-strong">
+                <Sparkles className="size-3.5" />
+              </span>
+              <div className="rounded-xl rounded-tl-sm border border-border/70 bg-surface px-3 py-2.5 text-sm leading-6 text-ink">
+                {streamPreview ? (
+                  <p className="whitespace-pre-wrap text-ink-secondary">
+                    {streamPreview}
+                  </p>
+                ) : (
+                  <span className="flex items-center gap-2 text-ink-muted">
+                    <Loader2 className="size-3.5 shrink-0 animate-spin text-accent/70" />
+                    <span>{waitingLabel}</span>
+                  </span>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     ) : null}
 

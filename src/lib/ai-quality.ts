@@ -41,6 +41,22 @@ export const VAGUE_METHOD_PHRASES = [
   "慢慢来",
 ];
 
+/**
+ * 把「先想清楚」这类认知动作当成要做的任务，等于把「做」推回「想」。
+ * 走走的初心是「从想变为做」，所以这类任务不该通过质检。
+ */
+export const THINKING_ACTION_PHRASES = [
+  "先想清楚",
+  "先想明白",
+  "先想一下",
+  "先思考",
+  "先梳理",
+  "先理清",
+  "先确认方向",
+  "先明确方向",
+  "想清楚再",
+];
+
 /** 看起来像问题，但没有区分度、不会改变计划的通用问句 */
 export const GENERIC_CLARIFY_QUESTIONS = [
   "你最想要什么",
@@ -145,6 +161,13 @@ export function checkPlanQuality(
   ) {
     issues.push(`taskDisposition 非法：${typed.taskDisposition}`);
   }
+  if (
+    typed.mode !== undefined &&
+    typed.mode !== null &&
+    !["normal", "longterm", "explore"].includes(String(typed.mode))
+  ) {
+    issues.push(`mode 非法：${typed.mode}`);
+  }
   if (!tasks.length) {
     issues.push("至少要有一条任务");
     return issues;
@@ -160,6 +183,17 @@ export function checkPlanQuality(
     const title = typeof task.title === "string" ? task.title.trim() : "";
     if (!title) {
       issues.push(`${label}缺标题`);
+    }
+
+    const doneWhenForThinking =
+      typeof task.doneWhen === "string" ? task.doneWhen : "";
+    for (const phrase of THINKING_ACTION_PHRASES) {
+      if (title.includes(phrase)) {
+        issues.push(`${label}把「想」当成任务动作：${phrase}`);
+      }
+      if (doneWhenForThinking.includes(phrase)) {
+        issues.push(`${label}的完成标准还停在「想」：${phrase}`);
+      }
     }
 
     const mode = typeof task.executionMode === "string" ? task.executionMode : "";
@@ -287,6 +321,12 @@ function hasSharedFragment(left: string, right: string) {
  * 检查一轮澄清输出是否真的在“做判断”，而不是换一种方式问问卷。
  * 这里不评价模型是否聪明，只拦住结构缺失、重复提问和明显通用问句。
  */
+const PRODUCT_DEFINITION_QUESTION =
+  /给谁用|要完成什么|核心功能|产品定位|目标用户|功能范围|成功指标|哪类用户/;
+
+const SUBPROBLEM_PATH_QUESTION =
+  /你更想先.*还是|先.*还是.*(?:解决|处理|同步|开口|做|开始)|要.*还是.*(?:同步|开口|解决|处理)/;
+
 export function checkClarificationQuality(
   value: unknown,
   context: ClarificationQualityContext = {},
@@ -376,6 +416,12 @@ export function checkClarificationQuality(
     issues.push("问题太短，缺少具体对象");
   }
   if (questionText) {
+    if (PRODUCT_DEFINITION_QUESTION.test(questionText)) {
+      issues.push("问题把产品/项目定义直接推回给用户");
+    }
+    if (SUBPROBLEM_PATH_QUESTION.test(questionText)) {
+      issues.push("问题把同一目标下的两个子步骤推回给用户");
+    }
     for (const phrase of GENERIC_CLARIFY_QUESTIONS) {
       if (questionText.includes(phrase)) {
         issues.push(`问题是通用问句：${phrase}`);

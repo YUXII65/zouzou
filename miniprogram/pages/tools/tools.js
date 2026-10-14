@@ -14,7 +14,6 @@ Page({
     feedbackCount: 0,
     modules: [
       { id: "focus", name: "专注计时", description: "给今日重点任务计时，避免一上午都在低效忙碌。", badge: "可用", icon: "◷", available: true },
-      { id: "weekly", name: "周复盘", description: "每周回看项目推进情况，并自动生成下周重点。", badge: "可用", icon: "☑", available: true },
       { id: "reminders", name: "日历提醒", description: "把今日计划和截止日期变成提醒，降低忘记打开的阻力。", badge: "暂不开放", icon: "▦", available: false },
       { id: "ai-execute", name: "AI 执行接入", description: "以后把可执行任务交给 Codex / WorkBuddy 等外部 Agent。", badge: "暂不开放", icon: "✦", available: false }
     ],

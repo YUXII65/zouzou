@@ -3,24 +3,16 @@
 import { usePathname } from "next/navigation";
 import { Sidebar } from "@/components/sidebar";
 import { CommandPalette } from "@/components/command-palette";
-import type { ProfileUser } from "@/components/profile-card";
 import { isFullscreenRoute } from "@/lib/routes";
 
-
-export function AppChrome({
-  isAdmin,
-  user,
-}: {
-  isAdmin: boolean;
-  user: ProfileUser | null;
-}) {
+export function AppChrome({ isAdmin }: { isAdmin: boolean }) {
   const pathname = usePathname();
   const fullscreen = isFullscreenRoute(pathname);
   if (fullscreen) return null;
 
   return (
     <>
-      <Sidebar isAdmin={isAdmin} user={user} />
+      <Sidebar isAdmin={isAdmin} />
       <CommandPalette isAdmin={isAdmin} />
     </>
   );

@@ -1,5 +1,5 @@
-import { getCurrentUser } from "@/lib/auth";
-import { isAiQuotaEnabled } from "@/lib/ai-quota";
+import { readSessionUserId } from "@/lib/auth";
+import { shouldUseClientAiOverrides } from "@/lib/ai-quota";
 import { buildAiStreamPreview } from "@/lib/ai-stream-preview";
 import { createInboxPlan } from "@/lib/inbox-ai";
 import { createNdjsonResponse } from "@/lib/ndjson-response";
@@ -17,8 +17,8 @@ type PlanRequest = {
 };
 
 export async function POST(request: Request) {
-  const user = await getCurrentUser();
-  if (!user) {
+  const userId = await readSessionUserId();
+  if (!userId) {
     return Response.json({ error: "请先登录" }, { status: 401 });
   }
 
@@ -34,13 +34,13 @@ export async function POST(request: Request) {
     return Response.json({ error: "没有找到要整理的想法" }, { status: 400 });
   }
 
-  const overrides = isAiQuotaEnabled()
-    ? undefined
-    : {
+  const overrides = shouldUseClientAiOverrides()
+    ? {
         apiKey: body.apiKey?.trim() || undefined,
         model: body.model?.trim() || undefined,
         baseUrl: body.baseUrl?.trim() || undefined,
-      };
+      }
+    : undefined;
   const dimensionChoices = Array.isArray(body.dimensionChoices)
     ? body.dimensionChoices
         .map((choice) => String(choice).trim())
@@ -53,7 +53,7 @@ export async function POST(request: Request) {
     let raw = "";
     let lastPreview = "";
     const plan = await createInboxPlan({
-      userId: user.id,
+      userId: userId,
       itemId,
       option: body.option?.trim() || undefined,
       supplement: body.supplement?.trim() || undefined,

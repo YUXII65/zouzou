@@ -113,7 +113,7 @@ async function main() {
   let restoreTarget;
 
   if (useFixture) {
-    // 小样本：覆盖自环外键回填、可空外键、以及 13 张表各至少一行。
+    // 小样本：覆盖自环外键回填、可空外键、以及当前所有表各至少一行。
     // 这样 CI 不需要真实备份文件也能跑完整恢复流程。
     const fixturePath = path.join(root, "scripts", "fixtures", "restore-roundtrip.json");
     dump = JSON.parse(fs.readFileSync(fixturePath, "utf8"));

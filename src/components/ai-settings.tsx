@@ -47,8 +47,8 @@ export function AiSettings({
   }
 
   return (
-    <details className="zouzou-panel rounded-xl bg-surface">
-      <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-3 py-2 text-xs font-medium text-ink-secondary transition-colors hover:text-accent">
+    <details className="zouzou-panel overflow-hidden rounded-lg bg-surface">
+      <summary className="flex h-10 min-w-0 cursor-pointer list-none items-center justify-between gap-2 px-2 text-xs font-medium text-ink-secondary transition-colors hover:bg-surface-hover hover:text-ink sm:gap-3 sm:px-4 sm:text-sm">
         <span className="flex items-center gap-1.5">
           <KeyRound className="size-3.5" />
           API 连接
@@ -56,19 +56,19 @@ export function AiSettings({
         <span
           className={
             connected
-              ? "inline-flex items-center gap-1 text-success"
-              : "inline-flex items-center gap-1 text-warning"
+              ? "inline-flex shrink-0 items-center gap-1 text-xs text-success"
+              : "inline-flex shrink-0 items-center gap-1 text-xs text-warning"
           }
         >
           {connected ? (
             <>
-              <CheckCircle2 className="size-3.5" />
-              {hasLocalKey ? "已连接" : "服务端已连接"}
+              <CheckCircle2 className="size-3.5 shrink-0" />
+              <span className="hidden truncate sm:inline">{hasLocalKey ? "已连接" : "服务端已连接"}</span>
             </>
           ) : (
             <>
-              <Sparkles className="size-3.5" />
-              本地规则
+              <Sparkles className="size-3.5 shrink-0" />
+              <span className="hidden truncate sm:inline">本地规则</span>
             </>
           )}
         </span>
@@ -95,7 +95,7 @@ export function AiSettings({
           <button
             type="button"
             onClick={save}
-            className="zouzou-primary-button inline-flex h-8 shrink-0 items-center justify-center rounded-md bg-accent px-3 text-xs font-medium text-white transition-colors hover:bg-accent-strong"
+            className="zouzou-primary-button inline-flex h-10 shrink-0 items-center justify-center rounded-lg bg-accent px-4 text-sm font-medium text-white transition-colors hover:bg-accent-strong"
           >
             保存
           </button>

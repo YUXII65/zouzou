@@ -8,6 +8,8 @@ const VISITOR_COOKIE = "visitor_id";
 const quotaStorage = new AsyncLocalStorage<{
   visitorId: string;
   feature: string;
+  /** 调用方已经知道是哪个登录用户时带上，后面就不必再查一次 users 表。 */
+  userId?: string;
 }>();
 
 export type AiUsageInput = {
@@ -28,6 +30,13 @@ export function isAiQuotaEnabled() {
   return process.env.AI_QUOTA_ENABLED === "true";
 }
 
+export function shouldUseClientAiOverrides() {
+  return (
+    !isAiQuotaEnabled() ||
+    !(process.env.DEEPSEEK_API_KEY || process.env.OPENAI_API_KEY)
+  );
+}
+
 export function getAiQuotaContext() {
   return quotaStorage.getStore();
 }
@@ -43,6 +52,7 @@ export async function getVisitorId() {
   const visitorId = randomUUID();
   cookieStore.set(VISITOR_COOKIE, visitorId, {
     httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
     sameSite: "lax",
     path: "/",
     maxAge: 60 * 60 * 24 * 365,
@@ -53,9 +63,12 @@ export async function getVisitorId() {
 export async function withAiQuota<T>(
   feature: string,
   fn: () => Promise<T>,
+  userId?: string,
 ): Promise<T> {
-  const visitorId = await getVisitorId();
-  return quotaStorage.run({ visitorId, feature }, fn);
+  // 登录用户传了 userId 就直接用，免得再打一次跨洋的 users 查询。
+  // getVisitorId() 对登录用户本来就返回 user:<id>，两者等价。
+  const visitorId = userId ? `user:${userId}` : await getVisitorId();
+  return quotaStorage.run({ visitorId, feature, userId }, fn);
 }
 
 function dailyStart() {
@@ -107,11 +120,12 @@ export async function recordAiUsage(usage: AiUsageInput) {
   if (!context) return;
 
   try {
-    const user = await getCurrentUser();
-    if (!user) return;
+    // 有 userId 就不用再查用户；没有（例如游客）才回退到 getCurrentUser。
+    const userId = context.userId ?? (await getCurrentUser())?.id;
+    if (!userId) return;
     await prisma.aiUsageLog.create({
       data: {
-        userId: user.id,
+        userId,
         visitorId: context.visitorId,
         feature: context.feature,
         status: "ok",

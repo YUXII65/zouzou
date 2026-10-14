@@ -10,6 +10,7 @@ import type {
   TaskStatus,
 } from "@prisma/client";
 import { prisma, withTransactionRetry } from "@/lib/prisma";
+import { safeNext } from "@/lib/safe-next";
 import { isAdminUsername } from "@/lib/admin";
 import {
   createUserSession,
@@ -21,8 +22,7 @@ import {
   verifyPassword,
 } from "@/lib/auth";
 import { startOfDay, toDateInputValue } from "@/lib/date";
-import { buildAiContext } from "@/lib/ai-context";
-import { createInboxClarification, createInboxPlan } from "@/lib/inbox-ai";
+import { buildAiContext, invalidateAiContext } from "@/lib/ai-context";
 import { createReviewDraft } from "@/lib/review-ai";
 import { syncReviewRelations } from "@/lib/review-relations";
 import { recordAiFeedback } from "@/lib/feedback";
@@ -31,19 +31,17 @@ import {
   guestEntryPath,
   newUserEntryPath,
 } from "@/lib/entry-policy";
-import { isAiQuotaEnabled, withAiQuota } from "@/lib/ai-quota";
+import { withAiQuota } from "@/lib/ai-quota";
 import {
   isOnboardingCompleted,
   setOnboardingCompleted,
 } from "@/lib/onboarding";
-import {
-  isFirstPlanGroupComplete,
-  setFirstRunTourStep as persistFirstRunTourStep,
-} from "@/lib/first-run";
+import { setFirstRunTourStep as persistFirstRunTourStep } from "@/lib/first-run";
 import {
   serializeTaskStickyNote,
   type TaskStickyNoteData,
 } from "@/lib/task-sticky";
+import { writeTodayFocus } from "@/lib/today-focus";
 import { buildTaskContract } from "@/lib/task-contract";
 import {
   decisionCardFromAdvice,
@@ -52,7 +50,18 @@ import {
   routeDecisionKind,
   stickyPayloadFromDecisionCard,
 } from "@/lib/decision";
-import { ensureInboxProject } from "@/lib/inbox-project";
+import { ensureInboxProject, ensureProjectTracks } from "@/lib/inbox-project";
+import { normalizeProjectMode } from "@/lib/work-mode";
+import {
+  currentProjectStageId,
+  ensureCurrentProjectStage,
+  syncProjectStageGate,
+} from "@/lib/project-stage";
+import {
+  advanceExploreAfterTask,
+  generateLongtermStagePreview,
+} from "@/lib/project-progress-agent";
+import { parseStagePreview } from "@/lib/project-progress-types";
 import {
   appendTaskContinuation,
   formatReviewNextActions,
@@ -67,7 +76,6 @@ import {
   generateTaskEditSuggestion,
   generateTaskShortTitle,
   generateProjectEditSuggestion,
-  planInbox,
   suggestTodayFocus,
   type FirstRunPlanResult,
   type InboxClarification,
@@ -116,22 +124,6 @@ function linesOr(value: string | null | undefined, fallback: string[]) {
 function shortTitleFromTitle(title: string) {
   const first = title.split(/[，,。；;！？!?\n]/)[0]?.trim() || title.trim();
   return first.length > 18 ? `${first.slice(0, 17).trim()}…` : first;
-}
-
-function clientAiOverrides(formData: FormData) {
-  if (isAiQuotaEnabled()) {
-    return {
-      apiKey: undefined,
-      model: undefined,
-      baseUrl: undefined,
-    };
-  }
-
-  return {
-    apiKey: String(formData.get("apiKey") ?? "").trim() || undefined,
-    model: undefined,
-    baseUrl: undefined,
-  };
 }
 
 function dateInput(formData: FormData, key: string) {
@@ -275,13 +267,6 @@ function isUniqueConstraintError(error: unknown) {
       "code" in error &&
       (error as { code?: unknown }).code === "P2002",
   );
-}
-
-function safeNext(value: string | null) {
-  if (value && value.startsWith("/") && !value.startsWith("//")) {
-    return value;
-  }
-  return "/";
 }
 
 async function ownedProjectId(projectId: string | null, userId: string) {
@@ -545,14 +530,14 @@ export async function updateUserProfile(formData: FormData) {
 }
 
 /**
- * 新手引导进度（1 / 2 / 3 / 4 / done）。
+ * 新手引导进度（1 / 2 / 3 / done）。
  * 客户端会在切换步骤时调用，失败不影响使用。
  */
 export async function setFirstRunTourStep(step: string) {
   const user = await getCurrentUser();
   if (!user) return { ok: false };
 
-  const allowed = new Set(["1", "2", "3", "4", "done"]);
+  const allowed = new Set(["1", "2", "3", "done"]);
   await persistFirstRunTourStep(user.id, allowed.has(step) ? step : "done");
   return { ok: true };
 }
@@ -568,7 +553,7 @@ export async function skipOnboarding(_formData?: FormData) {
 }
 
 export async function planOnboarding(idea: string): Promise<FirstRunPlanResult> {
-  await requireUser();
+  const user = await requireUser();
   const content = idea.trim();
   if (!content) {
     return {
@@ -589,13 +574,13 @@ export async function planOnboarding(idea: string): Promise<FirstRunPlanResult> 
     };
   }
 
-  return withAiQuota("onboarding_plan", () => generateFirstRunPlan(content));
+  return withAiQuota("onboarding_plan", () => generateFirstRunPlan(content), user.id);
 }
 
 export async function clarifyOnboarding(
   idea: string,
 ): Promise<InboxClarification> {
-  await requireUser();
+  const user = await requireUser();
   const content = idea.trim();
   if (!content) {
     return { dimensions: [], supplementPlaceholder: "" };
@@ -603,7 +588,7 @@ export async function clarifyOnboarding(
 
   const aiContext = await buildAiContext({
     kind: "inbox_plan",
-    userId: (await requireUser()).id,
+    userId: user.id,
   });
 
   return withAiQuota("onboarding_clarify", () =>
@@ -616,6 +601,7 @@ export async function clarifyOnboarding(
       decisionMemory: aiContext.decisionMemory,
       maxQuestions: 2,
     }),
+    user.id
   );
 }
 
@@ -641,7 +627,7 @@ export async function submitProductFeedback(formData: FormData) {
         event: "product_feedback",
         page: page || null,
         detail: message,
-        metadata: JSON.stringify({ version: "v2.5" }),
+        metadata: JSON.stringify({ version: "v3.5" }),
       },
     });
     return { ok: true as const };
@@ -705,41 +691,6 @@ export async function logoutUser() {
   redirect("/landing");
 }
 
-export async function addInboxItem(formData: FormData) {
-  const content = String(formData.get("content") ?? "").trim();
-
-  if (!content) return;
-  const user = await requireUser();
-
-  await prisma.inboxItem.create({
-    data: {
-      userId: user.id,
-      content,
-      source: "manual",
-    },
-  });
-
-  await recordUsageEvent({
-    userId: user.id,
-    event: "task_created",
-    detail: "manual",
-  });
-  revalidatePath("/");
-  revalidatePath("/workspace");
-}
-
-export async function addInboxItemAndClarify(formData: FormData) {
-  const content = String(formData.get("content") ?? "").trim();
-  if (!content) return;
-  const user = await requireUser();
-  const { apiKey, model, baseUrl } = clientAiOverrides(formData);
-  return createInboxClarification({
-    userId: user.id,
-    content,
-    overrides: { apiKey, model, baseUrl },
-  });
-}
-
 export async function getTaskEditSuggestion(input: {
   taskId?: string;
   title: string;
@@ -766,6 +717,7 @@ export async function getTaskEditSuggestion(input: {
       aiContext.evidence,
       aiContext.decisionMemory,
     ),
+    user.id
   );
 }
 
@@ -799,6 +751,7 @@ export async function ensureTaskShortTitle(input: {
       projectName: task.project?.name ?? input.projectName,
       status: task.status,
     }),
+    user.id
   );
 
   await prisma.task.update({
@@ -835,6 +788,7 @@ export async function getProjectEditSuggestion(input: {
       aiContext.evidence,
       aiContext.decisionMemory,
     ),
+    user.id
   );
 }
 
@@ -847,6 +801,17 @@ export async function getTaskCoachAdvice(input: {
   message: string;
 }): Promise<TaskCoachAdvice> {
   const user = await requireUser();
+  const task = input.taskId
+    ? await prisma.task.findFirst({
+        where: { id: input.taskId, userId: user.id },
+        select: {
+          executionMode: true,
+          doneWhen: true,
+          methodHint: true,
+          project: { select: { mode: true } },
+        },
+      })
+    : null;
   const aiContext = await buildAiContext({
     kind: "task_coach",
     taskId: input.taskId,
@@ -854,10 +819,17 @@ export async function getTaskCoachAdvice(input: {
   });
   return withAiQuota("task_coach", () =>
     generateTaskCoachAdvice(
-      input,
+      {
+        ...input,
+        projectMode: task?.project?.mode ?? null,
+        executionMode: task?.executionMode ?? null,
+        doneWhen: task?.doneWhen ?? null,
+        methodHint: task?.methodHint ?? null,
+      },
       aiContext.summary,
       aiContext.evidence,
     ),
+    user.id
   );
 }
 
@@ -872,7 +844,13 @@ export async function createTaskStickyNote(input: {
   const user = await requireUser();
   const task = await prisma.task.findFirst({
     where: { id: input.taskId, userId: user.id },
-    select: { id: true },
+    select: {
+      id: true,
+      executionMode: true,
+      doneWhen: true,
+      methodHint: true,
+      project: { select: { mode: true } },
+    },
   });
 
   if (!task) throw new Error("任务不存在或无权访问");
@@ -884,10 +862,17 @@ export async function createTaskStickyNote(input: {
   });
   const advice = await withAiQuota("task_coach", () =>
     generateTaskCoachAdvice(
-      input,
+      {
+        ...input,
+        projectMode: task.project?.mode ?? null,
+        executionMode: task.executionMode,
+        doneWhen: task.doneWhen,
+        methodHint: task.methodHint,
+      },
       aiContext.summary,
       aiContext.evidence,
     ),
+    user.id
   );
   const sticky = stickyPayloadFromDecisionCard(
     decisionCardFromAdvice(
@@ -934,110 +919,6 @@ export async function deleteTaskStickyNote(noteId: string) {
   return { ok: deleted.count > 0 };
 }
 
-export async function addInboxItemAndPlan(formData: FormData) {
-  const content = String(formData.get("content") ?? "").trim();
-  if (!content) return;
-  const user = await requireUser();
-  const { apiKey, model, baseUrl } = clientAiOverrides(formData);
-
-  const item = await prisma.inboxItem.create({
-    data: {
-      userId: user.id,
-      content,
-      source: "manual",
-    },
-  });
-
-  const aiContext = await buildAiContext({
-    kind: "inbox_plan",
-    inboxItemId: item.id,
-    userId: user.id,
-  });
-  const plan = await withAiQuota("inbox_plan", () =>
-    planInbox(
-      content,
-      aiContext.projectFacts.map((project) => project.name),
-      apiKey,
-      model,
-      baseUrl,
-      undefined,
-      undefined,
-      aiContext.projectFacts,
-      aiContext.summary,
-      undefined,
-      aiContext.evidence,
-      aiContext.maxPlanTasks,
-    ),
-  );
-
-  await prisma.inboxItem.update({
-    where: { id: item.id, userId: user.id },
-    data: {
-      aiPlanJson: JSON.stringify(plan),
-      aiAnalyzedAt: new Date(),
-    },
-  });
-
-  revalidatePath("/");
-  revalidatePath("/workspace");
-}
-
-export async function convertInboxItemToTask(formData: FormData) {
-  const id = text(formData, "id");
-  if (!id) return;
-  const user = await requireUser();
-
-  const item = await prisma.inboxItem.findUnique({
-    where: { id, userId: user.id },
-  });
-
-  if (!item || item.status !== "inbox") return;
-
-  const title = item.title ?? item.content;
-  const projectId = await ownedProjectId(text(formData, "projectId"), user.id);
-  const priorityValue = priority(String(formData.get("priority") ?? "medium"));
-  const dueDate = dateInput(formData, "dueDate");
-
-  await prisma.$transaction([
-    prisma.inboxItem.update({
-      where: { id, userId: user.id },
-      data: {
-        status: "processed",
-        category: "task",
-        title,
-        projectId,
-        priority: priorityValue,
-        dueDate,
-        processedAt: new Date(),
-      },
-    }),
-    prisma.task.create({
-      data: {
-        userId: user.id,
-        title,
-        notes: title === item.content ? null : item.content,
-        projectId,
-        priority: priorityValue,
-        dueDate,
-        planOrder: 0,
-        inboxItemId: id,
-        ...taskContractData({
-          title,
-          notes: title === item.content ? null : item.content,
-        }),
-      },
-    }),
-  ]);
-
-  await recordUsageEvent({
-    userId: user.id,
-    event: "task_created",
-    detail: "inbox",
-  });
-  revalidatePath("/");
-  revalidatePath("/workspace");
-}
-
 export async function ignoreInboxItem(formData: FormData) {
   const id = text(formData, "id");
   if (!id) return;
@@ -1069,7 +950,9 @@ export async function ignoreInboxItem(formData: FormData) {
   // 反馈记录不能反过来阻断用户的忽略操作。
   after(async () => {
     try {
-      await prisma.aiPlanFeedback.create({
+      invalidateAiContext(user.id);
+
+  await prisma.aiPlanFeedback.create({
         data: {
           userId: user.id,
           inboxItemId: id,
@@ -1095,85 +978,6 @@ export async function ignoreInboxItem(formData: FormData) {
   });
 }
 
-export async function suggestInboxItem(formData: FormData) {
-  const id = text(formData, "id");
-  if (!id) return;
-  const user = await requireUser();
-  const { apiKey, model, baseUrl } = clientAiOverrides(formData);
-
-  const item = await prisma.inboxItem.findUnique({
-    where: { id, userId: user.id },
-    select: { id: true, content: true, status: true },
-  });
-
-  if (!item || item.status !== "inbox") return;
-
-  const projects = await prisma.project.findMany({
-    where: { userId: user.id },
-    select: {
-      name: true,
-      objective: true,
-      currentMilestone: true,
-    },
-    orderBy: { name: "asc" },
-  });
-  const aiContext = await buildAiContext({
-    kind: "inbox_plan",
-    inboxItemId: id,
-    userId: user.id,
-  });
-  const plan = await withAiQuota("inbox_plan", () =>
-    planInbox(
-      item.content,
-      projects.map((project) => project.name),
-      apiKey,
-      model,
-      baseUrl,
-      undefined,
-      undefined,
-      projects.map((project) => ({
-        name: project.name,
-        objective: project.objective,
-        currentMilestone: project.currentMilestone,
-      })),
-      aiContext.summary,
-      undefined,
-      aiContext.evidence,
-      aiContext.maxPlanTasks,
-    ),
-  );
-
-  await prisma.inboxItem.update({
-    where: { id, userId: user.id },
-    data: {
-      aiPlanJson: JSON.stringify(plan),
-      aiAnalyzedAt: new Date(),
-    },
-  });
-
-  revalidatePath("/workspace");
-}
-
-export async function generateInboxPlan(formData: FormData) {
-  const id = text(formData, "id");
-  if (!id) return;
-  const user = await requireUser();
-  const option = text(formData, "option");
-  const supplement = text(formData, "supplement");
-  const dimensionChoices = [0, 1, 2, 3]
-    .map((index) => text(formData, `choice_${index}`))
-    .filter((choice): choice is string => Boolean(choice));
-  const { apiKey, model, baseUrl } = clientAiOverrides(formData);
-  return createInboxPlan({
-    userId: user.id,
-    itemId: id,
-    option: option ?? undefined,
-    supplement: supplement ?? undefined,
-    dimensionChoices,
-    overrides: { apiKey, model, baseUrl },
-  });
-}
-
 export async function confirmInboxPlan(formData: FormData) {
   const id = text(formData, "id");
   if (!id) return;
@@ -1186,7 +990,27 @@ export async function confirmInboxPlan(formData: FormData) {
   if (!item || item.status !== "inbox" || !item.aiPlanJson) return;
 
   const plan = parseInboxPlan(item);
-  if (!plan || plan.action === "ignore" || !plan.tasks.length) return;
+  if (!plan) return;
+
+  if (plan.action === "answer" || plan.responseMode === "answer") {
+    await prisma.inboxItem.update({
+      where: { id: item.id, userId: user.id },
+      data: {
+        status: "processed",
+        processedAt: new Date(),
+        confirmedAt: new Date(),
+      },
+    });
+    return {
+      ok: true as const,
+      projectId: null,
+      attachedTaskId: null,
+      showProjectHint: false,
+      directAnswer: plan.directAnswer ?? "",
+    };
+  }
+
+  if (plan.action === "ignore" || !plan.tasks.length) return;
 
   const projectName = text(formData, "projectName") ?? plan.projectName;
   const projectObjective =
@@ -1227,6 +1051,7 @@ export async function confirmInboxPlan(formData: FormData) {
     dueDate:
       dateInput(formData, `tasks[${index}].dueDate`) ??
       dateString(plannedTask.dueDate),
+    trackName: plannedTask.trackName ?? null,
   }));
   const firstTask = tasks[0];
   const [existingProjectCount, existingTaskCount] = await Promise.all([
@@ -1270,6 +1095,36 @@ export async function confirmInboxPlan(formData: FormData) {
       fallbackTaskTitle: firstTask.title,
       fallbackTaskShortTitle: firstTask.shortTitle,
       fallbackDoneWhen: firstTask.doneWhen,
+      // 首页选的模式（智能则用模型判断结果）在这里落到项目上。
+      mode: plan.mode ?? item.mode,
+    });
+
+    const project = await tx.project.findUnique({
+      where: { id: projectId, userId: user.id },
+      select: { mode: true, objective: true },
+    });
+    await ensureCurrentProjectStage(tx, {
+      userId: user.id,
+      projectId,
+      mode: project?.mode ?? "normal",
+      milestone: projectMilestone,
+      objective: projectObjective ?? project?.objective,
+    });
+    // 探索模式落线路图；其他模式 plan.tracks 为空，不会建线。
+    const trackMap = await ensureProjectTracks(tx, {
+      userId: user.id,
+      projectId,
+      tracks:
+        (project?.mode ?? plan.mode) === "explore" ? plan.tracks ?? [] : [],
+    });
+    const stage = await tx.projectStage.findFirst({
+      where: {
+        userId: user.id,
+        projectId,
+        status: { in: ["active", "ready"] },
+      },
+      orderBy: [{ order: "desc" }, { id: "asc" }],
+      select: { id: true },
     });
 
     const openTasks = await tx.task.findMany({
@@ -1297,6 +1152,10 @@ export async function confirmInboxPlan(formData: FormData) {
           shortTitle: plannedTask.shortTitle,
           notes: plannedTask.notes,
           projectId,
+          stageId: stage?.id ?? null,
+          trackId: plannedTask.trackName
+            ? trackMap.get(plannedTask.trackName) ?? null
+            : null,
           priority: plannedTask.priority,
           scheduledDate: plannedTask.scheduledDate,
           dueDate: plannedTask.dueDate,
@@ -1349,6 +1208,8 @@ export async function confirmInboxPlan(formData: FormData) {
       });
       attachedTaskId = anchorTaskId;
     }
+
+    await syncProjectStageGate(tx, { userId: user.id, projectId });
 
     await tx.inboxItem.update({
       where: { id: item.id, userId: user.id },
@@ -1451,6 +1312,8 @@ export async function generateTodaySuggestion(
         priority: task.priority,
         dueDate: task.dueDate,
         scheduledDate: task.scheduledDate,
+        planOrder: task.planOrder,
+        batchId: task.inboxItemId,
       })),
       {
         reviewSummary: latestReview?.summary ?? undefined,
@@ -1460,8 +1323,10 @@ export async function generateTodaySuggestion(
       aiContext.evidence,
       aiContext.decisionMemory,
     ),
+    user.id
   );
 
+  await writeTodayFocus(user.id, suggestions);
   revalidatePath("/");
   return suggestions;
 }
@@ -1561,11 +1426,11 @@ export async function generateReviewDraftAction(formData: FormData) {
   const user = await requireUser();
   const today = startOfDay();
   const reviewDate = dateInput(formData, "reviewDate") ?? today;
-  const result = await createReviewDraft({
+  await createReviewDraft({
     userId: user.id,
     reviewDate,
   });
-  redirect(`/review?date=${result.date}`);
+  redirect("/");
 }
 
 export async function saveReview(formData: FormData) {
@@ -1580,7 +1445,7 @@ export async function saveReview(formData: FormData) {
   const nextActionsText = formatReviewNextActions(nextActions);
   const existingReview = await prisma.review.findFirst({
     where: { id, userId: user.id },
-    select: { status: true, nextActions: true },
+    select: { status: true, nextActions: true, projectId: true },
   });
   if (!existingReview) return;
 
@@ -1609,6 +1474,7 @@ export async function saveReview(formData: FormData) {
     await syncReviewRelations(review, nextActions, user.id);
   }
   await recordUsageEvent({ userId: user.id, event: "review_saved" });
+  invalidateAiContext(user.id);
 
   return { date: toDateInputValue(review.reviewDate) };
 }
@@ -1620,20 +1486,31 @@ export async function createProject(formData: FormData) {
 
   if (!name || !objective) return;
 
+  const mode = normalizeProjectMode(formData.get("mode"));
+  const currentMilestone = text(formData, "currentMilestone");
   const project = await prisma.project.create({
     data: {
       userId: user.id,
       name,
       objective,
       status: projectStatus(String(formData.get("status") ?? "active")),
-      currentMilestone: text(formData, "currentMilestone"),
+      mode,
+      currentMilestone,
       notes: text(formData, "notes"),
     },
+  });
+  await ensureCurrentProjectStage(prisma, {
+    userId: user.id,
+    projectId: project.id,
+    mode,
+    milestone: currentMilestone,
+    objective,
   });
 
   revalidatePath("/");
   revalidatePath("/workspace");
-  redirect(`/workspace?project=${project.id}`);
+  revalidatePath("/files");
+  redirect(`/files?project=${project.id}`);
 }
 
 export async function updateProject(formData: FormData) {
@@ -1644,18 +1521,156 @@ export async function updateProject(formData: FormData) {
 
   if (!id || !name || !objective) return;
 
-  await prisma.project.update({
+  const currentMilestone = text(formData, "currentMilestone");
+  const project = await prisma.project.update({
     where: { id, userId: user.id },
     data: {
       name,
       objective,
       status: projectStatus(String(formData.get("status") ?? "active")),
-      currentMilestone: text(formData, "currentMilestone"),
+      ...(formData.get("mode") !== null
+        ? { mode: normalizeProjectMode(formData.get("mode")) }
+        : {}),
+      currentMilestone,
       notes: text(formData, "notes"),
     },
+    select: { id: true, mode: true, objective: true },
+  });
+  await ensureCurrentProjectStage(prisma, {
+    userId: user.id,
+    projectId: project.id,
+    mode: project.mode,
+    milestone: currentMilestone,
+    objective: project.objective,
   });
 
   revalidatePath("/");
+  revalidatePath("/workspace");
+  revalidatePath("/files");
+}
+
+export async function setProjectMode(formData: FormData) {
+  const user = await requireUser();
+  const id = text(formData, "id");
+  const mode = text(formData, "mode");
+  if (!id || !mode) return;
+
+  const project = await prisma.project.update({
+    where: { id, userId: user.id },
+    data: { mode: normalizeProjectMode(mode) },
+    select: { id: true, mode: true, currentMilestone: true, objective: true },
+  });
+  await ensureCurrentProjectStage(prisma, {
+    userId: user.id,
+    projectId: project.id,
+    mode: project.mode,
+    milestone: project.currentMilestone,
+    objective: project.objective,
+  });
+
+  revalidatePath("/files");
+  revalidatePath("/profile");
+}
+
+export async function generateStagePreviewAction(formData: FormData) {
+  const user = await requireUser();
+  const stageId = text(formData, "stageId");
+  if (!stageId) return;
+
+  await generateLongtermStagePreview({ userId: user.id, stageId });
+  revalidatePath("/");
+  revalidatePath("/files");
+  revalidatePath("/workspace");
+}
+
+export async function confirmStagePreviewAction(formData: FormData) {
+  const user = await requireUser();
+  const stageId = text(formData, "stageId");
+  if (!stageId) return;
+
+  await withTransactionRetry(async (tx) => {
+    const stage = await tx.projectStage.findFirst({
+      where: { id: stageId, userId: user.id, status: "ready" },
+      include: {
+        project: { select: { id: true, userId: true } },
+      },
+    });
+    if (!stage) return;
+
+    const preview = parseStagePreview(stage.nextStageJson);
+    if (!preview?.tasks.length) return;
+
+    await tx.$queryRaw`SELECT id FROM projects WHERE id = ${stage.projectId} FOR UPDATE`;
+
+    await tx.projectStage.update({
+      where: { id: stage.id, userId: user.id },
+      data: { status: "completed", completedAt: new Date() },
+    });
+
+    const nextStage = await tx.projectStage.create({
+      data: {
+        userId: user.id,
+        projectId: stage.projectId,
+        order: stage.order + 1,
+        title: "当前阶段",
+        deliverable: preview.nextMilestone,
+        status: "active",
+      },
+      select: { id: true },
+    });
+
+    for (const [index, plannedTask] of preview.tasks.entries()) {
+      const created = await tx.task.create({
+        data: {
+          userId: user.id,
+          title: plannedTask.title,
+          shortTitle: plannedTask.shortTitle,
+          notes: plannedTask.notes,
+          projectId: stage.projectId,
+          stageId: nextStage.id,
+          status: "todo",
+          priority: priority(plannedTask.priority),
+          scheduledDate: dateString(plannedTask.scheduledDate),
+          dueDate: dateString(plannedTask.dueDate),
+          planOrder: index,
+          ...taskContractData({
+            title: plannedTask.title,
+            notes: plannedTask.notes,
+            executionMode: plannedTask.executionMode,
+            doneWhen: plannedTask.doneWhen,
+            methodHint: plannedTask.methodHint,
+            maxTurns: plannedTask.maxTurns,
+            toolPolicy: plannedTask.toolPolicy,
+          }),
+        },
+        select: { id: true },
+      });
+
+      const sticky = stickyPayloadFromDecisionCard(
+        decisionCardFromTask(plannedTask),
+      );
+      await tx.taskStickyNote.create({
+        data: {
+          userId: user.id,
+          taskId: created.id,
+          sourceMessage: "长期阶段衔接 Agent",
+          title: sticky.title,
+          encouragement: sticky.encouragement,
+          stepsJson: JSON.stringify(sticky.steps),
+          nextStep: sticky.nextStep,
+        },
+      });
+    }
+
+    await tx.project.update({
+      where: { id: stage.projectId, userId: user.id },
+      data: { currentMilestone: preview.nextMilestone },
+    });
+  });
+
+  invalidateAiContext(user.id);
+  revalidatePath("/");
+  revalidatePath("/files");
   revalidatePath("/workspace");
 }
 
@@ -1669,7 +1684,7 @@ export async function deleteProject(formData: FormData) {
 
   revalidatePath("/");
   revalidatePath("/workspace");
-  redirect("/workspace");
+  redirect("/files");
 }
 
 export async function createTask(formData: FormData) {
@@ -1681,6 +1696,10 @@ export async function createTask(formData: FormData) {
   const notes = text(formData, "notes");
   const shortTitle =
     text(formData, "shortTitle") ?? shortTitleFromTitle(title);
+  const projectId = await ownedProjectId(text(formData, "projectId"), user.id);
+  const stageId = projectId
+    ? await currentProjectStageId(prisma, { userId: user.id, projectId })
+    : null;
 
   await prisma.task.create({
     data: {
@@ -1688,7 +1707,8 @@ export async function createTask(formData: FormData) {
       title,
       shortTitle,
       notes,
-      projectId: await ownedProjectId(text(formData, "projectId"), user.id),
+      projectId,
+      stageId,
       status,
       priority: priority(String(formData.get("priority") ?? "medium")),
       scheduledDate: dateInput(formData, "scheduledDate"),
@@ -1707,12 +1727,50 @@ export async function createTask(formData: FormData) {
     },
   });
 
+  if (projectId) {
+    await syncProjectStageGate(prisma, { userId: user.id, projectId });
+  }
+
   revalidatePath("/");
   revalidatePath("/workspace");
 
   const returnTo = taskReturnTo(text(formData, "returnTo"));
   if (returnTo) redirect(returnTo);
 }
+
+/**
+ * 长期项目当前阶段完成后，自动生成下一阶段预览。
+ * 「从想变为做」的承接就在这里：做完一步不等于整件事结束，系统要接着给出下一步。
+ */
+function scheduleLongtermStagePreview(input: {
+  userId: string;
+  projectId: string | null;
+  gate: { state: string } | null;
+}) {
+  if (!input.projectId || input.gate?.state !== "ready") return;
+  const projectId = input.projectId;
+  after(async () => {
+    try {
+      const stageId = await currentProjectStageId(prisma, {
+        userId: input.userId,
+        projectId,
+      });
+      if (!stageId) return;
+      const stage = await prisma.projectStage.findFirst({
+        where: { id: stageId, userId: input.userId },
+        select: { nextStageJson: true },
+      });
+      if (!stage || stage.nextStageJson) return;
+      await generateLongtermStagePreview({
+        userId: input.userId,
+        stageId,
+      });
+    } catch {
+      // 预览生成失败不阻塞任务完成，用户进入项目时仍可手动生成
+    }
+  });
+}
+
 
 export async function updateTask(formData: FormData) {
   const user = await requireUser();
@@ -1838,6 +1896,25 @@ export async function updateTask(formData: FormData) {
     });
   }
 
+  if (projectId) {
+    const stageGate = await syncProjectStageGate(prisma, {
+      userId: user.id,
+      projectId,
+    });
+    scheduleLongtermStagePreview({
+      userId: user.id,
+      projectId,
+      gate: stageGate,
+    });
+  }
+
+  if (
+    (status === "done" || status === "cancelled") &&
+    existing.status !== status
+  ) {
+    after(() => advanceExploreAfterTask({ userId: user.id, taskId: id }));
+  }
+
   if (existing.reviewNextAction?.id) {
     await prisma.reviewNextAction.update({
       where: { id: existing.reviewNextAction.id, userId: user.id },
@@ -1891,19 +1968,18 @@ export async function setTaskStatus(formData: FormData) {
 
   if (!updated.length) return;
 
-  let reviewHintEligible = false;
-  if (status === "done" || status === "cancelled") {
-    const [firstPlanGroupComplete, reviewCount] = await Promise.all([
-      isFirstPlanGroupComplete(user.id),
-      prisma.review.count({ where: { userId: user.id } }),
-    ]);
-    reviewHintEligible = firstPlanGroupComplete && reviewCount === 0;
-    if (reviewHintEligible) {
-      await persistFirstRunTourStep(user.id, "4");
-    }
-  }
-
   const updatedTask = updated[0];
+  if (updatedTask.projectId) {
+    const stageGate = await syncProjectStageGate(prisma, {
+      userId: user.id,
+      projectId: updatedTask.projectId,
+    });
+    scheduleLongtermStagePreview({
+      userId: user.id,
+      projectId: updatedTask.projectId,
+      gate: stageGate,
+    });
+  }
   const reviewNextStatus =
     status === "done"
       ? "done"
@@ -1920,6 +1996,12 @@ export async function setTaskStatus(formData: FormData) {
         data: { status: reviewNextStatus },
       }),
     ];
+
+    if (status === "done" || status === "cancelled") {
+      backgroundTasks.push(
+        advanceExploreAfterTask({ userId: user.id, taskId: id }),
+      );
+    }
 
     if (status === "done") {
       backgroundTasks.push(
@@ -1952,8 +2034,7 @@ export async function setTaskStatus(formData: FormData) {
 
     await Promise.all(backgroundTasks).catch(() => {});
   });
-
-  return { reviewHintEligible };
+  invalidateAiContext(user.id);
 }
 
 export async function markTodayFocus(formData: FormData) {

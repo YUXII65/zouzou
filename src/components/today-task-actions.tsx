@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { CheckCircle2, Circle, Loader2, Play } from "lucide-react";
 import { setTaskStatus } from "@/app/actions";
-import { markFirstTaskGroupDone, notifyTourStep } from "@/lib/first-run-hints";
+import { notifyTourStep } from "@/lib/first-run-hints";
 import { trackEvent } from "@/lib/track";
 
 const ORDER = ["todo", "in_progress", "done"] as const;
@@ -76,9 +76,14 @@ export function TodayTaskActions({
       const formData = new FormData();
       formData.set("id", taskId);
       formData.set("status", next);
-      const result = await setTaskStatus(formData);
-      if (result?.reviewHintEligible) markFirstTaskGroupDone();
+      await setTaskStatus(formData);
       router.refresh();
+      if (next === "done") {
+        // 探索项目的下一步是异步续接的，稍后主动刷新一次让新任务出现。
+        window.setTimeout(() => router.refresh(), 2400);
+        window.setTimeout(() => router.refresh(), 8000);
+        window.setTimeout(() => router.refresh(), 16000);
+      }
     } catch {
       setCurrent(previous);
     } finally {

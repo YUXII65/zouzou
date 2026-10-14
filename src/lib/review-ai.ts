@@ -4,14 +4,158 @@ import { withAiQuota } from "@/lib/ai-quota";
 import { generateReviewDraft } from "@/lib/ai";
 import { endOfDay, startOfDay, toDateInputValue } from "@/lib/date";
 import { prisma } from "@/lib/prisma";
+import { decisionSessionFromReview } from "@/lib/decision";
+import { syncReviewRelations } from "@/lib/review-relations";
+import {
+  formatReviewNextActions,
+  parseReviewNextActions,
+  shouldSyncReviewActions,
+} from "@/lib/task-flow";
+
+async function finalizeReview(
+  review: {
+    id: string;
+    summary: string;
+    nextActions: string | null;
+    status: string;
+  },
+  userId: string,
+) {
+  const nextActions = parseReviewNextActions(review.nextActions ?? "");
+  const nextActionsText = formatReviewNextActions(nextActions);
+  const shouldSync = shouldSyncReviewActions(
+    review.status,
+    review.nextActions,
+    nextActionsText,
+  );
+  const decisionSession = decisionSessionFromReview({
+    summary: review.summary,
+    nextAction: nextActions[0]?.title ?? null,
+  });
+  const finalized = await prisma.review.update({
+    where: { id: review.id },
+    data: {
+      nextActions: nextActionsText,
+      decisionJson: JSON.stringify(decisionSession),
+      status: "final",
+    },
+  });
+  if (shouldSync) {
+    await syncReviewRelations(finalized, nextActions, userId);
+  }
+  return finalized;
+}
 
 export async function createReviewDraft(input: {
   userId: string;
   reviewDate: Date;
+  /** 传了就做"某个项目（探索模式）"的复盘，不传是按天复盘 */
+  projectId?: string | null;
   onDelta?: (delta: string) => void;
 }) {
+  const projectId = input.projectId ?? null;
   const dayStart = startOfDay(input.reviewDate);
   const dayEnd = endOfDay(input.reviewDate);
+
+  // 按项目复盘：只收集这个项目自己的任务和台阶
+  if (projectId) {
+    const project = await prisma.project.findFirst({
+      where: { id: projectId, userId: input.userId },
+      select: { id: true, name: true, currentMilestone: true, cadence: true },
+    });
+    if (!project) return null;
+
+    const [doneInProject, openInProject] = await Promise.all([
+      prisma.task.findMany({
+        where: { userId: input.userId, projectId, status: "done" },
+        select: { title: true },
+        orderBy: [{ completedAt: "desc" }, { id: "asc" }],
+        take: 20,
+      }),
+      prisma.task.findMany({
+        where: {
+          userId: input.userId,
+          projectId,
+          status: { in: ["todo", "in_progress"] },
+        },
+        select: { id: true, title: true, status: true },
+        orderBy: [{ updatedAt: "desc" }, { id: "asc" }],
+      }),
+    ]);
+
+    const aiContext = await buildAiContext({
+      kind: "review",
+      userId: input.userId,
+    });
+    const scopedDraft = await withAiQuota("review_draft", () =>
+      generateReviewDraft(
+        {
+          completed: doneInProject.map((task) => ({
+            title: task.title,
+            projectName: project.name,
+          })),
+          open: openInProject.map((task) => ({
+            id: task.id,
+            title: task.title,
+            status: task.status,
+            projectName: project.name,
+          })),
+          planned: [],
+          projects: [
+            {
+              name: project.name,
+              currentMilestone: project.currentMilestone,
+              taskCount: openInProject.length,
+              openTaskCount: openInProject.length,
+            },
+          ],
+        },
+        aiContext.evidence,
+        input.onDelta,
+        aiContext.decisionMemory,
+        { projectName: project.name, cadence: project.cadence },
+      ),
+      input.userId
+    );
+    if (!scopedDraft) return null;
+
+    const existingScoped = await prisma.review.findFirst({
+      where: {
+        userId: input.userId,
+        reviewDate: input.reviewDate,
+        projectId,
+      },
+      select: { id: true },
+    });
+    const scopedReview = existingScoped
+      ? await prisma.review.update({
+          where: { id: existingScoped.id },
+          data: {
+            summary: scopedDraft.summary,
+            nextActions: scopedDraft.nextActions,
+            decisionJson: null,
+            status: "draft",
+          },
+        })
+      : await prisma.review.create({
+          data: {
+            userId: input.userId,
+            reviewDate: input.reviewDate,
+            projectId,
+            summary: scopedDraft.summary,
+            nextActions: scopedDraft.nextActions,
+            status: "draft",
+          },
+        });
+
+    const finalized = await finalizeReview(scopedReview, input.userId);
+    revalidatePath("/files");
+    return {
+      reviewId: finalized.id,
+      date: toDateInputValue(input.reviewDate),
+      projectId,
+    };
+  }
 
   const [completedTasks, openTasks, plannedTasks, activeProjects] =
     await Promise.all([
@@ -96,34 +240,43 @@ export async function createReviewDraft(input: {
       input.onDelta,
       aiContext.decisionMemory,
     ),
+    input.userId
   );
 
-  const review = await prisma.review.upsert({
+  // 用 findFirst + update/create 而不是 upsert：projectId 可为空，Postgres 的 NULL 唯一性不适合 upsert
+  const existingReview = await prisma.review.findFirst({
     where: {
-      userId_reviewDate: {
-        userId: input.userId,
-        reviewDate: input.reviewDate,
-      },
-    },
-    update: {
-      summary: draft.summary,
-      nextActions: draft.nextActions,
-      decisionJson: null,
-      status: "draft",
-    },
-    create: {
       userId: input.userId,
       reviewDate: input.reviewDate,
-      summary: draft.summary,
-      nextActions: draft.nextActions,
-      status: "draft",
+      projectId: null,
     },
+    select: { id: true },
   });
+  const review = existingReview
+    ? await prisma.review.update({
+        where: { id: existingReview.id },
+        data: {
+          summary: draft.summary,
+          nextActions: draft.nextActions,
+          decisionJson: null,
+          status: "draft",
+        },
+      })
+    : await prisma.review.create({
+        data: {
+          userId: input.userId,
+          reviewDate: input.reviewDate,
+          summary: draft.summary,
+          nextActions: draft.nextActions,
+          status: "draft",
+        },
+      });
 
+  const finalized = await finalizeReview(review, input.userId);
   revalidatePath("/");
-  revalidatePath("/review");
+  revalidatePath("/");
   return {
-    reviewId: review.id,
+    reviewId: finalized.id,
     date: toDateInputValue(input.reviewDate),
   };
 }

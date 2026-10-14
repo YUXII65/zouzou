@@ -1,6 +1,6 @@
 {
   "name": "zouzou",
-  "version": "2.5.0",
+  "version": "3.5.0",
   "private": true,
   "description": "走走：把零散想法收成下一步的 AI 个人项目推进系统",
   "scripts": {
@@ -21,9 +21,11 @@
     "public:demo:reset": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/start-public-demo.ps1 -Reset",
     "eval:ai": "node --experimental-strip-types --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/evaluate-ai.mjs",
     "eval:clarify": "node --experimental-strip-types --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/evaluate-clarification.mjs",
-  "eval:first-run": "node --experimental-strip-types --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/evaluate-first-run.mjs",
+    "eval:mode": "node --experimental-strip-types --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/evaluate-mode-judgment.mjs",
+    "eval:first-run": "node --experimental-strip-types --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/evaluate-first-run.mjs",
     "verify:clarify-flow": "node --experimental-strip-types --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --import ./scripts/ts-alias-loader.mjs scripts/verify-clarification-flow.mjs",
     "metrics:ai": "node scripts/ai-metrics.mjs",
+    "audit:plan-quality": "node --experimental-strip-types --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/audit-plan-quality.mjs",
     "typecheck": "tsc --noEmit",
     "test": "node --experimental-strip-types --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --import ./scripts/ts-alias-loader.mjs --test \"src/**/*.test.ts\" \"scripts/**/*.test.mjs\"",
     "db:verify": "node scripts/restore-db.mjs",
@@ -35,14 +37,14 @@
     "dotenv": "^17.4.2",
     "lucide-react": "^1.28.0",
     "lunar-javascript": "^1.7.7",
-    "next": "15.5.23",
+    "next": "15.5.27",
     "react": "19.2.8",
     "react-dom": "19.2.8"
   },
   "devDependencies": {
     "@electric-sql/pglite": "^0.5.8",
     "@electric-sql/pglite-socket": "^0.2.11",
-    "@next/eslint-plugin-next": "15.5.23",
+    "@next/eslint-plugin-next": "15.5.27",
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
     "@types/react": "^19",
@@ -50,7 +52,7 @@
     "@typescript-eslint/eslint-plugin": "^8.66.0",
     "@typescript-eslint/parser": "^8.66.0",
     "eslint": "^9",
-    "eslint-config-next": "15.5.23",
+    "eslint-config-next": "15.5.27",
     "eslint-plugin-jsx-a11y": "6.10.0",
     "eslint-plugin-react": "7.37.0",
     "eslint-plugin-react-hooks": "5.2.0",
@@ -58,5 +60,5 @@
     "tailwindcss": "^4",
     "typescript": "^5"
   },
-  "packageManager": "pnpm@11.19.0"
+  "packageManager": "pnpm@11.25.0"
 }

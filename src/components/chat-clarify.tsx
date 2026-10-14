@@ -16,8 +16,15 @@ type Props = {
   submitLabel?: string;
   initialHistory?: InboxClarificationHistoryItem[];
   clarificationStatus?: "asking" | "done";
-  summaryText?: string;
   frame?: InboxClarificationFrame | null;
+  /** 首页原始想法，作为对话的第一条用户消息展示 */
+  userMessage?: string;
+  /** 澄清完成后直接进入自动整理，不再显示「生成任务」按钮 */
+  autoSubmit?: boolean;
+  /** 自动整理尚未就绪时也先隐藏手动提交按钮，避免闪一下 */
+  hideSubmitAction?: boolean;
+  /** 生成计划/任务时的流式预览文本 */
+  previewText?: string;
   onNext?: (payload: {
     answer: string[];
     history: InboxClarificationHistoryItem[];
@@ -25,7 +32,6 @@ type Props = {
     status: "asking" | "done";
     question?: InboxClarificationDimension | null;
     reflection?: string | null;
-    summaryText?: string | null;
   }>;
   onSubmit: (payload: { answers: string[][]; supplement: string }) => void;
 };
@@ -40,18 +46,8 @@ type Turn = {
 };
 
 const TYPING_MS = 600;
-const CLARIFY_WAITING_LABELS = [
-  "正在理解你的回答...",
-  "正在更新推进判断...",
-  "正在找一个会改变计划的问题...",
-  "马上给你下一问...",
-];
-const PLAN_WAITING_LABELS = [
-  "正在把你的选择合在一起...",
-  "正在判断这次推进的重点...",
-  "正在把任务写具体...",
-  "快整理好了...",
-];
+const CLARIFY_WAITING_LABELS = ["正在想下一个问题...", "快好了..."];
+const PLAN_WAITING_LABELS = ["正在整理...", "快好了..."];
 
 function initialAnswers(history: InboxClarificationHistoryItem[]) {
   return history
@@ -62,10 +58,11 @@ function initialAnswers(history: InboxClarificationHistoryItem[]) {
 function buildInitialTurns(
   dimensions: InboxClarificationDimension[],
   history: InboxClarificationHistoryItem[],
-  clarificationStatus?: "asking" | "done",
-  summaryText = "",
+  userMessage?: string,
 ): Turn[] {
-  const turns: Turn[] = [];
+  const turns: Turn[] = userMessage?.trim()
+    ? [{ role: "user", text: userMessage.trim() }]
+    : [];
 
   if (history.length) {
     for (const item of history) {
@@ -81,9 +78,6 @@ function buildInitialTurns(
         turns.push({ role: "user", text: item.answer.join("、") });
       }
     }
-    if (clarificationStatus === "done" && summaryText) {
-      turns.push({ role: "ai", text: summaryText });
-    }
     return turns;
   }
 
@@ -96,9 +90,6 @@ function buildInitialTurns(
       key: dimensions[0].key,
     });
   }
-  if (clarificationStatus === "done" && summaryText) {
-    turns.push({ role: "ai", text: summaryText });
-  }
   return turns;
 }
 
@@ -108,13 +99,16 @@ export function ChatClarify({
   submitLabel = "看看怎么走",
   initialHistory = [],
   clarificationStatus,
-  summaryText = "",
   frame = null,
+  userMessage,
+  autoSubmit = false,
+  hideSubmitAction = false,
+  previewText = "",
   onNext,
   onSubmit,
 }: Props) {
   const [turns, setTurns] = useState<Turn[]>(() =>
-    buildInitialTurns(dimensions, initialHistory, clarificationStatus, summaryText),
+    buildInitialTurns(dimensions, initialHistory, userMessage),
   );
   const [answers, setAnswers] = useState<string[][]>(() =>
     initialAnswers(initialHistory),
@@ -130,6 +124,7 @@ export function ChatClarify({
   const [typed, setTyped] = useState("");
   const [directInput, setDirectInput] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const autoSubmittedRef = useRef(false);
   const waitingLabel = useRotatingText(busy, PLAN_WAITING_LABELS);
   const clarifyWaitingLabel = useRotatingText(
     thinking && Boolean(onNext),
@@ -142,24 +137,17 @@ export function ChatClarify({
   const showOptions = Boolean(
     lastTurn?.role === "ai" && lastTurn.options?.length && !done,
   );
-  const readiness = frame?.readiness ?? "ready";
-  const headerTitle = done
-    ? "已经够清楚了"
-    : readiness === "needs_meaning"
-      ? "先把这件事说完整"
-      : readiness === "needs_context"
-        ? "先补一个关键信息"
-        : "先确认一件事";
-  const headerHint = done
-    ? "可以生成下一步了"
-    : readiness === "ready"
-      ? "只问会改变计划的问题"
-      : "补全后再判断真正卡点";
 
   useEffect(() => {
     const node = scrollRef.current;
     if (node) node.scrollTop = node.scrollHeight;
   }, [turns, thinking, done, busy]);
+
+  useEffect(() => {
+    if (!autoSubmit || !done || autoSubmittedRef.current) return;
+    autoSubmittedRef.current = true;
+    void onSubmit({ answers, supplement: "" });
+  }, [answers, autoSubmit, done, onSubmit]);
 
   function toggle(option: string) {
     if (busy || thinking) return;
@@ -198,7 +186,7 @@ export function ChatClarify({
             ...current,
             {
               role: "ai",
-              text: result.summaryText || "信息够了，我按刚才确认的边界往下整理。",
+              text: "明白了，已整理完成",
             },
           ]);
         } else if (result.question) {
@@ -287,40 +275,12 @@ export function ChatClarify({
   }
 
   return (
-    <div className="zouzou-panel overflow-hidden rounded-2xl border-border/80 bg-surface">
-      <div className="flex items-center justify-between gap-3 border-b border-border/60 px-4 py-3">
-        <div className="flex min-w-0 items-center gap-2.5">
-          <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-accent-soft text-accent-strong">
-            <Sparkles className="size-4" />
-          </span>
-          <div className="min-w-0">
-            <p className="truncate text-sm font-semibold text-ink">{headerTitle}</p>
-            <p className="mt-0.5 text-[11px] text-ink-muted">{headerHint}</p>
-          </div>
-        </div>
-        {!done ? (
-          <span className="shrink-0 rounded-full border border-border bg-surface-muted px-2.5 py-1 text-[11px] font-medium text-ink-secondary">
-            第 {answeredCount + 1} 问
-          </span>
-        ) : null}
-      </div>
+    // 只保留对话本身：不再有「先确认一件事 / 第 N 问」这类说明条
+    <div className="overflow-hidden">
       <div
         ref={scrollRef}
-        className="max-h-[420px] space-y-3 overflow-y-auto px-4 py-4"
+        className="max-h-[420px] space-y-3 overflow-y-auto"
       >
-        {!done && frame?.readiness !== "ready" && frame?.missingSlots?.length ? (
-          <div className="flex flex-wrap items-center gap-1.5 pb-1">
-            <span className="text-[11px] text-ink-muted">还缺</span>
-            {frame.missingSlots.map((slot) => (
-              <span
-                key={slot}
-                className="rounded-full bg-warning/10 px-2 py-0.5 text-[11px] font-medium text-warning"
-              >
-                {slot}
-              </span>
-            ))}
-          </div>
-        ) : null}
         {turns.map((turn, index) =>
           turn.role === "user" ? (
             <div
@@ -339,15 +299,11 @@ export function ChatClarify({
                 </span>
                 <div className="min-w-0 max-w-full">
                   <div className="rounded-xl rounded-tl-sm border border-border/70 bg-surface px-3 py-2.5 text-sm leading-6 text-ink">
-                    {turn.reflection ? (
-                      <p className="mb-1.5 text-xs leading-5 text-ink-muted">
-                        {turn.reflection}
-                      </p>
-                    ) : null}
+
                     <span className="whitespace-pre-wrap">{turn.text}</span>
                   </div>
                   {showOptions && index === turns.length - 1 ? (
-                    <div className="mt-2">
+                    <div className="mt-2" data-tour="clarify-options">
                       <div className="flex flex-wrap items-center gap-2">
                         {turn.options?.map((option) => {
                           const selected = pending.includes(option);
@@ -408,21 +364,15 @@ export function ChatClarify({
         )}
 
         {thinking ? (
-          <div className="rounded-xl border border-dashed border-accent/25 bg-accent-soft/35 px-3.5 py-3">
-            <div className="flex items-center gap-2.5">
-              <Loader2 className="size-4 shrink-0 animate-spin text-accent" />
-              <div className="min-w-0">
-                <p className="text-sm font-medium text-ink">
-                  {onNext ? "正在顺着你的回答判断" : "正在把想法收拢"}
-                </p>
-                <p className="mt-0.5 text-xs text-ink-muted">
-                  {onNext ? clarifyWaitingLabel : waitingLabel}
-                </p>
-              </div>
-            </div>
-            <div className="mt-3 h-1 overflow-hidden rounded-full bg-accent/10">
-              <div className="h-full w-1/2 animate-[zouzou-progress_1.6s_ease-in-out_infinite] rounded-full bg-accent/70" />
-            </div>
+          <div className="text-sm leading-6 text-ink-muted">
+            {previewText ? (
+              <p className="whitespace-pre-wrap text-ink-secondary">{previewText}</p>
+            ) : (
+              <span className="flex items-center gap-2">
+                <Loader2 className="size-3.5 shrink-0 animate-spin text-accent" />
+                <span>{onNext ? clarifyWaitingLabel : waitingLabel}</span>
+              </span>
+            )}
           </div>
         ) : null}
 
@@ -454,7 +404,7 @@ export function ChatClarify({
           </div>
         ) : null}
 
-        {done ? (
+        {done && !autoSubmit && !hideSubmitAction ? (
           <div className="flex justify-end pt-1">
             <button
               type="button"

@@ -45,6 +45,187 @@ export type AiContext = {
   projectFacts: ProjectPlanFact[];
 };
 
+
+/**
+ * 上下文缓存。
+ *
+ * 一条想法从澄清到生成计划会调用 buildAiContext 最多 5 次（澄清 1 + 每轮回答各 1 + 计划 1），
+ * 而每次都要查 6 张表。数据库在跨洋链路上（单次往返 200ms+，整段 5~6 秒），重复查同样的背景
+ * 数据是纯浪费。这些背景（项目 / 复盘 / 偏好 / 反馈）在几十秒内不会变，所以用短 TTL 缓存兜住，
+ * 并在关键写入后主动失效。
+ */
+const AI_CONTEXT_TTL_MS = 60_000;
+const aiContextCache = new Map<
+  string,
+  { value: AiContext; expiresAt: number }
+>();
+
+/** 数据变了就主动失效，不要等 TTL */
+export function invalidateAiContext(userId?: string) {
+  if (!userId) {
+    aiContextCache.clear();
+    return;
+  }
+  for (const key of [...aiContextCache.keys()]) {
+    if (key.endsWith(":" + userId)) aiContextCache.delete(key);
+  }
+}
+
+export async function buildAiContext(
+  input: AiContextInput,
+): Promise<AiContext> {
+  const key = input.kind + ":" + input.userId;
+  const hit = aiContextCache.get(key);
+  if (hit && hit.expiresAt > Date.now()) {
+    return hit.value;
+  }
+  const value = await buildAiContextUncached(input);
+  // 简单清理，避免长期驻留
+  if (aiContextCache.size > 100) {
+    const now = Date.now();
+    for (const [cacheKey, entry] of aiContextCache) {
+      if (entry.expiresAt <= now) aiContextCache.delete(cacheKey);
+    }
+  }
+  aiContextCache.set(key, { value, expiresAt: Date.now() + AI_CONTEXT_TTL_MS });
+  return value;
+}
+
+/**
+ * 一次查询取回全部背景数据。
+ *
+ * 跨洋链路上真正的成本是「往返次数 x 单次 RTT」，而且 Neon 这个端点在并发下会明显劣化：
+ * 同样的 5 条查询，分开跑各约 460ms，一起跑要 4~5 秒。合成一条 SQL、一次往返最省。
+ * 下游的格式化逻辑没有变，只是把取数从 5 个 Prisma 调用换成 1 个 json_agg。
+ */
+type ContextFetchRow = {
+  preferences: Array<{
+    key: string;
+    value: string;
+    source: string;
+  }> | null;
+  feedback: Array<{
+    action: string;
+    detail: string | null;
+    taskTitle: string | null;
+    inboxContent: string | null;
+  }> | null;
+  reviews: Array<{
+    reviewDate: string;
+    summary: string;
+    nextActions: string | null;
+    decisionJson: string | null;
+  }> | null;
+  projects: Array<{
+    id: string;
+    name: string;
+    objective: string | null;
+    currentMilestone: string | null;
+    updatedAt: string;
+    tasks: Array<{
+      id: string;
+      title: string;
+      shortTitle: string | null;
+      updatedAt: string;
+      status: string;
+    }>;
+    openTaskCount: number | string;
+    reviewDates: string[];
+  }> | null;
+  stickies: Array<{
+    title: string;
+    nextStep: string;
+  }> | null;
+};
+
+const AI_CONTEXT_SQL = `
+WITH pref AS (
+  SELECT id, key, value, source, note, "updatedAt"
+  FROM user_preferences
+  WHERE "userId" = $1
+  ORDER BY "updatedAt" DESC, id ASC
+  LIMIT 20
+),
+fb AS (
+  SELECT e.id, e.action, e.detail, e."createdAt",
+         t.title AS "taskTitle",
+         i.content AS "inboxContent"
+  FROM ai_feedback_events e
+  LEFT JOIN tasks t ON t.id = e."taskId"
+  LEFT JOIN inbox_items i ON i.id = e."inboxItemId"
+  WHERE e."userId" = $1
+  ORDER BY e."createdAt" DESC, e.id ASC
+  LIMIT 50
+),
+rv AS (
+  SELECT id, "reviewDate", summary, "nextActions", "decisionJson"
+  FROM reviews
+  WHERE "userId" = $1
+  ORDER BY "reviewDate" DESC, id ASC
+  LIMIT 3
+),
+pr AS (
+  SELECT id, name, objective, "currentMilestone", "updatedAt"
+  FROM projects
+  WHERE status = 'active' AND "userId" = $1
+  ORDER BY "updatedAt" DESC, id ASC
+  LIMIT 8
+),
+pt AS (
+  SELECT id, "projectId", title, "shortTitle", "updatedAt", status
+  FROM tasks
+  WHERE "projectId" IN (SELECT id FROM pr)
+    AND status IN ('todo', 'in_progress')
+),
+rt AS (
+  SELECT review_tasks."projectId", r2."reviewDate"
+  FROM review_tasks
+  JOIN reviews r2 ON r2.id = review_tasks."reviewId"
+  WHERE review_tasks."projectId" IN (SELECT id FROM pr)
+),
+st AS (
+  SELECT id, title, "nextStep", "createdAt"
+  FROM task_sticky_notes
+  WHERE "userId" = $1
+  ORDER BY "createdAt" DESC, id ASC
+  LIMIT 6
+)
+SELECT
+  (SELECT COALESCE(json_agg(pref ORDER BY pref."updatedAt" DESC, pref.id ASC), '[]'::json) FROM pref) AS preferences,
+  (SELECT COALESCE(json_agg(fb ORDER BY fb."createdAt" DESC, fb.id ASC), '[]'::json) FROM fb) AS feedback,
+  (SELECT COALESCE(json_agg(rv ORDER BY rv."reviewDate" DESC, rv.id ASC), '[]'::json) FROM rv) AS reviews,
+  (SELECT COALESCE(json_agg(
+      json_build_object(
+        'id', pr.id,
+        'name', pr.name,
+        'objective', pr.objective,
+        'currentMilestone', pr."currentMilestone",
+        'updatedAt', pr."updatedAt",
+        'tasks', COALESCE((
+          SELECT json_agg(limited)
+          FROM (
+            SELECT pt.id, pt.title, pt."shortTitle", pt."updatedAt", pt.status
+            FROM pt
+            WHERE pt."projectId" = pr.id
+            ORDER BY pt."updatedAt" DESC, pt.id ASC
+            LIMIT 5
+          ) limited
+        ), '[]'::json),
+        'openTaskCount', (SELECT count(*) FROM pt WHERE pt."projectId" = pr.id),
+        'reviewDates', COALESCE((
+          SELECT json_agg(review_dates."reviewDate")
+          FROM (
+            SELECT rt."reviewDate"
+            FROM rt
+            WHERE rt."projectId" = pr.id
+            LIMIT 5
+          ) review_dates
+        ), '[]'::json)
+      )
+      ORDER BY pr."updatedAt" DESC, pr.id ASC
+  ), '[]'::json) FROM pr) AS projects,
+  (SELECT COALESCE(json_agg(st ORDER BY st."createdAt" DESC, st.id ASC), '[]'::json) FROM st) AS stickies
+`;
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 function daysBetween(earlier: Date, later = new Date()) {
@@ -64,114 +245,94 @@ function truncate(value: string, max = 100) {
   return value.length > max ? `${value.slice(0, max)}…` : value;
 }
 
-export async function buildAiContext(
+/**
+ * 数据库里的 DateTime 列是 TIMESTAMP(3)（不带时区），Prisma 读出来按 UTC 解释。
+ * 但 json_agg 返回的是不带时区后缀的字符串，JS 的 new Date() 会按本地时区解析，
+ * 在东八区会整体偏 8 小时、甚至跨天。这里统一补 Z，和 Prisma 的解释保持一致。
+ */
+function parseDbDate(value: string): Date {
+  return new Date(/(?:Z|[+-]\d{2}:?\d{2})$/.test(value) ? value : value + "Z");
+}
+
+async function buildAiContextUncached(
   input: AiContextInput,
 ): Promise<AiContext> {
   const { userId } = input;
-  const [
-    preferences,
-    feedbackEvents,
-    reviews,
-    activeProjects,
-    focusedTask,
-    recentStickyNotes,
-  ] = await Promise.all([
-      prisma.userPreference.findMany({
-        where: { userId },
-        orderBy: [{ updatedAt: "desc" }, { id: "asc" }],
-        take: 20,
-      }),
-      prisma.aiFeedbackEvent.findMany({
-        where: { userId },
-        orderBy: [{ createdAt: "desc" }, { id: "asc" }],
-        take: 50,
-        include: {
-          task: { select: { title: true } },
-          inboxItem: { select: { content: true } },
-        },
-      }),
-      prisma.review.findMany({
-        where: { userId },
-        orderBy: [{ reviewDate: "desc" }, { id: "asc" }],
-        take: 3,
-        select: {
-          reviewDate: true,
-          summary: true,
-          nextActions: true,
-          decisionJson: true,
-        },
-      }),
-      prisma.project.findMany({
-        where: { status: "active", userId },
-        select: {
-          id: true,
-          name: true,
-          objective: true,
-          currentMilestone: true,
-          updatedAt: true,
-          tasks: {
-            where: { status: { in: ["todo", "in_progress"] } },
-            select: {
-              id: true,
-              title: true,
-              shortTitle: true,
-              updatedAt: true,
-              status: true,
-            },
-            orderBy: [{ updatedAt: "desc" }, { id: "asc" }],
-            take: 5,
-          },
-          _count: {
-            select: {
-              tasks: {
-                where: { status: { in: ["todo", "in_progress"] } },
-              },
-            },
-          },
-          reviewTasks: {
-            select: {
-              review: { select: { reviewDate: true } },
-            },
-            take: 5,
-          },
-        },
-        orderBy: [{ updatedAt: "desc" }, { id: "asc" }],
-        take: 8,
-      }),
-      input.taskId
-        ? prisma.task.findUnique({
-            where: { id: input.taskId, userId },
-            select: {
-              title: true,
-              status: true,
-              priority: true,
-              scheduledDate: true,
-              dueDate: true,
-              completedAt: true,
-              createdAt: true,
-              updatedAt: true,
-              inboxItem: { select: { content: true } },
-              project: {
-                select: {
-                  name: true,
-                  objective: true,
-                  currentMilestone: true,
-                },
-              },
-            },
-          })
-        : null,
-      prisma.taskStickyNote.findMany({
-        where: { userId },
-        orderBy: [{ createdAt: "desc" }, { id: "asc" }],
-        take: 6,
+
+  const raw = await prisma.$queryRawUnsafe<ContextFetchRow[]>(
+    AI_CONTEXT_SQL,
+    userId,
+  );
+  const fetched = raw[0];
+
+  const preferences = (fetched?.preferences ?? []).map((item) => ({
+    key: item.key,
+    value: item.value,
+    source: item.source,
+  }));
+
+  const feedbackEvents = (fetched?.feedback ?? []).map((item) => ({
+    action: item.action,
+    detail: item.detail,
+    task: item.taskTitle ? { title: item.taskTitle } : null,
+    inboxItem: item.inboxContent ? { content: item.inboxContent } : null,
+  }));
+
+  const reviews = (fetched?.reviews ?? []).map((item) => ({
+    reviewDate: parseDbDate(item.reviewDate),
+    summary: item.summary,
+    nextActions: item.nextActions,
+    decisionJson: item.decisionJson,
+  }));
+
+  const activeProjects = (fetched?.projects ?? []).map((item) => ({
+    id: item.id,
+    name: item.name,
+    objective: item.objective,
+    currentMilestone: item.currentMilestone,
+    updatedAt: parseDbDate(item.updatedAt),
+    tasks: (item.tasks ?? []).map((task) => ({
+      id: task.id,
+      title: task.title,
+      shortTitle: task.shortTitle,
+      status: task.status,
+      updatedAt: parseDbDate(task.updatedAt),
+    })),
+    _count: { tasks: Number(item.openTaskCount ?? 0) },
+    reviewTasks: (item.reviewDates ?? []).map((value) => ({
+      review: { reviewDate: parseDbDate(value) },
+    })),
+  }));
+
+  const recentStickyNotes = (fetched?.stickies ?? []).map((item) => ({
+    title: item.title,
+    nextStep: item.nextStep,
+  }));
+
+  // 只有 task_coach / task_edit 这类带 taskId 的场景才需要单查任务，热路径不会走这里。
+  const focusedTask = input.taskId
+    ? await prisma.task.findUnique({
+        where: { id: input.taskId, userId },
         select: {
           title: true,
-          nextStep: true,
+          status: true,
+          priority: true,
+          scheduledDate: true,
+          dueDate: true,
+          completedAt: true,
           createdAt: true,
+          updatedAt: true,
+          inboxItem: { select: { content: true } },
+          project: {
+            select: {
+              name: true,
+              objective: true,
+              currentMilestone: true,
+            },
+          },
         },
-      }),
-    ]);
+      })
+    : null;
 
   const preferenceLines = preferences.map((item) => {
     const source = item.source === "manual" ? "用户设置" : "行为推断";

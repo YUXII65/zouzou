@@ -1,6 +1,7 @@
 generator client {
-  provider      = "prisma-client-js"
-  binaryTargets = ["native", "rhel-openssl-1.1.x"]
+  provider        = "prisma-client-js"
+  previewFeatures = ["relationJoins"]
+  binaryTargets   = ["native", "rhel-openssl-1.1.x"]
 }
 
 datasource db {
@@ -20,6 +21,13 @@ enum TaskStatus {
   todo
   in_progress
   done
+  cancelled
+}
+
+enum ProjectStageStatus {
+  active
+  ready
+  completed
   cancelled
 }
 
@@ -55,16 +63,18 @@ enum ReviewNextActionStatus {
 }
 
 model User {
-  id                String              @id @default(cuid())
-  username          String              @unique
+  id                String             @id @default(cuid())
+  username          String             @unique
   passwordHash      String
   /// 展示用昵称（为空时回退到 username）
   displayName       String?
   /// 头像：客户端压缩后的 data URL（不做对象存储，保持部署简单）
   avatarUrl         String?
-  createdAt         DateTime            @default(now())
-  updatedAt         DateTime            @updatedAt
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
   projects          Project[]
+  projectStages     ProjectStage[]
+  projectTracks     ProjectTrack[]
   tasks             Task[]
   taskStickyNotes   TaskStickyNote[]
   inboxItems        InboxItem[]
@@ -87,20 +97,84 @@ model Project {
   name                   String
   objective              String
   status                 ProjectStatus     @default(active)
+  /// 推进模式：normal / longterm / explore（v3.3）
+  mode                   String            @default("normal")
   currentMilestone       String?
   notes                  String?
   createdFromInboxItemId String?           @unique
   createdFromInboxItem   InboxItem?        @relation("ProjectFromInbox", fields: [createdFromInboxItemId], references: [id], onDelete: SetNull)
+  /// 探索模式的节奏说明（由 AI 判断，例如"每周两次"）
+  cadence                String?
   lastReviewedAt         DateTime?
   createdAt              DateTime          @default(now())
   updatedAt              DateTime          @updatedAt
   tasks                  Task[]
+  stages                 ProjectStage[]
+  tracks                 ProjectTrack[]
   inboxItems             InboxItem[]
   reviewTasks            ReviewTask[]
+  reviews                Review[]
   aiFeedbackEvents       AiFeedbackEvent[]
 
   @@index([userId])
+  @@index([userId, status])
   @@map("projects")
+}
+
+model ProjectStage {
+  id                 String             @id @default(cuid())
+  userId             String
+  user               User               @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  projectId          String
+  project            Project            @relation(fields: [projectId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  order              Int
+  title              String
+  deliverable        String
+  doneWhen           String?
+  status             ProjectStageStatus @default(active)
+  completedAt        DateTime?
+  nextStageJson      String?
+  nextStageUpdatedAt DateTime?
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
+  tasks              Task[]
+
+  @@unique([projectId, order])
+  @@index([userId, status])
+  @@index([projectId, status])
+  @@map("project_stages")
+}
+
+/**
+ * 探索模式的「线路」。
+ * 探索和长期的分界不是「有没有终点」，而是长期是一条线按阶段走、探索是
+ * 多条线按主次演进。探索线路不强制多条：只对一个方向感兴趣时就只有一条主线。
+ */
+model ProjectTrack {
+  id           String    @id @default(cuid())
+  userId       String
+  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  projectId    String
+  project      Project   @relation(fields: [projectId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  order        Int
+  name         String
+  /// 这条线在发展 / 验证什么
+  intent       String
+  /// main | side —— 主次由反馈调整，不是创建时定死
+  role         String    @default("main")
+  /// active | paused | archived
+  status       String    @default("active")
+  /// 这条线现在练到哪 / 验证到哪
+  currentFocus String?
+  lastEventAt  DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  tasks        Task[]
+
+  @@unique([projectId, order])
+  @@index([userId, status])
+  @@index([projectId, status])
+  @@map("project_tracks")
 }
 
 model Task {
@@ -112,6 +186,10 @@ model Task {
   notes            String?
   projectId        String?
   project          Project?          @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  stageId          String?
+  stage            ProjectStage?     @relation(fields: [stageId], references: [id], onDelete: SetNull)
+  trackId          String?
+  track            ProjectTrack?     @relation(fields: [trackId], references: [id], onDelete: SetNull)
   status           TaskStatus        @default(todo)
   priority         Priority          @default(medium)
   scheduledDate    DateTime?
@@ -135,6 +213,9 @@ model Task {
   stickyNotes      TaskStickyNote[]
 
   @@index([userId])
+  @@index([userId, status])
+  @@index([stageId])
+  @@index([trackId])
   @@map("tasks")
 }
 
@@ -164,6 +245,8 @@ model InboxItem {
   source           String            @default("manual")
   status           InboxStatus       @default(inbox)
   category         InboxCategory?
+  /// 首页选择的推进模式：smart 表示交给 AI 判断
+  mode             String?
   title            String?
   projectId        String?
   project          Project?          @relation(fields: [projectId], references: [id], onDelete: SetNull)
@@ -182,6 +265,7 @@ model InboxItem {
   aiFeedbackEvents AiFeedbackEvent[]
 
   @@index([userId])
+  @@index([userId, status])
   @@map("inbox_items")
 }
 
@@ -246,13 +330,16 @@ model Review {
   summary         String
   nextActions     String?
   decisionJson    String?
+  /// 为空 = 按天复盘；不为空 = 某个项目（探索模式）的复盘
+  projectId       String?
+  project         Project?           @relation(fields: [projectId], references: [id], onDelete: SetNull)
   status          ReviewStatus       @default(draft)
   createdAt       DateTime           @default(now())
   updatedAt       DateTime           @updatedAt
   tasks           ReviewTask[]
   nextActionTasks ReviewNextAction[]
 
-  @@unique([userId, reviewDate])
+  @@unique([userId, reviewDate, projectId])
   @@index([userId])
   @@map("reviews")
 }
@@ -296,19 +383,19 @@ model ReviewNextAction {
 }
 
 model AiUsageLog {
-  id               String   @id @default(cuid())
-  userId           String
-  user             User     @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: Cascade)
-  visitorId        String
-  feature          String
-  status           String   @default("ok")
-  promptTokens     Int      @default(0)
-  completionTokens Int      @default(0)
-  totalTokens      Int      @default(0)
+  id                    String   @id @default(cuid())
+  userId                String
+  user                  User     @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  visitorId             String
+  feature               String
+  status                String   @default("ok")
+  promptTokens          Int      @default(0)
+  completionTokens      Int      @default(0)
+  totalTokens           Int      @default(0)
   promptCacheHitTokens  Int?
   promptCacheMissTokens Int?
   model                 String?
-  createdAt        DateTime @default(now())
+  createdAt             DateTime @default(now())
 
   @@index([visitorId, createdAt])
   @@index([createdAt])

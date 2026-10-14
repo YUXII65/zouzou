@@ -88,6 +88,11 @@ function createPrismaClient() {
   }).$extends({
     query: {
       async $allOperations({ operation, args, query }) {
+        // 性能排查用：PRISMA_QUERY_TRACE=1 启动服务，每条 SQL 会打进服务端日志。
+        // 默认关闭，用来数"一次请求到底发了几条查询"（详见 AGENTS.md）。
+        if (process.env.PRISMA_QUERY_TRACE === "1") {
+          console.log("[qc] " + Date.now() + " " + operation);
+        }
         const maxAttempts = isReadOperation(operation) ? 5 : 3;
         return retryConnection(() => query(args), maxAttempts);
       },

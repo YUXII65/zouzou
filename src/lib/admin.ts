@@ -2,12 +2,8 @@ import { getCurrentUser } from "@/lib/auth";
 
 export function isAdminUsername(username: string) {
   const configuredAdmin = process.env.ADMIN_USERNAME?.trim();
-  const adminNames = new Set(
-    ["YUXII", "yuxii", ...(configuredAdmin ? [configuredAdmin] : [])].map(
-      (name) => name.trim().toLowerCase(),
-    ),
-  );
-  return adminNames.has(username.toLowerCase());
+  if (!configuredAdmin) return false;
+  return username.toLowerCase() === configuredAdmin.toLowerCase();
 }
 
 export async function getAdminUser() {

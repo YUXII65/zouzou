@@ -5,7 +5,18 @@ import { Moon, Sun } from "lucide-react";
 
 const THEME_STORAGE = "theme";
 
-export function ThemeToggle() {
+/**
+ * 主题开关。v3.4 起从左侧栏搬到个人页：
+ * - icon：图标按钮（紧凑入口）
+ * - row：个人页功能区里的按钮，和「退出登录」并排，尺寸、圆角、边框保持一致
+ */
+export function ThemeToggle({
+  variant = "icon",
+  className = "",
+}: {
+  variant?: "icon" | "row";
+  className?: string;
+}) {
   const [dark, setDark] = useState(false);
 
   useEffect(() => {
@@ -26,6 +37,21 @@ export function ThemeToggle() {
   function setTheme(next: boolean) {
     setDark(next);
     localStorage.setItem(THEME_STORAGE, next ? "dark" : "light");
+  }
+
+  if (variant === "row") {
+    return (
+      <button
+        type="button"
+        onClick={() => setTheme(!dark)}
+        aria-label={dark ? "切换到白天模式" : "切换到夜晚模式"}
+        title={dark ? "切换到白天" : "切换到夜晚"}
+        className={`inline-flex h-10 min-w-0 items-center justify-center gap-1.5 rounded-lg border border-border bg-surface/70 px-2 text-xs font-medium text-ink-secondary transition-colors hover:bg-surface-hover hover:text-ink sm:gap-2 sm:px-4 sm:text-sm ${className}`}
+      >
+        {dark ? <Sun className="size-4" /> : <Moon className="size-4" />}
+        <span>{dark ? "白天模式" : "夜间模式"}</span>
+      </button>
+    );
   }
 
   return (

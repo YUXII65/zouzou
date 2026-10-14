@@ -1,43 +1,27 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Sparkles } from "lucide-react";
+import { Loader2 } from "lucide-react";
 import { ChatClarify } from "@/components/chat-clarify";
+import { ignoreInboxItem } from "@/app/actions";
 import { consumeAiStream } from "@/lib/ai-stream-client";
 import type {
   InboxClarification as InboxClarificationData,
   InboxClarificationDimension,
   InboxClarificationFrame,
   InboxClarificationHistoryItem,
-  InboxClarificationSummary,
   InboxPlan,
 } from "@/lib/ai";
 
-function formatSummary(summary?: InboxClarificationSummary | null) {
-  if (!summary) return "";
-  const confirmed = [
-    ...summary.confirmedFacts,
-    ...summary.valueJudgments,
-    ...summary.goals,
-  ]
-    .filter(Boolean)
-    .slice(0, 3);
-  const assumption = [
-    summary.workingAssumption,
-    ...summary.unverifiedAssumptions,
-    summary.keyVariable,
-  ].find(Boolean);
-
-  return [
-    `我目前的判断：${summary.realProblem}`,
-    confirmed.length ? `已经确认：${confirmed.join("；")}` : "",
-    assumption ? `先按这个假设往下走：${assumption}` : "",
-    summary.ifWrongThen ? `如果它不成立：${summary.ifWrongThen}` : "",
-  ]
-    .filter(Boolean)
-    .join("\n\n");
-}
+type ConfirmResult = {
+  ok: true;
+  projectId: string | null;
+  attachedTaskId: string | null;
+  showProjectHint: boolean;
+  directAnswer?: string | null;
+};
 
 export function InboxClarification({
   itemId,
@@ -47,7 +31,6 @@ export function InboxClarification({
   mode,
   status,
   history = [],
-  summary = null,
   frame = null,
 }: {
   itemId: string;
@@ -57,15 +40,18 @@ export function InboxClarification({
   mode?: "socratic";
   status?: "asking" | "done";
   history?: InboxClarificationHistoryItem[];
-  summary?: InboxClarificationSummary | null;
   frame?: InboxClarificationFrame | null;
 }) {
   const [apiKey, setApiKey] = useState("");
   const [model, setModel] = useState("deepseek-v4-flash");
   const [baseUrl, setBaseUrl] = useState("https://api.deepseek.com");
-  const [pending, setPending] = useState(false);
-  const [planReady, setPlanReady] = useState(false);
+  const [storageReady, setStorageReady] = useState(false);
+  const [finalizing, setFinalizing] = useState(false);
+  const [confirmed, setConfirmed] = useState<ConfirmResult | null>(null);
+  const [directAnswer, setDirectAnswer] = useState<string | null>(null);
+  const [ignored, setIgnored] = useState(false);
   const [error, setError] = useState("");
+  const completionStartedRef = useRef(false);
   const router = useRouter();
 
   useEffect(() => {
@@ -75,9 +61,79 @@ export function InboxClarification({
       setBaseUrl(
         localStorage.getItem("ai-base-url") ?? "https://api.deepseek.com",
       );
+      setStorageReady(true);
     }, 0);
     return () => window.clearTimeout(timer);
   }, []);
+
+  const finalize = useCallback(async () => {
+    // 澄清一旦结束就自动整理，不给用户再点一次「生成任务」。
+    if (completionStartedRef.current) return;
+    completionStartedRef.current = true;
+    setFinalizing(true);
+    setDirectAnswer(null);
+    setError("");
+
+    try {
+      const response = await fetch("/api/ai/inbox/plan", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          itemId,
+          autoConfirm: true,
+          apiKey,
+          model,
+          baseUrl,
+        }),
+      });
+      const plan = await consumeAiStream<InboxPlan>(response, () => {});
+      if (!plan) throw new Error("missing_plan");
+
+      if (plan.source === "agent_failed") {
+        completionStartedRef.current = false;
+        setError("方案没有生成完整。可以先点“重试”；如果连续失败，去个人页检查 DeepSeek 连接。");
+        return;
+      }
+      if (plan.source === "heuristic_fallback") {
+        completionStartedRef.current = false;
+        setError("AI 这次没有接上，方案没有自动保存。可以先点“重试”；如果连续失败，去个人页检查 DeepSeek 连接。");
+        return;
+      }
+      if (plan.action === "answer" || plan.responseMode === "answer") {
+        const answer =
+          plan.directAnswer?.trim() ||
+          plan.userCard?.how ||
+          plan.userCard?.understanding ||
+          "";
+        if (!answer) throw new Error("missing_answer");
+        setDirectAnswer(answer);
+      } else if (plan.action === "ignore" || !plan.tasks.length) {
+        const formData = new FormData();
+        formData.set("id", itemId);
+        await ignoreInboxItem(formData);
+        setIgnored(true);
+        return;
+      }
+
+      const confirmResponse = await fetch("/api/ai/inbox/confirm", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ itemId }),
+      });
+      const confirmedPayload = (await confirmResponse.json()) as {
+        result?: ConfirmResult;
+      };
+      if (!confirmResponse.ok || !confirmedPayload.result?.ok) {
+        throw new Error("confirm_failed");
+      }
+      setConfirmed(confirmedPayload.result);
+    } catch {
+      completionStartedRef.current = false;
+      setError("整理没完成。点“重试”；如果连续失败，去个人页检查 DeepSeek 连接。");
+    } finally {
+      setFinalizing(false);
+    }
+  }, [apiKey, baseUrl, itemId, model]);
 
   async function next(payload: {
     answer: string[];
@@ -103,7 +159,10 @@ export function InboxClarification({
     const clarification = result.clarification;
     const current = clarification.history?.at(-1);
     return {
-      status: clarification.status === "done" ? ("done" as const) : ("asking" as const),
+      status:
+        clarification.status === "done"
+          ? ("done" as const)
+          : ("asking" as const),
       question:
         clarification.status === "done" || !current
           ? null
@@ -114,79 +173,80 @@ export function InboxClarification({
               multi: current.multi,
             },
       reflection: current?.reflection ?? null,
-      summaryText: formatSummary(clarification.summary),
     };
   }
 
-  async function submit(payload: { answers: string[][]; supplement: string }) {
-    if (pending) return;
-    setPending(true);
-    setPlanReady(false);
-    setError("");
-    try {
-      const response = await fetch("/api/ai/inbox/plan", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          itemId,
-          option: payload.answers[0]?.join("、") ?? "",
-          dimensionChoices: payload.answers.map((group) => group.join("、")),
-          supplement: payload.supplement,
-          apiKey,
-          model,
-          baseUrl,
-        }),
-      });
-      await consumeAiStream<InboxPlan>(response, () => {});
-      setPlanReady(true);
-      router.refresh();
-      window.setTimeout(() => setPlanReady(false), 4000);
-    } catch {
-      setError("这次没有整理出来，再试一次");
-    } finally {
-      setPending(false);
-    }
-  }
+  const fileHref = confirmed?.attachedTaskId
+    ? `/files?edit=${confirmed.attachedTaskId}`
+    : confirmed?.projectId
+      ? `/files?project=${confirmed.projectId}`
+      : "/files";
 
-  const hasSocraticState = mode === "socratic";
   return (
     <div className="space-y-3">
-      <p className="text-sm leading-6 text-ink">{content}</p>
-      {hasSocraticState || dimensions.length ? (
-        <ChatClarify
-          dimensions={dimensions}
-          supplementPlaceholder={supplementPlaceholder}
-          initialHistory={history}
-          clarificationStatus={status}
-          summaryText={formatSummary(summary)}
-          frame={frame}
-          onNext={hasSocraticState ? next : undefined}
-          busy={pending || planReady}
-          submitLabel="就是这个问题，给我下一步"
-          onSubmit={submit}
-        />
-      ) : (
-        <form
-          onSubmit={(event) => {
-            event.preventDefault();
-            submit({ answers: [], supplement: "" });
-          }}
-          className="zouzou-panel rounded-xl p-4"
-        >
-          <p className="text-sm leading-6 text-ink">
-            没有需要补充的问题，直接生成下一步。
-          </p>
-          <button
-            type="submit"
-            disabled={pending || planReady}
-            className="zouzou-primary-button mt-3 inline-flex h-9 items-center gap-2 rounded-lg bg-accent px-4 text-sm font-medium text-white transition-colors hover:bg-accent-strong disabled:cursor-not-allowed disabled:opacity-50"
+      <ChatClarify
+        userMessage={content}
+        dimensions={dimensions}
+        supplementPlaceholder={supplementPlaceholder}
+        initialHistory={history}
+        clarificationStatus={status}
+        frame={frame}
+        autoSubmit={storageReady}
+        hideSubmitAction
+        onNext={mode === "socratic" ? next : undefined}
+        busy={finalizing}
+        onSubmit={finalize}
+      />
+
+      {finalizing ? (
+        <div className="flex items-center gap-2 px-1 pt-1 text-sm text-ink-muted">
+          <Loader2 className="size-4 shrink-0 animate-spin text-accent/70" />
+          <span>正在整理到文件页...</span>
+        </div>
+      ) : null}
+
+      {directAnswer ? (
+        <div className="rounded-xl border border-accent/20 bg-accent-soft/30 px-4 py-4 text-sm leading-7 text-ink-secondary">
+          <p className="whitespace-pre-wrap">{directAnswer}</p>
+        </div>
+      ) : null}
+
+      {confirmed && !directAnswer ? (
+        <div className="flex justify-end pt-1">
+          <Link
+            href={fileHref}
+            className="zouzou-primary-button inline-flex h-11 items-center rounded-lg bg-accent px-5 text-sm font-medium text-white transition-colors hover:bg-accent-strong"
           >
-            <Sparkles className="size-4" />
-            {pending || planReady ? "正在整理..." : "给我下一步"}
+            查看
+          </Link>
+        </div>
+      ) : null}
+
+      {ignored ? (
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border bg-surface-muted/70 px-4 py-3 text-sm text-ink-secondary">
+          <span>这条先收着，没有生成任务。</span>
+          <button
+            type="button"
+            onClick={() => router.refresh()}
+            className="text-sm font-medium text-accent-strong transition-colors hover:text-accent"
+          >
+            继续记录
           </button>
-          {error ? <p className="mt-2 text-xs text-danger">{error}</p> : null}
-        </form>
-      )}
+        </div>
+      ) : null}
+
+      {error ? (
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-danger/20 bg-danger/5 px-4 py-3 text-sm text-danger">
+          <span>{error}</span>
+          <button
+            type="button"
+            onClick={() => void finalize()}
+            className="font-medium underline underline-offset-4"
+          >
+            重试
+          </button>
+        </div>
+      ) : null}
     </div>
   );
 }

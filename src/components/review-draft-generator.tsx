@@ -21,8 +21,13 @@ type ReviewDraftResult = {
 
 export function ReviewDraftGenerator({
   defaultDate,
+  projectId = null,
+  label = "生成复盘",
 }: {
   defaultDate: string;
+  /** 传了就做"某个项目（探索模式）"的复盘 */
+  projectId?: string | null;
+  label?: string;
 }) {
   const [pending, setPending] = useState(false);
   const [preview, setPreview] = useState("");
@@ -44,13 +49,17 @@ export function ReviewDraftGenerator({
       const response = await fetch("/api/ai/review/draft", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ reviewDate }),
+        body: JSON.stringify({ reviewDate, projectId: projectId ?? undefined }),
       });
       const result = await consumeAiStream<ReviewDraftResult>(
         response,
         setPreview,
       );
-      router.replace(`/review?date=${encodeURIComponent(result.date)}`);
+      // /review 页面已删除：复盘统一在文件页里展开（?review=<id>），项目复盘带上 project
+      const target = projectId
+        ? `/files?project=${projectId}&review=${result.reviewId}`
+        : `/files?review=${result.reviewId}`;
+      router.replace(target);
     } catch {
       setError("这次没有整理出来，再试一次");
     } finally {
@@ -71,7 +80,7 @@ export function ReviewDraftGenerator({
         ) : (
           <CalendarDays className="size-4" />
         )}
-        {pending ? waitingLabel : "生成复盘"}
+        {pending ? waitingLabel : label}
       </button>
 
       {pending || preview ? (

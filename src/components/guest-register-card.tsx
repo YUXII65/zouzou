@@ -17,7 +17,7 @@ export function GuestRegisterCard({ error }: { error: string }) {
       <input type="hidden" name="next" value="/" />
       <h2 className="text-sm font-semibold text-ink">注册账号</h2>
       <p className="mt-2 text-sm leading-6 text-ink-secondary">
-        注册后，这次体验里的项目、任务和复盘会继续保留。
+        注册后，这次体验里的项目和任务会继续保留。
       </p>
       <input
         name="username"

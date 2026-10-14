@@ -1,7 +1,13 @@
 import { toDateInputValue } from "@/lib/date";
+import { pickModeFromJudgment } from "@/lib/mode-judgment";
+import {
+  heuristicProjectMode,
+  isProjectMode,
+  normalizeProjectMode,
+  type ProjectMode,
+} from "@/lib/work-mode";
 import { after } from "next/server";
 import { buildTaskContract } from "@/lib/task-contract";
-import { checkClarificationQuality } from "@/lib/ai-quality";
 import { assessIdeaReadiness, type IdeaReadiness } from "@/lib/idea-readiness";
 import { extractJsonObject as extractJson } from "@/lib/json-extract";
 import {
@@ -21,14 +27,21 @@ import {
   recordAiUsage,
 } from "@/lib/ai-quota";
 import {
-  CLARIFICATION_QUALITY_RULES,
-  FIRST_RUN_PLAN_SYSTEM_PROMPT,
+  CLARIFICATION_TRANSLATION_SYSTEM_PROMPT,
+  MODE_JUDGMENT_SYSTEM_PROMPT,
   OUTPUT_QUALITY_RULES,
   PLAN_SYSTEM_PROMPT,
-  SOCRATIC_CLARIFY_SYSTEM_PROMPT,
+  buildClarificationTranslationUserPayload,
+  buildModeJudgmentUserPayload,
   buildPlanUserPayload,
-  buildSocraticClarifyUserPayload,
 } from "@/lib/ai-prompts";
+
+/** 探索模式的「线路」：一个发展方向；只有一个方向时就是一条主线。 */
+export type InboxPlanTrack = {
+  name: string;
+  intent: string;
+  role: "main" | "side";
+};
 
 export type InboxPlanTask = {
   title: string;
@@ -45,17 +58,64 @@ export type InboxPlanTask = {
   priority: "low" | "medium" | "high" | "urgent";
   scheduledDate: string | null;
   dueDate: string | null;
+  /** explore 计划里这条任务属于哪条线（线路名），其他模式为 null。 */
+  trackName?: string | null;
 };
 
+export type InboxPlanSource =
+  | "model"
+  | "heuristic_fallback"
+  | "agent_failed";
+
+export type InboxPlanUserCard = {
+  understanding: string;
+  firstAction: string;
+  how: string;
+  doneWhen: string;
+  ifWrongThen?: string;
+};
+
+export type InboxPlanAgentTrace = {
+  usedFacts: string[];
+  assumptionsUsed: string[];
+  auditIssues: string[];
+};
+
+export type InboxPlanContentTrace = {
+  enabled: boolean;
+  /** 第二段规划执行 Agent 排出的步骤数。 */
+  stepCount: number;
+  usedTranslation: boolean;
+  /** 第二段规划执行 Agent 的自然语言输出，用于调试查看。 */
+  goal?: string;
+  constraints?: string[];
+  route?: string;
+  steps?: Array<{ action: string; how: string; output: string }>;
+  responseMode?: InboxPlanResponseMode;
+  answer?: string;
+};
+
+export type InboxPlanResponseMode = "answer" | "action" | "plan";
+
 export type InboxPlan = {
-  action: "create_project" | "existing_project" | "single_task" | "ignore";
+  action: "create_project" | "existing_project" | "single_task" | "ignore" | "answer";
+  responseMode?: InboxPlanResponseMode;
+  directAnswer?: string | null;
   taskDisposition?: "attach" | "new_tasks";
   projectName: string | null;
   projectObjective: string | null;
   projectMilestone: string | null;
   tasks: InboxPlanTask[];
+  /** explore 模式的线路图；其他模式为空。线路可以不只一条，也可以只有一条。 */
+  tracks?: InboxPlanTrack[] | null;
+  /** 项目最终归属的模式（v3.3 文件页用它分类） */
+  mode?: ProjectMode;
   reason: string;
   session?: DecisionSession | null;
+  source?: InboxPlanSource;
+  userCard?: InboxPlanUserCard | null;
+  agent?: InboxPlanAgentTrace | null;
+  content?: InboxPlanContentTrace | null;
 };
 
 export type FirstRunPlan = {
@@ -88,6 +148,22 @@ export type InboxClarificationDimension = {
 export type InboxClarificationHistoryItem = InboxClarificationDimension & {
   answer: string[];
   reflection?: string | null;
+};
+
+export type InboxClarificationTranslation = {
+  originalInput: string;
+  literalMeaning: string;
+  normalizedIntent: string;
+  confirmedFacts: string[];
+  interpretations: string[];
+  valueJudgments: string[];
+  goals: string[];
+  constraints: string[];
+  unknowns: string[];
+  readiness: IdeaReadiness;
+  missingSlots: string[];
+  reason: string;
+  responseMode?: InboxPlanResponseMode;
 };
 
 export type InboxClarificationFrame = {
@@ -123,11 +199,14 @@ export type InboxClarification = {
   dimensions: InboxClarificationDimension[];
   supplementPlaceholder: string;
   mode?: "socratic";
+  /** 澄清收口后定下的推进模式；第 2、3 段只承接，不再自己判。 */
+  workMode?: ProjectMode | null;
   status?: "asking" | "done";
   askedCount?: number;
   maxQuestions?: number;
   history?: InboxClarificationHistoryItem[];
   summary?: InboxClarificationSummary | null;
+  translation?: InboxClarificationTranslation | null;
   frame?: InboxClarificationFrame | null;
   session?: DecisionSession | null;
 };
@@ -200,6 +279,10 @@ type FocusTask = {
   priority: string;
   dueDate: Date | null;
   scheduledDate: Date | null;
+  /** 同一批计划里的原定顺序；用来判断「谁是谁的前提」 */
+  planOrder?: number | null;
+  /** 同一批 AI 计划共享的 id，同批任务之间才有顺序含义 */
+  batchId?: string | null;
 };
 
 const priorities = ["low", "medium", "high", "urgent"] as const;
@@ -227,7 +310,15 @@ function safePlanAction(value: unknown) {
     : "single_task";
 }
 
-function safePlanTask(value: unknown): InboxPlanTask {
+/** 便利贴最多保留 3 个真实阶段；多出来的动作合并进最后一块，避免把连续动作拆碎。 */
+export function collapseExecutionSteps(steps: string[], limit = 3) {
+  if (steps.length <= limit) return steps;
+  const kept = steps.slice(0, Math.max(1, limit - 1));
+  const rest = steps.slice(Math.max(1, limit - 1));
+  return [...kept, rest.join("；")];
+}
+
+export function safePlanTask(value: unknown): InboxPlanTask {
   if (!value || typeof value !== "object") {
     return {
       title: "待整理任务",
@@ -244,6 +335,7 @@ function safePlanTask(value: unknown): InboxPlanTask {
       priority: "medium",
       scheduledDate: null,
       dueDate: null,
+      trackName: null,
     };
   }
 
@@ -259,21 +351,31 @@ function safePlanTask(value: unknown): InboxPlanTask {
       : null;
   const contract = buildTaskContract(`${title} ${notes ?? ""}`, title);
   const executionSteps = Array.isArray(raw.executionSteps)
-    ? raw.executionSteps
-        .filter(
-          (step): step is string =>
-            typeof step === "string" && Boolean(step.trim()),
-        )
-        .slice(0, 5)
-        .map((step) => step.trim().slice(0, 240))
+    ? collapseExecutionSteps(
+        raw.executionSteps
+          .filter(
+            (step): step is string =>
+              typeof step === "string" && Boolean(step.trim()),
+          )
+          .map((step) => step.trim().slice(0, 240)),
+      )
     : [];
+  const executionMode =
+    typeof raw.executionMode === "string" && raw.executionMode.trim()
+      ? raw.executionMode.trim()
+      : contract.executionMode;
+  const maxTurnsByMode: Record<string, number> = {
+    quick: 1,
+    tool: 2,
+    produce: 2,
+    explore: 3,
+    project: 3,
+  };
+
   return {
     title,
     shortTitle: normalizeShortTitle(raw.shortTitle, title),
-    executionMode:
-      typeof raw.executionMode === "string" && raw.executionMode.trim()
-        ? raw.executionMode.trim()
-        : contract.executionMode,
+    executionMode,
     doneWhen:
       typeof raw.doneWhen === "string" && raw.doneWhen.trim()
         ? raw.doneWhen.trim().slice(0, 200)
@@ -293,10 +395,7 @@ function safePlanTask(value: unknown): InboxPlanTask {
       typeof raw.fallback === "string" && raw.fallback.trim()
         ? raw.fallback.trim().slice(0, 300)
         : "",
-    maxTurns:
-      typeof raw.maxTurns === "number" && raw.maxTurns > 0
-        ? Math.min(Math.floor(raw.maxTurns), 5)
-        : contract.maxTurns,
+    maxTurns: maxTurnsByMode[executionMode] ?? contract.maxTurns,
     toolPolicy:
       typeof raw.toolPolicy === "string" && raw.toolPolicy.trim()
         ? raw.toolPolicy.trim()
@@ -315,14 +414,21 @@ function safePlanTask(value: unknown): InboxPlanTask {
       raw.dueDate >= today
         ? raw.dueDate
         : null,
+    trackName:
+      typeof raw.trackName === "string" && raw.trackName.trim()
+        ? raw.trackName.trim().slice(0, 40)
+        : null,
   };
 }
 
-type CallModelOptions = {
+export type CallModelOptions = {
   onDelta?: (delta: string) => void;
-  reasoningEffort?: "none" | "low" | "medium" | "high";
+  reasoningEffort?: "none" | "low" | "medium" | "high" | "max";
   maxTokens?: number;
   qualityRules?: string;
+  timeoutMs?: number;
+  totalBudgetMs?: number;
+  maxAttempts?: number;
 };
 
 type ChatCompletionUsage = {
@@ -383,7 +489,7 @@ async function readStreamingContent(
   return { content, usage };
 }
 
-async function callModel(
+export async function callModel(
   system: string,
   user: string,
   apiKeyOverride?: string,
@@ -401,7 +507,7 @@ async function callModel(
     modelOverride ||
     process.env.DEEPSEEK_MODEL ||
     process.env.OPENAI_MODEL ||
-    "deepseek-v4-flash";
+    "deepseek-flash";
   const baseUrl = (
     baseUrlOverride ||
     process.env.DEEPSEEK_BASE_URL ||
@@ -409,10 +515,11 @@ async function callModel(
   ).replace(/\/$/, "");
 
   const startedAt = Date.now();
-  const totalBudgetMs = 26_000;
+  const totalBudgetMs = options.totalBudgetMs ?? 26_000;
+  const maxAttempts = Math.max(1, Math.floor(options.maxAttempts ?? 2));
   let streamed = false;
 
-  for (let attempt = 0; attempt < 2; attempt += 1) {
+  for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
     if (isAiQuotaEnabled() && !(await hasAiQuota())) return null;
 
     // 超过总预算就不再重试，避免按钮长时间停在“处理中”。
@@ -423,6 +530,11 @@ async function callModel(
       const shouldStream = Boolean(options.onDelta);
       const useDeepSeekReasoningControl =
         /deepseek/i.test(model) || /deepseek/i.test(baseUrl);
+      const requestedReasoningEffort = options.reasoningEffort;
+      const reasoningEffort =
+        requestedReasoningEffort === "medium"
+          ? undefined
+          : requestedReasoningEffort;
       const response = await fetch(`${baseUrl}/chat/completions`, {
         method: "POST",
         headers: {
@@ -439,8 +551,8 @@ async function callModel(
             { role: "user", content: user },
           ],
           temperature: temperatureOverride,
-          ...(useDeepSeekReasoningControl
-            ? { reasoning_effort: options.reasoningEffort ?? "none" }
+          ...(useDeepSeekReasoningControl && reasoningEffort
+            ? { reasoning_effort: reasoningEffort }
             : {}),
           ...(options.maxTokens ? { max_tokens: options.maxTokens } : {}),
           ...(shouldStream
@@ -450,14 +562,14 @@ async function callModel(
               }
             : {}),
         }),
-        signal: AbortSignal.timeout(Math.min(20_000, remaining)),
+        signal: AbortSignal.timeout(Math.min(options.timeoutMs ?? 20_000, remaining)),
       });
 
       if (!response.ok) {
         console.warn(`[ai] request failed with ${response.status}`);
         if (
           (response.status === 429 || response.status >= 500) &&
-          attempt === 0 &&
+          attempt < maxAttempts - 1 &&
           totalBudgetMs - (Date.now() - startedAt) > 6_000
         ) {
           await new Promise((resolve) => setTimeout(resolve, 1000));
@@ -501,7 +613,7 @@ async function callModel(
       console.warn("[ai] request error", error);
       if (
         !streamed &&
-        attempt === 0 &&
+        attempt < maxAttempts - 1 &&
         totalBudgetMs - (Date.now() - startedAt) > 6_000
       ) {
         await new Promise((resolve) => setTimeout(resolve, 1000));
@@ -514,7 +626,16 @@ async function callModel(
   return null;
 }
 
-function heuristicPlan(content: string, projectNames: string[]): InboxPlan {
+/** 用户显式选了模式就用它；smart / 缺省才回落到推断值。 */
+function resolvePlanMode(workMode: unknown, hint: ProjectMode): ProjectMode {
+  return isProjectMode(workMode) ? workMode : hint;
+}
+
+function heuristicPlan(
+  content: string,
+  projectNames: string[],
+  workMode?: string,
+): InboxPlan {
   const lower = content.toLowerCase();
   const projectName =
     projectNames.find((name) => lower.includes(name.toLowerCase())) ?? null;
@@ -541,21 +662,25 @@ function heuristicPlan(content: string, projectNames: string[]): InboxPlan {
   const taskTitle = /卡|难|累|焦虑|压力|害怕|不确定|迷茫|拖延|没时间/.test(
     lower,
   )
-    ? `把「${short}」最卡的一处说清楚`
+    ? `动手排除「${short}」里卡住的那一步`
     : /用户|需求|反馈|市场|聊天|访谈|验证/.test(lower)
-      ? `围绕「${short}」拿到一次真实反馈`
+      ? `找真实用户验证「${short}」并记下结论`
       : /写|作品|网站|产品|发布|上线|原型|创作/.test(lower)
-        ? `做出「${short}」一个看得见的粗糙版本`
+        ? `把「${short}」做出一个能给别人看的版本`
         : /学习|学|考试|复习|练习/.test(lower)
-          ? `用 25 分钟处理「${short}」最难的一小块`
-          : `让「${short}」今天出现一个看得见的变化`;
+          ? `把「${short}」练出今天第一个能看见的结果`
+          : `围绕「${short}」做出今天能交付的成果`;
   const contract = buildTaskContract(content, taskTitle);
 
   return {
     action: projectName ? "existing_project" : "single_task",
+    mode: resolvePlanMode(
+      workMode,
+      heuristicProjectMode(content, Boolean(projectName)),
+    ),
     projectName: projectName ?? generatedProjectName,
-    projectObjective: null,
-    projectMilestone: null,
+    projectObjective: first,
+    projectMilestone: `围绕「${short}」产出一个能被别人直接看到的结果`,
     tasks: [
       {
         title: taskTitle,
@@ -641,8 +766,8 @@ function heuristicFirstRun(content: string): FirstRunPlan {
       : isCreation
         ? `给「${topic}」做出一个能看见轮廓的粗糙版本`
         : isLearning
-          ? `用 25 分钟攻下「${topic}」里最难的一小块`
-          : `为「${topic}」留下一个 30 分钟内看得见的进展`;
+          ? `把「${topic}」练出第一个能看见的结果`
+          : `为「${topic}」做出一个能真正拿出手的结果`;
   const taskShortTitle = normalizeShortTitle(null, taskTitle);
   const taskContract = buildTaskContract(clean, taskTitle);
   const objective = isKnowledge
@@ -709,270 +834,8 @@ function heuristicFirstRun(content: string): FirstRunPlan {
   };
 }
 
-function heuristicClarification(
-  content: string,
-  projectNames: string[],
-): InboxClarification {
-  const projectName =
-    projectNames.find((name) => content.includes(name)) ?? null;
-  const hasAny = (...words: string[]) =>
-    words.some((word) => content.includes(word));
 
-  if (projectName) {
-    return {
-      dimensions: [
-        {
-          key: "signal",
-          question: `对“${projectName}”来说，什么样的进展会让你觉得值得继续？`,
-          options: [
-            "有人愿意用或给反馈",
-            "有一个能拿出手的成果",
-            "自己终于进入了稳定节奏",
-          ],
-        },
-        {
-          key: "friction",
-          question: "现在最不顺手的地方是什么？",
-          options: [
-            "方向还不清楚",
-            "总被别的事挤掉",
-            "一做就想做到很完整",
-          ],
-        },
-        {
-          key: "support",
-          question: "这时你更希望走走怎么帮你？",
-          options: [
-            "把范围收小到能动手",
-            "把下一步说得足够具体",
-            "先陪我理清真正卡在哪",
-          ],
-        },
-      ],
-      supplementPlaceholder: `如果你觉得这些都不准确，可以补充两句，例如“我想用 ${projectName} 完成一个具体结果”。`,
-    };
-  }
 
-  if (
-    hasAny(
-      "卡",
-      "难",
-      "累",
-      "焦虑",
-      "压力",
-      "害怕",
-      "不确定",
-      "迷茫",
-      "拖延",
-      "没时间",
-      "忙",
-    )
-  ) {
-    return {
-      dimensions: [
-        {
-          key: "friction",
-          question: "现在最卡你的是什么？",
-          options: [
-            "不知道从哪儿动手",
-            "时间总被别的事挤掉",
-            "一想到要做完整就累",
-          ],
-        },
-        {
-          key: "energy",
-          question: "你眼下能腾出的精力有多少？",
-          options: [
-            "十分钟，只想先动一下",
-            "半小时，能认真做一小块",
-            "周末再集中处理",
-          ],
-        },
-        {
-          key: "support",
-          question: "哪种帮助对你最有用？",
-          options: [
-            "把范围缩小到能开始",
-            "直接把下一步写具体",
-            "先陪我理清为什么卡住",
-          ],
-        },
-      ],
-      supplementPlaceholder:
-        "也可以直接说说：什么最耗你，或者你希望今天结束时有什么变化。",
-    };
-  }
-
-  if (
-    hasAny("验证", "用户", "需求", "反馈", "市场", "别人", "聊天", "访谈")
-  ) {
-    return {
-      dimensions: [
-        {
-          key: "uncertainty",
-          question: "你现在最想先弄清哪件事？",
-          options: [
-            "有没有人真的需要",
-            "哪种做法更有人愿意接受",
-            "这件事值不值得继续投入",
-          ],
-        },
-        {
-          key: "feedback",
-          question: "谁最可能给你有用反馈？",
-          options: [
-            "已经遇到这个问题的人",
-            "做过类似事情的人",
-            "身边愿意直说的朋友",
-          ],
-        },
-        {
-          key: "signal",
-          question: "什么样的回应会让你愿意继续？",
-          options: [
-            "有人主动追问细节",
-            "有人愿意试用或预约",
-            "有人指出一个真实痛点",
-          ],
-        },
-      ],
-      supplementPlaceholder:
-        "也可以写下你目前最没底的那个判断，我会围绕它来问你。",
-    };
-  }
-
-  if (
-    hasAny("学习", "学", "考试", "习惯", "坚持", "复习", "读书", "练习")
-  ) {
-    return {
-      dimensions: [
-        {
-          key: "progress",
-          question: "这次你更想要哪种进展？",
-          options: [
-            "把难的地方弄懂",
-            "形成不容易断的节奏",
-            "做出一次能检查的结果",
-          ],
-        },
-        {
-          key: "interruption",
-          question: "最容易打断你的是什么？",
-          options: [
-            "不知道每天从哪儿开始",
-            "状态一差就容易停",
-            "内容太多，总想重头整理",
-          ],
-        },
-        {
-          key: "rhythm",
-          question: "哪种推进方式更像你？",
-          options: [
-            "每天固定一小段",
-            "一周集中几次",
-            "按状态灵活安排",
-          ],
-        },
-      ],
-      supplementPlaceholder:
-        "如果你愿意，也可以说说最近一次没坚持下来的原因。",
-    };
-  }
-
-  if (
-    hasAny("写", "作品", "网站", "产品", "发布", "上线", "原型", "整理", "创作")
-  ) {
-    return {
-      dimensions: [
-        {
-          key: "audience",
-          question: "你希望谁最先看到它？",
-          options: [
-            "先给自己看，确认方向",
-            "给少数目标用户看",
-            "直接公开发布",
-          ],
-        },
-        {
-          key: "shape",
-          question: "这一次你想先做出什么形态？",
-          options: [
-            "能看到轮廓的草稿",
-            "能实际使用的版本",
-            "一小块最关键的体验",
-          ],
-        },
-        {
-          key: "bottleneck",
-          question: "现在最影响推进的是什么？",
-          options: [
-            "内容还没想清楚",
-            "做起来太费时间",
-            "总在细节里打转",
-          ],
-        },
-      ],
-      supplementPlaceholder:
-        "也可以说说你希望它先解决谁的什么问题，我会据此继续问你。",
-    };
-  }
-
-  return {
-    dimensions: [
-      {
-        key: "change",
-        question: "这件事做成后，你最想看到什么变化？",
-        options: [
-          "不再只是想着，开始有真实进展",
-          "有一个能给别人看的成果",
-          "找回持续推进的手感",
-        ],
-      },
-      {
-        key: "friction",
-        question: "现在最不顺手的地方是什么？",
-        options: [
-          "不知道怎么开始",
-          "做到一半容易停下",
-          "选择太多，定不下来",
-        ],
-      },
-      {
-        key: "support",
-        question: "哪种开始方式更像你？",
-        options: [
-          "给我一个明确动作",
-          "先陪我把思路聊清",
-          "先看看别人怎么做",
-        ],
-      },
-    ],
-    supplementPlaceholder:
-      "如果这些都不太准，可以直接说说你真正在意什么，我会顺着你的话来问。",
-  };
-}
-
-function normalizeClarificationDimension(
-  value: unknown,
-): InboxClarificationDimension | null {
-  if (!value || typeof value !== "object") return null;
-  const raw = value as Record<string, unknown>;
-  if (typeof raw.question !== "string" || !Array.isArray(raw.options)) return null;
-  const options = raw.options
-    .filter((option): option is string => typeof option === "string" && Boolean(option.trim()))
-    .slice(0, 6)
-    .map((option) => option.trim().slice(0, 100));
-  if (!options.length) return null;
-  const key = typeof raw.key === "string" && raw.key.trim()
-    ? raw.key.trim().slice(0, 40)
-    : "dimension-" + Math.random().toString(36).slice(2, 7);
-  return {
-    key,
-    question: raw.question.trim().slice(0, 200),
-    options,
-    ...(raw.multi === true ? { multi: true } : {}),
-  };
-}
 
 function clarificationHistoryToDimensions(
   history: InboxClarificationHistoryItem[],
@@ -985,125 +848,314 @@ function clarificationHistoryToDimensions(
   }));
 }
 
-function normalizeClarificationFrame(
+
+
+function normalizeClarificationTranslation(
   value: unknown,
-  fallback: InboxClarificationFrame | null = null,
-): InboxClarificationFrame | null {
+  fallback: InboxClarificationTranslation,
+): InboxClarificationTranslation {
   if (!value || typeof value !== "object") return fallback;
   const raw = value as Record<string, unknown>;
-  const stringValue = (item: unknown, fallbackValue = "") =>
+  const stringValue = (item: unknown, fallbackValue: string) =>
     typeof item === "string" && item.trim()
       ? item.trim().slice(0, 500)
       : fallbackValue;
-  const stringList = (item: unknown) =>
+  const stringList = (item: unknown, fallbackValue: string[]) =>
     Array.isArray(item)
       ? item
           .filter(
             (entry): entry is string =>
               typeof entry === "string" && Boolean(entry.trim()),
           )
-          .slice(0, 5)
+          .slice(0, 6)
           .map((entry) => entry.trim().slice(0, 300))
-      : [];
-
-  const workingAssumptions = stringList(raw.workingAssumptions);
-  const methodOptions = stringList(raw.methodOptions);
-  const missingSlots = stringList(raw.missingSlots);
-  const completionOptions = stringList(raw.completionOptions);
-  const rawReadiness = raw.readiness;
-  const readiness: IdeaReadiness =
-    rawReadiness === "ready" ||
-    rawReadiness === "needs_context" ||
-    rawReadiness === "needs_meaning"
-      ? rawReadiness
-      : (fallback?.readiness ?? "ready");
-  const frame: InboxClarificationFrame = {
-    surfaceRequest: stringValue(raw.surfaceRequest, fallback?.surfaceRequest),
-    coreNeedHypothesis: stringValue(
-      raw.coreNeedHypothesis,
-      fallback?.coreNeedHypothesis,
+      : fallbackValue;
+  const readiness =
+    raw.readiness === "ready" ||
+    raw.readiness === "needs_context" ||
+    raw.readiness === "needs_meaning"
+      ? raw.readiness
+      : fallback.readiness;
+  const responseMode =
+    raw.responseMode === "answer" || raw.responseMode === "action"
+      ? raw.responseMode
+      : fallback.responseMode ?? "plan";
+  return {
+    originalInput: stringValue(raw.originalInput, fallback.originalInput),
+    literalMeaning: stringValue(raw.literalMeaning, fallback.literalMeaning),
+    normalizedIntent: stringValue(
+      raw.normalizedIntent,
+      fallback.normalizedIntent,
     ),
-    decisionFork: stringValue(raw.decisionFork, fallback?.decisionFork),
-    decisiveUnknown: stringValue(raw.decisiveUnknown, fallback?.decisiveUnknown),
-    whyItChangesPlan: stringValue(
-      raw.whyItChangesPlan,
-      fallback?.whyItChangesPlan,
-    ),
-    workingAssumptions: workingAssumptions.length
-      ? workingAssumptions
-      : (fallback?.workingAssumptions ?? []),
-    methodOptions: methodOptions.length
-      ? methodOptions
-      : (fallback?.methodOptions ?? []),
+    confirmedFacts: stringList(raw.confirmedFacts, fallback.confirmedFacts),
+    interpretations: stringList(raw.interpretations, fallback.interpretations),
+    valueJudgments: stringList(raw.valueJudgments, fallback.valueJudgments),
+    goals: stringList(raw.goals, fallback.goals),
+    constraints: stringList(raw.constraints, fallback.constraints),
+    unknowns: stringList(raw.unknowns, fallback.unknowns),
     readiness,
-    missingSlots: missingSlots.length
-      ? missingSlots
-      : (fallback?.missingSlots ?? []),
-    completionPrompt: stringValue(
-      raw.completionPrompt,
-      fallback?.completionPrompt,
-    ),
-    completionOptions: completionOptions.length
-      ? completionOptions
-      : (fallback?.completionOptions ?? []),
+    missingSlots: stringList(raw.missingSlots, fallback.missingSlots),
+    reason: stringValue(raw.reason, fallback.reason),
+    responseMode,
   };
-
-  const hasSignal = [
-    raw.surfaceRequest,
-    raw.coreNeedHypothesis,
-    raw.decisionFork,
-    raw.decisiveUnknown,
-    raw.whyItChangesPlan,
-    raw.completionPrompt,
-  ].some((item) => typeof item === "string" && Boolean(item.trim())) ||
-    workingAssumptions.length > 0 ||
-    methodOptions.length > 0 ||
-    missingSlots.length > 0 ||
-    completionOptions.length > 0;
-  return hasSignal ? frame : fallback;
 }
 
-function buildFallbackClarificationFrame(
+function buildFallbackClarificationTranslation(
   content: string,
-  question?: InboxClarificationDimension | null,
-): InboxClarificationFrame {
-  const assessment = assessIdeaReadiness(content);
+  history: InboxClarificationHistoryItem[],
+  assessment = assessIdeaReadiness(content),
+): InboxClarificationTranslation {
+  const answers = history
+    .flatMap((item) => item.answer)
+    .map((answer) => answer.trim())
+    .filter(Boolean);
   return {
-    surfaceRequest: content,
-    coreNeedHypothesis: `先判断「${content}」真正要推进的结果，而不是只顺着表面动作往下排任务。`,
-    decisionFork: "先确认真正想解决的问题，还是先做一个能开始的动作",
-    decisiveUnknown: question?.question ?? "这次最想先改变什么",
-    whyItChangesPlan: "答案会改变第一条任务、完成标准和最适合的做法。",
-    workingAssumptions: [],
-    methodOptions: [],
+    originalInput: content,
+    literalMeaning: content,
+    normalizedIntent: answers.length
+      ? answers.join("；").slice(0, 500)
+      : assessment.completionPrompt || content,
+    confirmedFacts: answers.slice(0, 6),
+    interpretations: [],
+    valueJudgments: [],
+    goals: [],
+    constraints: [],
+    unknowns: assessment.missingSlots,
     readiness: assessment.readiness,
     missingSlots: assessment.missingSlots,
+    reason: assessment.reason,
+    responseMode: "plan",
+  };
+}
+
+export type InboxClarificationResult = {
+  translation: InboxClarificationTranslation;
+  summary: InboxClarificationSummary;
+  /** readiness 不是 ready 时，翻译 Agent 额外给的一个补全问题；否则为 null。 */
+  question?: InboxClarificationDimension | null;
+};
+
+function buildFallbackSummaryFromTranslation(
+  content: string,
+  translation: InboxClarificationTranslation,
+): InboxClarificationSummary {
+  const intent =
+    translation.normalizedIntent || translation.literalMeaning || content;
+  return {
+    originalIdea: content,
+    realProblem: intent,
+    confirmedFacts: translation.confirmedFacts,
+    interpretations: translation.interpretations,
+    valueJudgments: translation.valueJudgments,
+    goals: translation.goals,
+    unverifiedAssumptions: translation.unknowns,
+    keyVariable: translation.unknowns[0] ?? "",
+    workingAssumption: intent,
+    ifWrongThen:
+      "如果执行后发现方向不对，先重做第一条任务，不要继续堆后续任务。",
+  };
+}
+
+function buildClarificationQuestionFallback(
+  content: string,
+): InboxClarificationDimension {
+  const assessment = assessIdeaReadiness(content);
+  const options = assessment.completionOptions.length
+    ? assessment.completionOptions
+    : ["一件工作或学习上的事", "一段关系或一次沟通", "生活安排或习惯"];
+  return {
+    key: assessment.readiness === "needs_meaning" ? "meaning" : "context",
+    question: assessment.completionPrompt || "先补一句：这件事具体指什么？",
+    options: options.slice(0, 4),
+  };
+}
+
+function normalizeClarificationQuestion(
+  value: unknown,
+  fallback: InboxClarificationDimension,
+): InboxClarificationDimension {
+  if (!value || typeof value !== "object") return fallback;
+  const raw = value as Record<string, unknown>;
+  const question =
+    typeof raw.question === "string" && raw.question.trim()
+      ? raw.question.trim().slice(0, 120)
+      : fallback.question;
+  const options = Array.isArray(raw.options)
+    ? raw.options
+        .filter((o): o is string => typeof o === "string" && Boolean(o.trim()))
+        .map((o) => o.trim().slice(0, 40))
+        .slice(0, 4)
+    : [];
+  const key =
+    typeof raw.key === "string" && raw.key.trim()
+      ? raw.key.trim().slice(0, 40)
+      : fallback.key;
+  return {
+    key,
+    question,
+    options: options.length >= 2 ? options : fallback.options,
+    ...(raw.multi === true ? { multi: true } : {}),
+  };
+}
+
+function buildFrameFromTranslation(
+  translation: InboxClarificationTranslation,
+  summary: InboxClarificationSummary,
+  content: string,
+): InboxClarificationFrame {
+  const assessment = assessIdeaReadiness(content);
+  const unknowns = translation.unknowns;
+  const workingAssumption =
+    summary.workingAssumption || translation.normalizedIntent;
+  return {
+    surfaceRequest: translation.literalMeaning || content,
+    coreNeedHypothesis: translation.normalizedIntent || summary.realProblem,
+    decisionFork: unknowns.length
+      ? `先按“${workingAssumption}”推进，还是先确认“${unknowns[0]}”`
+      : `直接按“${workingAssumption}”推进`,
+    decisiveUnknown: unknowns[0] ?? "",
+    whyItChangesPlan: unknowns.length
+      ? "这个未知点会改变第一条任务、完成标准和最适合的做法。"
+      : "没有会影响开工的未知点，按默认判断往下走。",
+    workingAssumptions: workingAssumption ? [workingAssumption] : [],
+    methodOptions: [],
+    readiness: translation.readiness,
+    missingSlots: translation.missingSlots.length
+      ? translation.missingSlots
+      : assessment.missingSlots,
     completionPrompt: assessment.completionPrompt,
     completionOptions: assessment.completionOptions,
   };
 }
 
-function hydrateClarificationFrame(
-  frame: InboxClarificationFrame | null,
-  question: InboxClarificationDimension | null,
-  content: string,
-): InboxClarificationFrame | null {
-  if (!frame || frame.readiness === "ready") return frame;
-  const assessment = assessIdeaReadiness(content);
-  return {
-    ...frame,
-    missingSlots: frame.missingSlots.length
-      ? frame.missingSlots
-      : assessment.missingSlots,
-    completionPrompt:
-      frame.completionPrompt || question?.question || assessment.completionPrompt,
-    completionOptions: frame.completionOptions.length
-      ? frame.completionOptions
-      : question?.options.length
-        ? question.options
-        : assessment.completionOptions,
-  };
+async function generateClarificationTranslation(input: {
+  content: string;
+  history: InboxClarificationHistoryItem[];
+  translation?: InboxClarificationTranslation | null;
+  apiKey?: string;
+  model?: string;
+  baseUrl?: string;
+  projectContext?: InboxProjectContext[];
+  memorySummary?: string | null;
+  evidence?: string[];
+  decisionMemory?: string[];
+}): Promise<InboxClarificationResult> {
+  const assessment = assessIdeaReadiness(input.content);
+  const fallbackTranslation = buildFallbackClarificationTranslation(
+    input.content,
+    input.history,
+    assessment,
+  );
+  const fallbackSummary = buildFallbackSummaryFromTranslation(
+    input.content,
+    fallbackTranslation,
+  );
+  const text = await callModel(
+    CLARIFICATION_TRANSLATION_SYSTEM_PROMPT,
+    buildClarificationTranslationUserPayload({
+      originalIdea: input.content,
+      contextSummary: input.memorySummary ?? null,
+      contextEvidence: input.evidence ?? [],
+      projectContext: input.projectContext ?? [],
+      decisionMemory: input.decisionMemory ?? [],
+      previousTranslation: input.translation ?? null,
+      inputAssessmentHint: assessment,
+      history: input.history.map((item) => ({
+        key: item.key,
+        question: item.question,
+        answers: item.answer,
+        reflection: item.reflection ?? null,
+      })),
+    }),
+    input.apiKey,
+    input.model,
+    input.baseUrl,
+    0.1,
+    {
+      maxTokens: 1400,
+      timeoutMs: 15_000,
+      totalBudgetMs: 15_000,
+      maxAttempts: 1,
+      reasoningEffort: "none",
+      qualityRules: "",
+    },
+  );
+  const fallbackQuestion =
+    fallbackTranslation.readiness === "ready"
+      ? null
+      : buildClarificationQuestionFallback(input.content);
+  if (!text) {
+    return {
+      translation: fallbackTranslation,
+      summary: fallbackSummary,
+      question: fallbackQuestion,
+    };
+  }
+  try {
+    const raw = JSON.parse(extractJson(text) ?? "{}") as Record<string, unknown>;
+    const translated =
+      raw.translation && typeof raw.translation === "object"
+        ? raw.translation
+        : raw;
+    const translation = normalizeClarificationTranslation(
+      translated,
+      fallbackTranslation,
+    );
+    const summary = normalizeClarificationSummary(
+      raw.summary,
+      buildFallbackSummaryFromTranslation(input.content, translation),
+    );
+    // 问不问由模型决定：它会考虑 readiness，也会考虑用户明说但没定的取舍。
+    // 模型没给问题、且本地判断信息不够时，才用本地兜底问题。
+    const question =
+      raw.question && typeof raw.question === "object"
+        ? normalizeClarificationQuestion(
+            raw.question,
+            buildClarificationQuestionFallback(input.content),
+          )
+        : translation.readiness === "ready"
+          ? null
+          : buildClarificationQuestionFallback(input.content);
+    return { translation, summary, question };
+  } catch {
+    return {
+      translation: fallbackTranslation,
+      summary: fallbackSummary,
+      question: fallbackQuestion,
+    };
+  }
 }
+
+/**
+ * 链路第 1 段的公开入口：任何输入都先翻译成结构化语义 + 默认判断。
+ * 首页澄清、计划前兜底、以及没有历史 translation 的调用都走这里。
+ */
+export async function translateIdea(input: {
+  content: string;
+  history?: InboxClarificationHistoryItem[];
+  translation?: InboxClarificationTranslation | null;
+  apiKey?: string;
+  model?: string;
+  baseUrl?: string;
+  projectContext?: InboxProjectContext[];
+  memorySummary?: string | null;
+  evidence?: string[];
+  decisionMemory?: string[];
+}): Promise<InboxClarificationResult> {
+  return generateClarificationTranslation({
+    content: input.content,
+    history: input.history ?? [],
+    translation: input.translation ?? null,
+    apiKey: input.apiKey,
+    model: input.model,
+    baseUrl: input.baseUrl,
+    projectContext: input.projectContext,
+    memorySummary: input.memorySummary,
+    evidence: input.evidence,
+    decisionMemory: input.decisionMemory,
+  });
+}
+
 
 function buildClarificationSession(
   frame: InboxClarificationFrame | null,
@@ -1161,82 +1213,14 @@ function normalizeClarificationSummary(
   };
 }
 
-function buildSocraticFallbackSummary(
-  content: string,
-  history: InboxClarificationHistoryItem[],
-): InboxClarificationSummary {
-  const answers = history.flatMap((item) => item.answer).map((answer) => answer.trim()).filter(Boolean);
-  const lastQuestion = history.at(-1)?.question ?? "";
-  return {
-    originalIdea: content,
-    realProblem: answers[0]
-      ? "你现在真正卡住的是：" + answers[0]
-      : "先把「" + content + "」里最影响下一步的限制说清楚。",
-    confirmedFacts: answers.slice(0, 3),
-    interpretations: [],
-    valueJudgments: [],
-    goals: [],
-    unverifiedAssumptions: [],
-    keyVariable: lastQuestion,
-    workingAssumption: lastQuestion
-      ? `先按“${lastQuestion}”所指的方向推进，规划时再根据实际情况调整。`
-      : "现有信息足够先做一版可调整的计划。",
-    ifWrongThen: "如果执行后发现方向不对，优先重做第一条任务，不继续堆后续任务。",
-  };
-}
 
-function buildSocraticStartFallback(
-  content: string,
-  projectNames: string[],
-): InboxClarification {
-  const fallback = heuristicClarification(content, projectNames);
-  const assessment = assessIdeaReadiness(content);
-  const first =
-    assessment.readiness === "ready"
-      ? fallback.dimensions[0]
-      : {
-          key: "context",
-          question: assessment.completionPrompt,
-          options: assessment.completionOptions,
-        };
-  if (!first) {
-    const frame = buildFallbackClarificationFrame(content);
-    const summary = buildSocraticFallbackSummary(content, []);
-    return {
-      dimensions: [],
-      supplementPlaceholder: "",
-      mode: "socratic",
-      status: "done",
-      askedCount: 0,
-      maxQuestions: 3,
-      history: [],
-      summary,
-      frame,
-      session: buildClarificationSession(frame, null, summary, true),
-    };
-  }
-  const history: InboxClarificationHistoryItem[] = [
-    { ...first, answer: [], reflection: null },
-  ];
-  const frame = buildFallbackClarificationFrame(content, first);
-  return {
-    dimensions: clarificationHistoryToDimensions(history),
-    supplementPlaceholder: "",
-    mode: "socratic",
-    status: "asking",
-    askedCount: 1,
-    maxQuestions: 3,
-    history,
-    summary: null,
-    frame,
-    session: buildClarificationSession(frame, first, null, false),
-  };
-}
+
 
 export async function generateSocraticClarification(input: {
   content: string;
   history: InboxClarificationHistoryItem[];
   frame?: InboxClarificationFrame | null;
+  translation?: InboxClarificationTranslation | null;
   apiKey?: string;
   model?: string;
   baseUrl?: string;
@@ -1247,291 +1231,137 @@ export async function generateSocraticClarification(input: {
   maxQuestions?: number;
   onDelta?: (delta: string) => void;
 }): Promise<InboxClarification> {
-  const maxQuestions = Math.min(Math.max(input.maxQuestions ?? 3, 1), 3);
-  const assessment = assessIdeaReadiness(input.content);
-  const contextFacts = [
-    ...(input.evidence ?? []),
-    ...(input.projectContext ?? []).flatMap((project) => [
-      project.name,
-      project.objective ?? "",
-      project.currentMilestone ?? "",
-      ...(project.openTasks ?? []).map((task) => task.title),
-    ]),
-  ].filter(Boolean);
-  const fallbackSummary = buildSocraticFallbackSummary(input.content, input.history);
-  const startFallback = buildSocraticStartFallback(
-    input.content,
-    (input.projectContext ?? []).map((project) => project.name),
-  );
-  const text = await callModel(
-    SOCRATIC_CLARIFY_SYSTEM_PROMPT,
-    buildSocraticClarifyUserPayload({
-      originalIdea: input.content,
-      contextSummary: input.memorySummary ?? null,
-      contextEvidence: input.evidence ?? [],
-      projectContext: input.projectContext ?? [],
-      decisionMemory: input.decisionMemory ?? [],
-      previousFrame: input.frame ?? null,
-      inputAssessmentHint: assessment,
-      history: input.history.map((item) => ({
-        key: item.key,
-        question: item.question,
-        answers: item.answer,
-        reflection: item.reflection ?? null,
-      })),
-      askedCount: input.history.length,
-      maxQuestions,
-    }),
-    input.apiKey,
-    input.model,
-    input.baseUrl,
-    0.55,
-    {
-      onDelta: input.onDelta,
-      maxTokens: 900,
-      qualityRules: CLARIFICATION_QUALITY_RULES,
-    },
-  );
+  const maxQuestions = Math.min(Math.max(input.maxQuestions ?? 3, 1), 5);
+  // 链路第 1 段：翻译 Agent 一次产出结构化语义 + 默认判断。
+  // 中间那段“提问/收敛”模型已经空转（autoConverge），主干不再调用它。
+  const { translation, summary, question } =
+    await generateClarificationTranslation({
+    content: input.content,
+    history: input.history,
+    translation: input.translation,
+    apiKey: input.apiKey,
+    model: input.model,
+    baseUrl: input.baseUrl,
+    projectContext: input.projectContext,
+    memorySummary: input.memorySummary,
+    evidence: input.evidence,
+    decisionMemory: input.decisionMemory,
+  });
+  const frame = buildFrameFromTranslation(translation, summary, input.content);
+  // readiness 不是 ready 就继续补信息，直到 ready 或问到上限；每轮只问一条，
+  // 问过的不复问、接得住上一轮回答。到上限无论 readiness 如何都往下走。
+  const answeredCount = input.history.filter(
+    (item) => item.answer.length > 0,
+  ).length;
+  // 问不问、问什么，全在第 1 段翻译 Agent 里决定——它才是那个知道"缺什么"的 agent。
+  // 生成 Agent 只在澄清收口之后才开工，不参与提问（不拿不完整的输入去跑生成）。
+  const finalQuestion = question;
 
-  if (!text) {
-    if (!input.history.length) return startFallback;
-    const frame = input.frame ?? buildFallbackClarificationFrame(input.content);
+  if (finalQuestion && answeredCount < maxQuestions) {
+    const historyItem: InboxClarificationHistoryItem = {
+      ...finalQuestion,
+      answer: [],
+      reflection: null,
+    };
     return {
       dimensions: clarificationHistoryToDimensions(input.history),
-      supplementPlaceholder: "",
-      mode: "socratic",
-      status: "done",
-      askedCount: input.history.length,
-      maxQuestions,
-      history: input.history,
-      summary: fallbackSummary,
-      frame,
-      session: buildClarificationSession(frame, null, fallbackSummary, true),
-    };
-  }
-
-  try {
-    const raw = JSON.parse(extractJson(text) ?? "{}") as Record<string, unknown>;
-    const frame = normalizeClarificationFrame(
-      raw.frame,
-      input.frame ?? buildFallbackClarificationFrame(input.content),
-    );
-    const mustAskCompletion =
-      assessment.readiness !== "ready" && input.history.length === 0;
-    const qualityIssues = checkClarificationQuality(
-      {
-        done: raw.done === true,
-        frame: raw.frame,
-        question: raw.question,
-        summary: raw.summary,
-      },
-      {
-        originalIdea: input.content,
-        previousQuestions: input.history.map((item) => item.question),
-        contextFacts,
-      },
-    );
-    if (qualityIssues.length) {
-      console.warn(`[ai] clarification quality: ${qualityIssues.join("; ")}`);
-    }
-    const forcedDone =
-      (raw.done === true && !mustAskCompletion) ||
-      input.history.length >= maxQuestions;
-    if (forcedDone) {
-      const summary = normalizeClarificationSummary(
-        raw.summary,
-        fallbackSummary,
-      );
-      const hydratedFrame = hydrateClarificationFrame(
-        frame,
-        null,
-        input.content,
-      );
-      return {
-        dimensions: clarificationHistoryToDimensions(input.history),
-        supplementPlaceholder: "",
-        mode: "socratic",
-        status: "done",
-        askedCount: input.history.length,
-        maxQuestions,
-        history: input.history,
-        summary,
-        frame: hydratedFrame,
-        session: buildClarificationSession(
-          hydratedFrame,
-          null,
-          summary,
-          true,
-        ),
-      };
-    }
-
-    const question = normalizeClarificationDimension(raw.question);
-    if (!question) {
-      if (mustAskCompletion) return startFallback;
-      if (!input.history.length) return startFallback;
-      const summary = normalizeClarificationSummary(
-        raw.summary,
-        fallbackSummary,
-      );
-      const hydratedFrame = hydrateClarificationFrame(
-        frame,
-        null,
-        input.content,
-      );
-      return {
-        dimensions: clarificationHistoryToDimensions(input.history),
-        supplementPlaceholder: "",
-        mode: "socratic",
-        status: "done",
-        askedCount: input.history.length,
-        maxQuestions,
-        history: input.history,
-        summary,
-        frame: hydratedFrame,
-        session: buildClarificationSession(
-          hydratedFrame,
-          null,
-          summary,
-          true,
-        ),
-      };
-    }
-
-    const reflection = typeof raw.reflection === "string" && raw.reflection.trim()
-      ? raw.reflection.trim().slice(0, 300)
-      : null;
-    const history: InboxClarificationHistoryItem[] = [
-      ...input.history,
-      { ...question, answer: [], reflection },
-    ];
-    const hydratedFrame = hydrateClarificationFrame(
-      frame,
-      question,
-      input.content,
-    );
-    return {
-      dimensions: clarificationHistoryToDimensions(history),
       supplementPlaceholder: "",
       mode: "socratic",
       status: "asking",
-      askedCount: history.length,
+      askedCount: answeredCount,
       maxQuestions,
-      history,
+      history: [...input.history, historyItem],
       summary: null,
-      frame: hydratedFrame,
-      session: buildClarificationSession(
-        hydratedFrame,
-        question,
-        null,
-        false,
-      ),
-    };
-  } catch {
-    if (!input.history.length) return startFallback;
-    const frame = input.frame ?? buildFallbackClarificationFrame(input.content);
-    return {
-      dimensions: clarificationHistoryToDimensions(input.history),
-      supplementPlaceholder: "",
-      mode: "socratic",
-      status: "done",
-      askedCount: input.history.length,
-      maxQuestions,
-      history: input.history,
-      summary: fallbackSummary,
+      translation,
       frame,
-      session: buildClarificationSession(frame, null, fallbackSummary, true),
+      session: buildClarificationSession(frame, finalQuestion, null, false),
     };
   }
+  // 澄清收口 → 先定模式，再交给第 2 段。第 2、3 段只承接这个结论。
+  const workMode = await judgeWorkMode({
+    content: input.content,
+    translation,
+    summary,
+    history: input.history,
+    apiKey: input.apiKey,
+    model: input.model,
+    baseUrl: input.baseUrl,
+  });
+
+  return {
+    dimensions: clarificationHistoryToDimensions(input.history),
+    supplementPlaceholder: "",
+    mode: "socratic",
+    status: "done",
+    workMode,
+    askedCount: input.history.length,
+    maxQuestions,
+    history: input.history,
+    summary,
+    translation,
+    frame,
+    session: buildClarificationSession(frame, null, summary, true),
+  };
 }
 
-export async function clarifyInbox(
-  content: string,
-  projectNames: string[],
-  apiKey?: string,
-  model?: string,
-  baseUrl?: string,
-  projectContext?: InboxProjectContext[],
-  memorySummary?: string,
-  evidence?: string[],
-  onDelta?: (delta: string) => void,
-) {
-  const fallback = heuristicClarification(content, projectNames);
+/**
+ * 澄清收口之后、生成之前的模式判断。
+ *
+ * 位置是用户明确要求的：模式必须在这里定下来，第 2 段规划执行和第 3 段收敛排版
+ * 只承接结论，不再自己判。判断器沿用 MODE_JUDGMENT_SYSTEM_PROMPT（与 eval:mode 共用）。
+ */
+export async function judgeWorkMode(input: {
+  content: string;
+  translation?: InboxClarificationTranslation | null;
+  summary?: InboxClarificationSummary | null;
+  history?: InboxClarificationHistoryItem[];
+  apiKey?: string;
+  model?: string;
+  baseUrl?: string;
+}): Promise<ProjectMode> {
+  const answers = (input.history ?? [])
+    .flatMap((item) => item.answer)
+    .map((entry) => entry.trim())
+    .filter(Boolean);
+  const clarified = [
+    input.translation?.normalizedIntent,
+    input.summary?.realProblem,
+    ...answers,
+  ]
+    .filter((item): item is string => Boolean(item && String(item).trim()))
+    .join("；");
   const text = await callModel(
-    `你是走走里的推进伙伴，不是问卷生成器。用户会输入一个真实想法，你要像认真聊天一样，先找到此刻最值得弄清的 2-4 个维度，再给每个维度 3 个能直接点击的具体选项。
-要求：
-- 从用户原话和上下文出发，不要固定套用“结果、优先级、第一步”这类模板。
-- 不要每道题都围着“最小行动”转。可根据内容选择：真正在意什么变化、担心什么、有哪些现实限制、能调动什么资源、谁能给反馈、什么信号算值得继续、当前最卡在哪、什么节奏更适合。
-- 问题和选项要口语化、有区分度，避免项目管理腔，避免三道题都像是同一种问法。
-- 每道题尽量让用户更容易说真话，而不是被逼着选一个标准答案。
-- 只返回 JSON，不要 Markdown。格式：{"dimensions":[{"key":"维度标识","question":"简短问题","options":["3个简单选项"]}],"supplementPlaceholder":"补充框提示语"}。`,
-    JSON.stringify({
-      content,
-      projectNames,
-      projects: projectContext ?? [],
-      memorySummary: memorySummary ?? null,
-      contextEvidence: evidence ?? [],
-    }),
-    apiKey,
-    model,
-    baseUrl,
-    0.7,
-    { onDelta, maxTokens: 1200 },
+    MODE_JUDGMENT_SYSTEM_PROMPT,
+    buildModeJudgmentUserPayload([
+      {
+        id: "current",
+        input: input.content,
+        ...(clarified ? { clarified } : {}),
+      },
+    ]),
+    input.apiKey,
+    input.model,
+    input.baseUrl,
+    0.1,
+    {
+      maxTokens: 700,
+      timeoutMs: 12_000,
+      totalBudgetMs: 12_000,
+      maxAttempts: 1,
+      reasoningEffort: "none",
+      qualityRules: "",
+    },
   );
-
-  if (!text) return fallback;
-
-  try {
-    const raw = JSON.parse(
-      extractJson(text) ?? "{}",
-    ) as Record<string, unknown>;
-    const rawDimensions = Array.isArray(raw.dimensions)
-      ? raw.dimensions
-      : raw.question && Array.isArray(raw.options)
-        ? [
-            {
-              key: "direction",
-              question: raw.question,
-              options: raw.options,
-            },
-          ]
-        : [];
-    const dimensions = rawDimensions
-      .filter(
-        (dimension): dimension is InboxClarificationDimension =>
-          Boolean(dimension) &&
-          typeof dimension === "object" &&
-          typeof dimension.question === "string" &&
-          Array.isArray(dimension.options),
-      )
-      .map((dimension) => ({
-        key:
-          typeof dimension.key === "string" && dimension.key.trim()
-            ? dimension.key.trim()
-            : `dimension-${Math.random().toString(36).slice(2, 7)}`,
-        question: dimension.question.trim().slice(0, 200),
-        options: dimension.options
-          .filter(
-            (option): option is string =>
-              typeof option === "string" && option.trim().length > 0,
-          )
-          .slice(0, 3)
-          .map((option) => option.trim().slice(0, 100)),
-      }))
-      .filter((dimension) => dimension.question && dimension.options.length)
-      .slice(0, 4);
-
-    return {
-      dimensions: dimensions.length ? dimensions : fallback.dimensions,
-      supplementPlaceholder:
-        typeof raw.supplementPlaceholder === "string" &&
-        raw.supplementPlaceholder.trim()
-          ? raw.supplementPlaceholder.trim()
-          : fallback.supplementPlaceholder,
-    };
-  } catch {
-    return fallback;
+  // callModel 失败时 text 为空，pickModeFromJudgment 会落 normal。
+  // 落 normal 等于「做完一次就结束」，会把长期 / 探索目标压小；
+  // 所以模型没给出结论时，再用本地规则兜一层。
+  if (!text || !text.trim()) {
+    return heuristicProjectMode(
+      [clarified, input.content].filter(Boolean).join("；"),
+      false,
+    );
   }
+  return pickModeFromJudgment(text);
 }
 
 export async function planInbox(
@@ -1553,11 +1383,12 @@ export async function planInbox(
   clarificationFrame?: InboxClarificationFrame | null,
   clarificationSession?: DecisionSession | null,
   decisionMemory?: string[],
-) {
+  workMode?: string,
+): Promise<InboxPlan>  {
   const clarifiedContent = [content, direction, supplement]
     .filter((part): part is string => Boolean(part?.trim()))
     .join("\n");
-  const fallback = heuristicPlan(clarifiedContent, projectNames);
+  const fallback = heuristicPlan(clarifiedContent, projectNames, workMode);
 
   const text = await callModel(
     PLAN_SYSTEM_PROMPT,
@@ -1580,15 +1411,16 @@ export async function planInbox(
       decisionMemory: decisionMemory ?? [],
       contextEvidence: evidence ?? [],
       maxTasks: maxTasks ?? null,
+      workMode: workMode ?? null,
     }),
     apiKey,
     model,
     baseUrl,
     0.65,
-    { onDelta, maxTokens: 2800 },
+    { onDelta, maxTokens: 2800, reasoningEffort: "none" },
   );
 
-  if (!text) return fallback;
+  if (!text) return { ...fallback, source: "heuristic_fallback" };
 
   try {
     const raw = JSON.parse(extractJson(text) ?? "{}") as Partial<InboxPlan>;
@@ -1633,6 +1465,13 @@ export async function planInbox(
     return {
       action,
       taskDisposition,
+      // 用户显式选了就听用户的；智能模式才采用模型判断，模型没给就用本地启发式兜底。
+      mode: isProjectMode(workMode)
+        ? workMode
+        : normalizeProjectMode(
+            raw.mode ??
+              heuristicProjectMode(clarifiedContent, action !== "single_task"),
+          ),
       projectName,
       projectObjective:
         typeof raw.projectObjective === "string" && raw.projectObjective.trim()
@@ -1648,6 +1487,7 @@ export async function planInbox(
           ? raw.reason.trim()
           : fallback.reason,
       session,
+      source: "model",
     };
   } catch (error) {
     console.warn(
@@ -1655,135 +1495,46 @@ export async function planInbox(
       error instanceof Error ? error.message : error,
       text.slice(0, 500),
     );
-    return fallback;
+    return { ...fallback, source: "heuristic_fallback" };
   }
 }
 
 export async function generateFirstRunPlan(
   content: string,
 ): Promise<FirstRunPlanResult> {
-  type RawFirstRunPlan = Partial<{
-    projectName: string;
-    objective: string;
-    milestone: string;
-    taskTitle: string;
-    taskShortTitle: string;
-    executionMode: string;
-    doneWhen: string;
-    methodHint: string;
-    taskRecommendation: string;
-    taskExecutionSteps: string[];
-    taskFallback: string;
-    maxTurns: number;
-    toolPolicy: string;
-  }>;
   const fallback: FirstRunPlanResult = {
     ...heuristicFirstRun(content),
     usedFallback: true,
   };
-  const text = await callModel(
-    FIRST_RUN_PLAN_SYSTEM_PROMPT,
-    JSON.stringify({ idea: content }),
-    undefined,
-    undefined,
-    undefined,
-    0.7,
-  );
-
-  if (!text) return fallback;
-
   try {
-    const raw = JSON.parse(extractJson(text) ?? "{}") as RawFirstRunPlan;
-    const trimmed = content.trim();
-    const projectName =
-      typeof raw.projectName === "string" && raw.projectName.trim()
-        ? raw.projectName.trim().slice(0, 60)
-        : fallback.projectName;
-    const objective =
-      typeof raw.objective === "string" &&
-      raw.objective.trim() &&
-      raw.objective.trim() !== trimmed &&
-      !/把[“”"].*变成|实际推进.*随时调整|初版|最小|第一步|先确认|先看到|核心方向|现实限制|最先值得|能看见|真正能执行/.test(
-        raw.objective,
-      )
-        ? raw.objective.trim().slice(0, 500)
-        : fallback.objective;
-    const milestone =
-      typeof raw.milestone === "string" &&
-      raw.milestone.trim() &&
-      !/初版|最小|第一步|具体成果|出现第一个|第一个进展|确认这件事/.test(
-        raw.milestone,
-      )
-        ? raw.milestone.trim().slice(0, 200)
-        : fallback.milestone;
-    const taskTitle =
-      typeof raw.taskTitle === "string" &&
-      raw.taskTitle.trim() &&
-      raw.taskTitle.trim() !== trimmed
-        ? raw.taskTitle.trim().slice(0, 200)
-        : fallback.taskTitle;
-    const taskShortTitle = normalizeShortTitle(raw.taskShortTitle, taskTitle);
-    const contract = buildTaskContract(trimmed, taskTitle);
-    const executionMode =
-      typeof raw.executionMode === "string" &&
-      ["quick", "tool", "produce", "explore", "project"].includes(raw.executionMode)
-        ? raw.executionMode
-        : contract.executionMode;
-    const doneWhen =
-      typeof raw.doneWhen === "string" && raw.doneWhen.trim()
-        ? raw.doneWhen.trim().slice(0, 200)
-        : contract.doneWhen;
-    const methodHint =
-      typeof raw.methodHint === "string" && raw.methodHint.trim()
-        ? raw.methodHint.trim().slice(0, 240)
-        : contract.methodHint;
-    const maxTurns =
-      typeof raw.maxTurns === "number" && raw.maxTurns > 0
-        ? Math.min(Math.floor(raw.maxTurns), 5)
-        : contract.maxTurns;
-    const toolPolicy =
-      typeof raw.toolPolicy === "string" &&
-      ["none", "read", "confirm-write"].includes(raw.toolPolicy)
-        ? raw.toolPolicy
-        : contract.toolPolicy;
-    const taskRecommendation =
-      typeof raw.taskRecommendation === "string" && raw.taskRecommendation.trim()
-        ? raw.taskRecommendation.trim().slice(0, 400)
-        : methodHint;
-    const taskExecutionSteps = Array.isArray(raw.taskExecutionSteps)
-      ? raw.taskExecutionSteps
-          .filter((item): item is string => typeof item === "string")
-          .map((item) => item.trim())
-          .filter(Boolean)
-          .slice(0, 4)
-      : [];
-    const taskFallback =
-      typeof raw.taskFallback === "string"
-        ? raw.taskFallback.trim().slice(0, 240)
-        : "";
-
+    // 首次引导的“想法 → 执行路径”与主链共用同一套三段 Agent：
+    // 翻译 → 生成内容 → 收敛，不再单独维护一份一次性提示词。
+    const { planNormalWithAgents } = await import("@/lib/agent-plan/normal");
+    const outcome = await planNormalWithAgents({ content, maxTasks: 3 });
+    if (outcome.status !== "ok") return fallback;
+    const plan = outcome.plan;
+    const task = plan.tasks[0];
+    if (!task) return fallback;
     return {
-      projectName:
-        projectName === trimmed ? fallback.projectName : projectName,
-      objective,
-      milestone,
-      taskTitle,
-      taskShortTitle,
-      taskExecutionMode: executionMode,
-      taskDoneWhen: doneWhen,
-      taskMethodHint: methodHint,
-      taskRecommendation,
-      taskExecutionSteps,
-      taskFallback,
-      taskMaxTurns: maxTurns,
-      taskToolPolicy: toolPolicy,
+      projectName: (plan.projectName ?? fallback.projectName).slice(0, 60),
+      objective: (plan.projectObjective ?? fallback.objective).slice(0, 500),
+      milestone: (plan.projectMilestone ?? fallback.milestone).slice(0, 200),
+      taskTitle: task.title.slice(0, 200),
+      taskShortTitle: task.shortTitle,
+      taskExecutionMode: task.executionMode,
+      taskDoneWhen: task.doneWhen.slice(0, 200),
+      taskMethodHint: task.methodHint.slice(0, 240),
+      taskRecommendation: (task.recommendation || task.methodHint).slice(0, 400),
+      taskExecutionSteps: task.executionSteps.slice(0, 8),
+      taskFallback: (task.fallback ?? "").slice(0, 240),
+      taskMaxTurns: task.maxTurns,
+      taskToolPolicy: task.toolPolicy,
       usedFallback: false,
     };
   } catch {
     return fallback;
   }
 }
-
 export async function generateTaskEditSuggestion(input: {
   title: string;
   shortTitle?: string | null;
@@ -2007,6 +1758,10 @@ export async function generateTaskCoachAdvice(input: {
   projectName?: string | null;
   status?: string;
   message: string;
+  projectMode?: string | null;
+  executionMode?: string | null;
+  doneWhen?: string | null;
+  methodHint?: string | null;
 }, memorySummary?: string, evidence?: string[]): Promise<TaskCoachAdvice> {
   const fallback = buildLocalTaskCoachAdvice(input);
   const decisionKind = routeDecisionKind({
@@ -2023,16 +1778,27 @@ export async function generateTaskCoachAdvice(input: {
 - 禁止每次使用同一套结构；根据用户原话里的具体词改变标题、鼓励语、步骤和下一步。
 - 把用户原话中的细节直接带进内容，不要只替换任务名。
 - 先判断用户更需要澄清、取舍、找反馈、降低阻力还是直接动手，不必每次都拆成“小步”。
-- 步骤要具体到马上能做；nextStep 是接下来最合适的动作，通常 10-20 分钟，不要总以“先”字开头，也不要固定写“最小一步”。
+- 步骤要具体到马上能做；nextStep 是接下来最该动手做的真实动作，指向一个能交出去的结果，不要总以“先”字开头，也不要固定写“最小一步”，更不要把动作压成“花几分钟随便做点”。
 - nextStep 不能是“思考一下”“整理思路”这类抽象指令。
+- steps 是执行卡片上的行动块，可以带序号，但不是把任务拆成空洞步骤。每块要是一段完整行动：做什么、用什么工具或方法、最后拿到什么；能合并就合并，不要为了凑结构拆碎。
+- 大多数任务 2-4 块就够；只有步骤之间有明显前后依赖或各自有独立产出时才多分，不要为了完整感把一件事拆成很多块。
+- steps 文本里不要自己写“1.”“2.”“第一步”“第二步”，序号由界面统一显示，你只写每块的行动内容。
+- 每块写到能直接照做就停，不要展开成教程；需要代码、提示词或文案时可以直接给出，其他说明尽量压短。
+- 按项目模式调整详略：普通模式给完整处理方法和完成标志；长期模式只说这一轮怎么推进当前阶段、做完后从哪里继续；探索模式说这次练什么或试什么、记录什么反馈，不谈完成度。
+- 工具自然融进行动里：需要外部工具就写清打开什么、输入什么、拿到什么；不需要就写清怎么做和得到什么。不要单独列工具清单，也不要为了显得具体硬塞。
+- 需要判断时写清怎么算做到；不需要判断就不要硬加验收标准。AI 现在就能产出的内容（文案、比较、改法、清单、判断）要直接写出来，不要让用户再问一遍 AI。
+- 涉及日期、年份或有效期时，必须基于输入里的 currentDate，不能凭记忆写错年份。
+- 工具名和网址必须准确；不确定网址就不要写，只写工具名和搜索关键词，避免编造链接。
+- 只返回一个 JSON 对象，不要把多个 JSON 对象拼在一起，也不要重复输出同一步。
 - 不要用“你只需要”“你应该”这类说教句式。
 - 语气像人写的，不像 AI 生成的。
 - 只返回 JSON，不要 Markdown。
-格式：{"title":"便利贴标题","encouragement":"一句鼓励","steps":["2-3个具体指导步骤"],"nextStep":"接下来可做的具体动作"}
+格式：{"title":"便利贴标题","encouragement":"一句鼓励","steps":["可以带序号，也可以不写序号；每块是一段完整行动"],"nextStep":"接下来可做的具体动作"}
 示例输入：任务“整理作品集”，想法“我不知道该放什么”
-示例输出：{"title":"从三张最能代表你的作品开始","encouragement":"你不知道放什么，是因为还没想清楚要给谁看。","steps":["写下你希望作品集让谁看到","挑三张你最想被记住的作品","把这三张放上去，其他以后再说"],"nextStep":"挑三张作品并放上去"}`,
+示例输出：{"title":"先按目标岗位反推作品顺序","encouragement":"你不知道放什么，是因为还没定作品集要给谁看。","steps":["把目标岗位的招聘要求和现有简历贴给 AI，让它列出对方最在意的 3 类能力","从现有作品里挑出分别证明这 3 类能力的 3 个项目","把项目按“问题—做法—结果”改写成三句话，先放进作品集"],"nextStep":"把目标岗位链接和简历贴给 AI，让它反推作品顺序"}`,
     JSON.stringify({
       ...input,
+      currentDate: toDateInputValue(new Date()),
       decisionKind,
       memorySummary: memorySummary ?? null,
       contextEvidence: evidence ?? [],
@@ -2041,6 +1807,7 @@ export async function generateTaskCoachAdvice(input: {
     undefined,
     undefined,
     0.75,
+    { maxTokens: 4000, reasoningEffort: "none" },
   );
 
   if (!text) return fallback;
@@ -2053,7 +1820,16 @@ export async function generateTaskCoachAdvice(input: {
             (step): step is string =>
               typeof step === "string" && step.trim().length > 0,
           )
-          .slice(0, 4)
+          .map((step) =>
+            step
+              .replace(
+                /^\s*(?:\d{1,2}\s*[.、)）]|第[一二三四五六七八九十]+步[:：]?)\s*/,
+                "",
+              )
+              .trim(),
+          )
+          .filter(Boolean)
+          .slice(0, 8)
       : [];
 
     return {
@@ -2101,15 +1877,15 @@ function buildLocalTaskCoachAdvice(input: {
         steps: [
           `把“${title}”的第一步写成“打开、写下、列出或试做”这类动作。`,
           `从“${short}”里挑一个你最关心的词，作为这次目标。`,
-          `只做 10 分钟，做完就停。`,
+          `先做起来，做到有结果再停。`,
         ],
-        nextStep: `用一句话写出“${title}”的 10 分钟第一步。`,
+        nextStep: `写出“${title}”今天要交付的具体结果。`,
       },
       {
-        title: `${title} 的最小开始`,
+        title: `${title} 的第一次动手`,
         encouragement: `“${short}”还没有变成动作，所以你觉得不知道怎么开始。`,
         steps: [
-          `把“${title}”变成一个今天能完成的最小结果。`,
+          `把“${title}”变成今天能做完、并且有产出的结果。`,
           `把“${short}”转成一句能问自己的话。`,
           `先回答那句话，再决定下一步。`,
         ],
@@ -2119,9 +1895,9 @@ function buildLocalTaskCoachAdvice(input: {
         title: `${title} 的第一次推进`,
         encouragement: `“${title}”对你不是没价值，是第一步还没被定义清楚。`,
         steps: [
-          `先给“${title}”设一个 10 分钟标准。`,
+          `先明确“${title}”今天要做到哪一步。`,
           `从“${short}”里找出最容易先做到的部分。`,
-          `今天只完成那一个部分。`,
+          `今天把最先能落地的那一步做出来。`,
         ],
         nextStep: `完成“${title}”里最容易先做到的部分。`,
       },
@@ -2152,13 +1928,13 @@ function buildLocalTaskCoachAdvice(input: {
       },
       {
         title: `${title} 的下一步`,
-        encouragement: `你已经走到具体问题这一步，剩下的不是重新开始，而是拆小。`,
+        encouragement: `你已经走到具体问题这一步，剩下的不是重新开始，而是把能做的做出来。`,
         steps: [
-          `找出“${title}”里你现在能控制的最小部分。`,
+          `找出“${title}”里你现在能直接动手做的部分。`,
           `先做能控制的，暂时放下不能控制的。`,
           `把下一步写成一句明确的动作。`,
         ],
-        nextStep: `写出“${title}”里现在能控制的具体动作。`,
+        nextStep: `把“${title}”里能控制的那一步先做出来。`,
       },
     ][seed % 3];
   }
@@ -2167,33 +1943,33 @@ function buildLocalTaskCoachAdvice(input: {
     return [
       {
         title: `${title} 的碎片版`,
-        encouragement: `你说“${short}”，那就把它切成 10 分钟能吃下去的样子。`,
+        encouragement: `你说“${short}”，那就先做能立刻动手、又能出结果的那部分。`,
         steps: [
-          `把“${title}”拆成 10 分钟和 30 分钟两个版本。`,
-          `今天只做 10 分钟版本。`,
+          `把“${title}”拆成今天能做完和需要更多时间两个版本。`,
+          `今天先把能做完的那版做出来。`,
           `做完后把剩余部分标记为明天继续。`,
         ],
-        nextStep: `完成“${title}”的 10 分钟版。`,
+        nextStep: `做出“${title}”今天这一版。`,
       },
       {
         title: `${title} 的低负担版`,
         encouragement: `没时间通常不是真的没有，而是这个任务在你心里被放大了。`,
         steps: [
-          `把“${title}”缩小成“只做一步”的标准。`,
+          `把“${title}”定成今天真正能交付的一个结果。`,
           `先做最不需要准备材料的那一步。`,
           `做完后允许自己停。`,
         ],
-        nextStep: `完成“${title}”里最不需要准备的一步。`,
+        nextStep: `把“${title}”里最不依赖额外准备的一步做出来。`,
       },
       {
-        title: `${title} 的 10 分钟入口`,
-        encouragement: `不用等有空，先给“${title}”留 10 分钟。`,
+        title: `${title} 的起步动作`,
+        encouragement: `不用等有空，先动手把“${title}”做出一版。`,
         steps: [
-          `把“${title}”里最容易启动的动作挑出来。`,
-          `设一个 10 分钟倒计时。`,
-          `时间到就停，不要求做完。`,
+          `挑出“${title}”里最先能动手做的那一步。`,
+          `先动手做起来，不用等准备齐全。`,
+          `做到有结果为止。`,
         ],
-        nextStep: `今天做 10 分钟“${title}”。`,
+        nextStep: `今天把“${title}”做出第一个结果。`,
       },
     ][seed % 3];
   }
@@ -2240,7 +2016,7 @@ function buildLocalTaskCoachAdvice(input: {
       steps: [
         `把“${title}”写成具体结果。`,
         `从“${short}”里挑一个能验证的词。`,
-        `先完成能验证的最小一步。`,
+        `先把能验证结果的那一步做出来。`,
       ],
       nextStep: `写出“${title}”的具体结果。`,
     },
@@ -2248,21 +2024,21 @@ function buildLocalTaskCoachAdvice(input: {
       title: `${title} 的下一步`,
       encouragement: `关于“${title}”，你已经有关键想法了，现在只需要把它变成动作。`,
       steps: [
-        `把“${title}”拆成一个今天能做的动作。`,
+        `把“${title}”落到今天能真正做出的一个结果。`,
         `把“${short}”里最想解决的部分放进去。`,
         `从不需要别人帮忙的那一项开始。`,
       ],
-      nextStep: `写出“${title}”今天能做的第一个动作。`,
+      nextStep: `做出“${title}”今天该交付的第一个结果。`,
     },
     {
       title: `${title} 的推进点`,
       encouragement: `“${short}”就是这次推进的入口，不用再重新想方向。`,
       steps: [
-        `围绕“${short}”选一个小动作。`,
-        `先做 10 分钟。`,
+        `围绕“${short}”直接动手做。`,
+        `先动手做起来。`,
         `把结果或卡点写下来。`,
       ],
-      nextStep: `围绕“${short}”做 10 分钟。`,
+      nextStep: `围绕“${short}”做出一个结果。`,
     },
   ][seed % 3];
 }
@@ -2316,13 +2092,16 @@ export async function suggestTodayFocus(
   if (!tasks.length) return fallback;
 
   const text = await callModel(
-    "你是走走里的今日推进伙伴，不是标准排期助手。根据任务列表、最近复盘、用户反馈和 decisionMemory，选择今天最值得推进的 1-3 个任务。不要只按优先级和截止日期选；reason 要像朋友解释为什么今天做它，可以引用复盘、项目状态、最近完成/延期/取消结果或用户原话，不要总用“先做最小一步”这类说法。如果最近有任务延期、取消、计划被忽略或建议无效，优先降低密度、换方法或缩小范围，不要重复推荐同类高压任务。只返回 JSON，不要 Markdown。格式：{\"suggestions\":[{\"title\":\"任务标题\",\"reason\":\"中文理由\"}]}。",
+    "你是走走里的今日推进伙伴，不是标准排期助手。根据任务列表、最近复盘、用户反馈和 decisionMemory，选择今天最值得推进的 1-3 个任务。不要只按优先级和截止日期选；reason 要像朋友解释为什么今天做它，可以引用复盘、项目状态、最近完成/延期/取消结果或用户原话，不要总用“先做最小一步”这类说法。如果最近有任务延期、取消、计划被忽略或建议无效，优先降低密度、换方法或缩小范围，不要重复推荐同类高压任务。同一 batchId 是同一批计划拆出的任务，planOrder 是原定顺序；如果一件正好是另一件的前提，优先推它。只返回 JSON，不要 Markdown。格式：{\"suggestions\":[{\"title\":\"任务标题\",\"reason\":\"中文理由\"}]}。",
     JSON.stringify({
       tasks: tasks.map((task) => ({
         title: task.title,
         project: task.projectName,
         priority: task.priority,
         dueDate: task.dueDate?.toISOString().slice(0, 10),
+        scheduledDate: task.scheduledDate?.toISOString().slice(0, 10),
+        planOrder: task.planOrder ?? null,
+        batchId: task.batchId ?? null,
       })),
       reviewSummary: context?.reviewSummary ?? null,
       projects: context?.projects ?? [],
@@ -2440,7 +2219,7 @@ export async function generateReviewDraft(input: {
     taskCount: number;
     openTaskCount?: number;
   }>;
-}, evidence?: string[], onDelta?: (delta: string) => void, decisionMemory?: string[]) {
+}, evidence?: string[], onDelta?: (delta: string) => void, decisionMemory?: string[], scope?: { projectName: string; cadence: string | null }) {
   const fallback = heuristicReview(
     input.completed,
     input.open,
@@ -2450,10 +2229,17 @@ export async function generateReviewDraft(input: {
 
   const reviewPrompt = `你是走走里的每日复盘伙伴。请根据当天完成的任务、今日计划、未完成任务、项目状态和 decisionMemory，写一段像用户自己留在纸上的复盘，不要写成汇报、心理分析或总结陈词。decisionMemory 里的完成、延期、取消、忽略计划和最近便利贴动作要用来判断下一步：重复延期的要缩小范围，被取消或无效的不要原样再来。summary 2-4 句话，先说具体做了什么，再说卡在哪里、下一步怎么判断；不要使用“今天真正推进的是”“不是……而是……”“意味着”“价值在于”等模板句，不要罗列任务数量。nextActions 只写 ${MAX_REVIEW_NEXT_ACTIONS} 条，也可以返回空字符串。已有未完成任务时不要再新建，只判断继续、调整还是替换；只有项目没有未完成任务时才给一条新任务。每条任务分两行：第一行是 6-16 个字的精简标题，第二行是 20-45 个字的具体说明。不要标序号、不要项目符号、不要竖线、不要写日期。只返回 JSON，不要 Markdown。格式：{\"summary\":\"总结\",\"nextActions\":\"精简标题\\n具体说明\"}。`;
 
+  // 探索项目复盘：范围是"单个没有终点的项目"，问法要跟着换
+  const scopedPrompt = scope
+    ? reviewPrompt +
+      `\n\n这次复盘的范围是**单个项目**：「${scope.projectName}」（当前节奏：${scope.cadence ?? "未设定"}）。用户在做一件没有终点的长期成长，所以：不要问"完成了吗"、不要算完成度、不要提"还剩多少"；要回看"这段时间练到哪了、卡在哪、下一条练什么"。nextActions 就是下一次要练的那一条。**只谈这一个项目：不要提到其他项目、其他项目的任务或其他事的进度**，即使 contextEvidence / decisionMemory 里出现了它们。`
+    : reviewPrompt;
+
   const text = await callModel(
-    reviewPrompt,
+    scopedPrompt,
     JSON.stringify({
       ...input,
+      scope: scope ?? null,
       contextEvidence: evidence ?? [],
       decisionMemory: decisionMemory ?? [],
     }),

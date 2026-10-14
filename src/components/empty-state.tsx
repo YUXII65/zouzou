@@ -9,7 +9,7 @@ export function EmptyState({
 }: {
   icon: LucideIcon;
   title: string;
-  hint: string;
+  hint?: string;
   action?: ReactNode;
 }) {
   return (
@@ -19,7 +19,11 @@ export function EmptyState({
       </span>
       <div className="mt-4 h-px w-8 bg-border" />
       <p className="mt-3 text-sm font-medium text-ink">{title}</p>
-      <p className="mt-1 max-w-sm text-xs leading-5 text-ink-secondary">{hint}</p>
+      {hint ? (
+        <p className="mt-1 max-w-sm text-xs leading-5 text-ink-secondary">
+          {hint}
+        </p>
+      ) : null}
       {action ? <div className="mt-4">{action}</div> : null}
     </div>
   );

@@ -140,12 +140,12 @@ export function FirstRunGuide({
       setAiFallback(true);
       setPlanSourceIdea(ideaValue);
       setProjectName(ideaValue.slice(0, 12) || "第一个项目");
-      setObjective(`把“${ideaValue}”推进成今天能做的一件事。`);
-      setMilestone("开始推进");
-      setTaskTitle(`把「${ideaValue}」里最影响推进的地方写成一句话`);
-      setTaskDoneWhen("写下一个今天能开始的具体动作");
-      setTaskMethodHint("先写成一个 30 分钟内能完成的具体动作，再判断它是否真的能推进。");
-      setTaskRecommendation("先写成一个 30 分钟内能完成的具体动作，再判断它是否真的能推进。");
+      setObjective(`把“${ideaValue}”推进到真正做起来。`);
+      setMilestone("做出第一个可见结果");
+      setTaskTitle(`把「${ideaValue}」做出第一个可见结果`);
+      setTaskDoneWhen("出现一个能直接看到的结果");
+      setTaskMethodHint("直接动手做最小但真实的一部分，做出一个能看见的结果，再判断下一步。");
+      setTaskRecommendation("直接动手做最小但真实的一部分，做出一个能看见的结果，再判断下一步。");
       setTaskExecutionSteps("写下今天能开始的那个具体动作");
       setTaskFallback("");
       setTaskMaxTurns("1");
@@ -255,12 +255,12 @@ export function FirstRunGuide({
                 <div className="mt-3 flex flex-wrap gap-2">
                   {samples.map((sample) => (
                     <button
-                      key={sample}
+                      key={sample.title}
                       type="button"
-                      onClick={() => handleIdeaChange(sample)}
+                      onClick={() => handleIdeaChange(sample.content)}
                       className="max-w-full rounded-lg border border-border bg-surface px-3 py-2 text-left text-xs leading-5 text-ink-secondary transition-colors hover:border-accent hover:text-accent"
                     >
-                      {sample}
+                      {sample.title}
                     </button>
                   ))}
                 </div>

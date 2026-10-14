@@ -3,8 +3,15 @@ import { createHmac } from "node:crypto";
 export const SESSION_COOKIE = "next_step_session";
 export const SESSION_MAX_AGE_SECONDS = 60 * 60 * 24 * 30;
 
+const DEV_SECRET = "next-step-dev-secret-change-me";
+
 function secret() {
-  return process.env.AUTH_SECRET || "next-step-dev-secret-change-me";
+  const value = process.env.AUTH_SECRET?.trim();
+  if (value && value !== "change-to-a-long-random-string") return value;
+  if (process.env.NODE_ENV === "production") {
+    throw new Error("AUTH_SECRET 必须在生产环境配置为足够长的随机字符串");
+  }
+  return DEV_SECRET;
 }
 
 export function issueSessionToken(userId: string) {

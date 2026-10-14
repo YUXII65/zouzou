@@ -17,9 +17,13 @@ const WAITING_LABELS = [
 ];
 
 /**
- * 任务展开后直接显示的便利贴内容。
- * 只保留主体：1 / 2 / 3 的执行步骤。标题、解释、"现在可以做"、删除按钮都不显示。
+ * 任务展开后直接显示的执行卡片。
+ * 行动块可以带序号，但每块是一段完整行动；标题、解释、"现在可以做"、删除按钮都不显示。
  */
+function stickySteps(note: TaskStickyNoteData) {
+  return (note.steps.length ? note.steps : [note.nextStep]).filter(Boolean);
+}
+
 export function TaskStickyInline({
   taskId,
   title,
@@ -85,26 +89,58 @@ export function TaskStickyInline({
         </p>
       ) : savedNotes.length ? (
         <div className="space-y-3">
-          {savedNotes.map((note) => {
-            const steps = (note.steps.length ? note.steps : [note.nextStep]).filter(
-              Boolean,
-            );
-            return (
-              <ol key={note.id} className="space-y-1.5">
-                {steps.map((step, stepIndex) => (
-                  <li
-                    key={`${note.id}-${stepIndex}`}
-                    className="flex items-start gap-2 text-sm leading-6 text-ink"
-                  >
-                    <span className="mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-full bg-surface/80 text-xs font-medium text-ink-secondary">
-                      {stepIndex + 1}
-                    </span>
-                    <span>{step}</span>
-                  </li>
+          {savedNotes[0].encouragement ? (
+            <details
+              open
+              className="mb-2 rounded-lg border border-warning/15 bg-surface/65 px-2.5 py-2"
+            >
+              <summary className="cursor-pointer list-none text-xs font-medium text-ink-secondary">
+                补充信息
+              </summary>
+              <p className="mt-2 whitespace-pre-wrap text-xs leading-5 text-ink-secondary">
+                {savedNotes[0].encouragement}
+              </p>
+            </details>
+          ) : null}
+
+          <ol className="space-y-2">
+            {stickySteps(savedNotes[0]).map((step, stepIndex) => (
+              <li
+                key={`${savedNotes[0].id}-${stepIndex}`}
+                className="flex items-start gap-2.5 rounded-lg border border-warning/15 bg-surface/65 px-2.5 py-2 text-sm leading-6 text-ink"
+              >
+                <span className="mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-full bg-surface/80 text-xs font-medium text-ink-secondary">
+                  {stepIndex + 1}
+                </span>
+                <span className="min-w-0 flex-1 whitespace-pre-wrap">{step}</span>
+              </li>
+            ))}
+          </ol>
+
+          {savedNotes.length > 1 ? (
+            <details className="rounded-lg border border-warning/15 bg-surface/45 px-2.5 py-2">
+              <summary className="cursor-pointer list-none text-xs font-medium text-ink-muted">
+                查看之前的便利贴（{savedNotes.length - 1}）
+              </summary>
+              <div className="mt-2 space-y-3">
+                {savedNotes.slice(1).map((note) => (
+                  <ol key={note.id} className="space-y-1.5 opacity-80">
+                    {stickySteps(note).map((step, stepIndex) => (
+                      <li
+                        key={`${note.id}-${stepIndex}`}
+                        className="flex items-start gap-2 rounded-lg border border-warning/10 bg-surface/50 px-2 py-1.5 text-sm leading-6 text-ink-secondary"
+                      >
+                        <span className="mt-0.5 flex size-4 shrink-0 items-center justify-center rounded-full bg-surface/80 text-[10px] font-medium text-ink-muted">
+                          {stepIndex + 1}
+                        </span>
+                        <span className="min-w-0 flex-1 whitespace-pre-wrap">{step}</span>
+                      </li>
+                    ))}
+                  </ol>
                 ))}
-              </ol>
-            );
-          })}
+              </div>
+            </details>
+          ) : null}
         </div>
       ) : (
         <p className="text-xs leading-5 text-ink-secondary">

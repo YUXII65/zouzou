@@ -15,11 +15,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import "dotenv/config";
-import { extractJsonObject as extractJson } from "../src/lib/json-extract.ts";
-import {
-  FIRST_RUN_PLAN_SYSTEM_PROMPT,
-  OUTPUT_QUALITY_RULES,
-} from "../src/lib/ai-prompts.ts";
+import { createChainRunner } from "./lib/run-chain.mjs";
 
 const root = path.resolve(import.meta.dirname, "..");
 const apiKey = process.env.DEEPSEEK_API_KEY || process.env.OPENAI_API_KEY;
@@ -41,7 +37,7 @@ const argOf = (name) => {
 };
 const label = argOf("label") ?? "";
 
-const systemPrompt = `${FIRST_RUN_PLAN_SYSTEM_PROMPT}\n\n${OUTPUT_QUALITY_RULES}`;
+const chain = createChainRunner({ baseUrl, apiKey, model });
 
 const cases = [
   {
@@ -77,31 +73,20 @@ const BANNED =
 const DEFERRED =
   /挑出\s*\d*\s*种组合|拍[^\n]{0,20}(挑|选)|再(去)?决定|回头再(挑|选|决定)|到时候再(挑|选|决定)/;
 
+/** 首次引导和主链共用同一套三段 Agent，这里把 plans[0] 映射成首启字段。 */
 async function callPlan(idea) {
-  const response = await fetch(`${baseUrl}/chat/completions`, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      model,
-      messages: [
-        { role: "system", content: systemPrompt },
-        { role: "user", content: JSON.stringify({ idea }) },
-      ],
-      temperature: 0.7,
-      max_tokens: 900,
-      ...(/deepseek/i.test(model) || /deepseek/i.test(baseUrl)
-        ? { reasoning_effort: "none" }
-        : {}),
-    }),
-  });
-  if (!response.ok) {
-    throw new Error(`AI 请求失败：${response.status}`);
-  }
-  const data = await response.json();
-  return data.choices?.[0]?.message?.content ?? "";
+  const { plan } = await chain.runChain(idea, { maxTasks: 3 });
+  const task = Array.isArray(plan.tasks) ? plan.tasks[0] ?? {} : {};
+  return {
+    projectName: plan.projectName ?? "",
+    projectObjective: plan.projectObjective ?? "",
+    projectMilestone: plan.projectMilestone ?? "",
+    taskTitle: task.title ?? "",
+    taskShortTitle: task.shortTitle ?? "",
+    taskRecommendation: task.recommendation ?? "",
+    taskExecutionSteps: Array.isArray(task.executionSteps) ? task.executionSteps : [],
+    taskFallback: task.fallback ?? "",
+  };
 }
 
 function runChecks(aiCase, plan) {
@@ -163,8 +148,7 @@ for (const aiCase of cases) {
   let plan = null;
   let issues = [];
   try {
-    const raw = await callPlan(aiCase.input);
-    plan = JSON.parse(extractJson(raw) ?? "{}");
+    plan = await callPlan(aiCase.input);
     issues = runChecks(aiCase, plan);
   } catch (error) {
     issues = [error instanceof Error ? error.message : String(error)];

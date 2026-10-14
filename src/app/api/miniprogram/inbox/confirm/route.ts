@@ -9,6 +9,12 @@ import {
   decisionCardFromTask,
   stickyPayloadFromDecisionCard,
 } from "@/lib/decision";
+import {
+  currentProjectStageId,
+  ensureCurrentProjectStage,
+  syncProjectStageGate,
+} from "@/lib/project-stage";
+import { ensureProjectTracks } from "@/lib/inbox-project";
 
 export const dynamic = "force-dynamic";
 
@@ -173,6 +179,7 @@ export async function POST(request: Request) {
       executionMode: plannedTask.executionMode,
       maxTurns: plannedTask.maxTurns,
       toolPolicy: plannedTask.toolPolicy,
+      trackName: plannedTask.trackName ?? null,
     };
   });
 
@@ -204,6 +211,7 @@ export async function POST(request: Request) {
           userId: user.id,
           name: projectName,
           objective: projectObjective ?? "由收件箱想法创建的项目",
+          mode: plan.mode ?? item.mode ?? "normal",
           currentMilestone: projectMilestone,
           createdFromInboxItemId: item.id,
           notes: item.content,
@@ -217,6 +225,36 @@ export async function POST(request: Request) {
       });
       projectId = project?.id ?? projectId;
     }
+
+    const project = projectId
+      ? await tx.project.findUnique({
+          where: { id: projectId, userId: user.id },
+          select: { mode: true, objective: true },
+        })
+      : null;
+    if (projectId) {
+      await ensureCurrentProjectStage(tx, {
+        userId: user.id,
+        projectId,
+        mode: project?.mode ?? plan.mode ?? item.mode ?? "normal",
+        milestone: projectMilestone,
+        objective: projectObjective ?? project?.objective,
+      });
+    }
+    const stageId = projectId
+      ? await currentProjectStageId(tx, { userId: user.id, projectId })
+      : null;
+    // 探索模式落线路图；其他模式 plan.tracks 为空。
+    const trackMap = projectId
+      ? await ensureProjectTracks(tx, {
+          userId: user.id,
+          projectId,
+          tracks:
+            (project?.mode ?? plan.mode ?? item.mode) === "explore"
+              ? plan.tracks ?? []
+              : [],
+        })
+      : new Map<string, string>();
 
     const firstTask = tasks[0];
     const openTasks = projectId
@@ -246,6 +284,8 @@ export async function POST(request: Request) {
           shortTitle: task.shortTitle,
           notes: task.notes,
           projectId,
+          stageId,
+          trackId: task.trackName ? trackMap.get(task.trackName) ?? null : null,
           priority: task.priority,
           scheduledDate: task.scheduledDate,
           dueDate: task.dueDate,
@@ -289,6 +329,10 @@ export async function POST(request: Request) {
         data: { notes: mergedNotes },
       });
       attachedTaskId = anchorTaskId;
+    }
+
+    if (projectId) {
+      await syncProjectStageGate(tx, { userId: user.id, projectId });
     }
 
     await tx.inboxItem.update({

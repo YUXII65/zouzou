@@ -1,9 +1,8 @@
-import { getCurrentUser } from "@/lib/auth";
-import { isAiQuotaEnabled } from "@/lib/ai-quota";
+import { readSessionUserId } from "@/lib/auth";
+import { shouldUseClientAiOverrides } from "@/lib/ai-quota";
 import { buildAiStreamPreview } from "@/lib/ai-stream-preview";
 import {
   advanceSocraticInboxClarification,
-  createInboxClarification,
   createSocraticInboxClarification,
 } from "@/lib/inbox-ai";
 import { createNdjsonResponse } from "@/lib/ndjson-response";
@@ -21,8 +20,8 @@ type ClarifyRequest = {
 };
 
 export async function POST(request: Request) {
-  const user = await getCurrentUser();
-  if (!user) {
+  const userId = await readSessionUserId();
+  if (!userId) {
     return Response.json({ error: "请先登录" }, { status: 401 });
   }
 
@@ -33,14 +32,13 @@ export async function POST(request: Request) {
     return Response.json({ error: "请求内容不正确" }, { status: 400 });
   }
 
-  const overrides = isAiQuotaEnabled()
-    ? undefined
-    : {
+  const overrides = shouldUseClientAiOverrides()
+    ? {
         apiKey: body.apiKey?.trim() || undefined,
         model: body.model?.trim() || undefined,
         baseUrl: body.baseUrl?.trim() || undefined,
-      };
-
+      }
+    : undefined;
   if (body.mode === "socratic" && body.itemId) {
     const itemId = body.itemId.trim();
     const answer = Array.isArray(body.answer)
@@ -55,7 +53,7 @@ export async function POST(request: Request) {
       let raw = "";
       let lastPreview = "";
       const result = await advanceSocraticInboxClarification({
-        userId: user.id,
+        userId: userId,
         itemId,
         answer,
         overrides,
@@ -93,20 +91,12 @@ export async function POST(request: Request) {
         send({ type: "preview", text: preview });
       }
     };
-    const result =
-      body.mode === "socratic"
-        ? await createSocraticInboxClarification({
-            userId: user.id,
-            content,
-            overrides,
-            onDelta,
-          })
-        : await createInboxClarification({
-            userId: user.id,
-            content,
-            overrides,
-            onDelta,
-          });
+    const result = await createSocraticInboxClarification({
+      userId: userId,
+      content,
+      overrides,
+      onDelta,
+    });
     send({ type: "done", result });
   });
 }

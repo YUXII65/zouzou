@@ -23,7 +23,7 @@ function taskContractData(input: { title: string; notes?: string | null; executi
 }
 
 export async function syncReviewRelations(
-  review: { id: string; reviewDate: Date },
+  review: { id: string; reviewDate: Date; projectId?: string | null },
   nextActions: Array<{ title: string; shortTitle: string }>,
   userId: string,
 ) {
@@ -68,7 +68,9 @@ export async function syncReviewRelations(
         orderBy: [{ updatedAt: "desc" }, { id: "asc" }],
         select: { id: true },
       });
-  const defaultProjectId = projectCandidates[0]?.id ?? fallbackProject?.id ?? null;
+  // 项目复盘：nextActions 明确归属这个项目，不要靠标题猜
+  const defaultProjectId =
+    review.projectId ?? projectCandidates[0]?.id ?? fallbackProject?.id ?? null;
 
   function projectIdForNextAction(title: string) {
     const normalized = title.trim().toLowerCase();

@@ -2,30 +2,32 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import {
   ArrowRight,
+  CheckCircle2,
   Clock3,
   Focus,
   ListTodo,
 } from "lucide-react";
-import { CalendarDatePanel } from "@/components/calendar-date-panel";
 import { FirstRunTour } from "@/components/first-run-tour";
+import { FIRST_RUN_TOUR_ENABLED } from "@/lib/tour";
 import { Panel, PanelHeader } from "@/components/panel";
 import { EmptyState } from "@/components/empty-state";
 import { StatusBadge } from "@/components/status-badge";
 import { TodayTaskActions } from "@/components/today-task-actions";
 import { TaskRowDisclosure } from "@/components/task-row-disclosure";
 import { AiTaskPlanner } from "@/components/ai-task-planner";
+import { TodayFocusControls } from "@/components/today-focus-controls";
+import { after } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { loadHomeSupport } from "@/lib/home-support";
+import { buildAiContext } from "@/lib/ai-context";
 import { getCurrentUser } from "@/lib/auth";
-import {
-  getFirstRunState,
-  isFirstPlanGroupComplete,
-} from "@/lib/first-run";
 import { serializeTaskStickyNote } from "@/lib/task-sticky";
 import {
   endOfDay,
   formatDate,
   isSameDay,
   startOfDay,
+  toDateInputValue,
 } from "@/lib/date";
 
 const priorityOrder: Record<string, number> = {
@@ -76,36 +78,35 @@ export default async function TodayPage() {
   const now = new Date();
   const dayStart = startOfDay(now);
   const dayEnd = endOfDay(now);
-  const [firstRun, tasks, pendingInbox, reviewCount] =
-    await Promise.all([
-      getFirstRunState(user.id, user.createdAt),
-      prisma.task.findMany({
-        where: { userId: user.id },
-        include: {
-          project: { select: { name: true } },
-          inboxItem: { select: { id: true } },
-          reviewNextAction: {
-            select: {
-              review: { select: { reviewDate: true } },
-            },
+  // 首页读路径保持并发：任务列表 + 新手状态 / 今日推荐 / 待整理 + 待确认的阶段门。
+  // 详见 src/lib/home-support.ts 里对跨洋链路并发劣化的说明。
+  const [support, tasks, readyStage] = await Promise.all([
+    loadHomeSupport({ userId: user.id, createdAt: user.createdAt, now }),
+    prisma.task.findMany({
+      where: { userId: user.id },
+      include: {
+        project: { select: { name: true } },
+        inboxItem: { select: { id: true } },
+        reviewNextAction: {
+          select: {
+            review: { select: { reviewDate: true } },
           },
-          stickyNotes: { orderBy: { createdAt: "desc" } },
         },
-        orderBy: { createdAt: "desc" },
-      }),
-      prisma.inboxItem.findMany({
-        where: { userId: user.id, status: "inbox" },
-        select: {
-          id: true,
-          content: true,
-          aiPlanJson: true,
-          aiSuggestionJson: true,
-        },
-        orderBy: { createdAt: "desc" },
-        take: 10,
-      }),
-      prisma.review.count({ where: { userId: user.id } }),
-    ]);
+        stickyNotes: { orderBy: { createdAt: "desc" } },
+      },
+      orderBy: { createdAt: "desc" },
+    }),
+    prisma.projectStage.findFirst({
+      where: { userId: user.id, status: "ready" },
+      orderBy: [{ updatedAt: "desc" }, { id: "asc" }],
+      select: {
+        id: true,
+        deliverable: true,
+        project: { select: { name: true } },
+      },
+    }),
+  ]);
+  const { firstRun, focusSuggestions, pendingInbox } = support;
 
 
   const openTasks = tasks.filter(
@@ -146,7 +147,7 @@ export default async function TodayPage() {
     return false;
   });
 
-  // 今天完成的也留在「今天要做」里：按 completedAt 落在今天判断，
+  // 今天完成的也留在「今日建议」里：按 completedAt 落在今天判断，
   // 过了 0 点自然就不在今天，等于每天自动清空。
   const completedTodayTasks = tasks
     .filter(
@@ -162,54 +163,84 @@ export default async function TodayPage() {
     )
     .slice(0, 5);
 
-  const todayTasks = [
-    ...(todayRelevant.length ? todayRelevant : agenda).slice(0, 3),
-    ...completedTodayTasks,
-  ];
-  const firstGroupReviewEligible =
-    reviewCount === 0 && (await isFirstPlanGroupComplete(user.id));
+  // 「今日建议」的待办部分交给模型取舍：当天已有推荐时按推荐取，
+  // 规则只在没有推荐时兜底、以及推荐名额因完成/取消空出来时补位。
+  const ruleOrdered = todayRelevant.length ? todayRelevant : agenda;
+  const openById = new Map(openTasks.map((task) => [task.id, task]));
+  const recommendedOpen = (focusSuggestions ?? [])
+    .map((item) => openById.get(item.taskId))
+    .filter((task): task is (typeof openTasks)[number] => Boolean(task));
+
+  const recommendedIds = new Set(recommendedOpen.map((task) => task.id));
+  const backfill = ruleOrdered.filter((task) => !recommendedIds.has(task.id));
+  const focusTarget = focusSuggestions
+    ? Math.min(3, focusSuggestions.length)
+    : 3;
+  const plannedTasks = [...recommendedOpen, ...backfill].slice(0, focusTarget);
+
+  const reasonByTaskId = new Map(
+    (focusSuggestions ?? []).map((item) => [item.taskId, item.reason]),
+  );
+  // 用户读页面 / 打字的时间足够把 AI 上下文查好：放到响应之后预热，提交时直接命中缓存，
+  // 省掉第一次 5~6 秒的跨洋查询（见 AGENTS.md「性能优化」一节）。
+  after(() =>
+    buildAiContext({ kind: "inbox_plan", userId: user.id }).catch(() => {}),
+  );
+
+  const dateKey = toDateInputValue(now);
+
+  const todayTasks = [...plannedTasks, ...completedTodayTasks];
 
   return (
     <>
-      {firstRun.isFirstRun ? (
+      {FIRST_RUN_TOUR_ENABLED ? (
         <FirstRunTour
           initialStep={firstRun.tourStep}
           context="home"
           hasTasks={tasks.length > 0}
-          reviewEligible={firstGroupReviewEligible}
+          enabled={firstRun.isFirstRun}
         />
       ) : null}
-      <CalendarDatePanel now={now} />
 
       <Panel>
-        <AiTaskPlanner
-          pending={pendingInbox}
-          quotaManaged={process.env.AI_QUOTA_ENABLED === "true"}
-          serverAiConfigured={Boolean(
-            process.env.DEEPSEEK_API_KEY || process.env.OPENAI_API_KEY,
-          )}
-        />
+        <AiTaskPlanner pending={pendingInbox} />
       </Panel>
 
       <Panel className="mt-6">
         <PanelHeader
-          title="今天要做"
+          title="今日建议"
           icon={ListTodo}
           action={
-            <span className="text-xs font-medium text-ink-muted">
-              {todayTasks.length} 条
-            </span>
+            <TodayFocusControls
+              count={plannedTasks.length}
+              hasFocus={Boolean(focusSuggestions?.length)}
+              dateKey={dateKey}
+            />
           }
         />
         {todayTasks.length ? (
           <div className="divide-y divide-border">
-            {todayTasks.map((task) => (
+            {plannedTasks.map((task) => (
               <AgendaTaskRow
                 key={task.id}
                 task={task}
                 now={now}
                 dayStart={dayStart}
-                showLabels={firstRun.isFirstRun}
+                reason={reasonByTaskId.get(task.id) ?? null}
+              />
+            ))}
+            {completedTodayTasks.length ? (
+              <div className="flex items-center gap-1.5 bg-surface-muted/60 px-4 py-2 text-xs font-medium text-ink-muted">
+                <CheckCircle2 className="size-3.5" />
+                今天完成 {completedTodayTasks.length}
+              </div>
+            ) : null}
+            {completedTodayTasks.map((task) => (
+              <AgendaTaskRow
+                key={task.id}
+                task={task}
+                now={now}
+                dayStart={dayStart}
               />
             ))}
           </div>
@@ -217,29 +248,31 @@ export default async function TodayPage() {
           <EmptyState
             icon={Focus}
             title="今天还没有重点"
-            hint="先记录一个想法，会先听懂你，再帮你拆成今天能做的事。"
-            action={
-              <a
-                href="#quick-capture"
-                className="zouzou-primary-button inline-flex h-9 items-center gap-1.5 rounded-lg bg-accent px-3.5 text-sm font-medium text-white transition-colors hover:bg-accent-strong"
-              >
-                记一个想法
-                <ArrowRight className="size-4" />
-              </a>
-            }
           />
         )}
       </Panel>
 
-      <div className="mt-6 flex justify-end">
-        <Link
-          href="/review"
-          className="zouzou-secondary-button inline-flex h-10 items-center gap-2 rounded-lg border border-border bg-surface px-4 text-sm font-medium text-ink-secondary transition-colors hover:border-accent hover:text-accent"
-        >
-          去复盘
-          <ArrowRight className="size-4" />
-        </Link>
-      </div>
+      {readyStage ? (
+        <Panel className="mt-6">
+          <div className="flex items-center justify-between gap-3 px-4 py-3">
+            <div className="min-w-0">
+              <p className="truncate text-sm font-medium text-ink">
+                「{readyStage.project.name}」这一阶段完成了
+              </p>
+              <p className="mt-0.5 truncate text-xs text-ink-muted">
+                {readyStage.deliverable}
+              </p>
+            </div>
+            <Link
+              href="/files"
+              className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-lg bg-accent px-3 text-xs font-medium text-white transition-colors hover:bg-accent-strong"
+            >
+              下一阶段
+              <ArrowRight className="size-3.5" />
+            </Link>
+          </div>
+        </Panel>
+      ) : null}
     </>
   );
 }
@@ -249,12 +282,12 @@ function AgendaTaskRow({
   task,
   now,
   dayStart,
-  showLabels,
+  reason,
 }: {
   task: AgendaTask;
   now: Date;
   dayStart: Date;
-  showLabels?: boolean;
+  reason?: string | null;
 }) {
   const isFocused = task.focusDate && isSameDay(task.focusDate, now);
   const isOverdue = task.dueDate && task.dueDate < dayStart;
@@ -266,44 +299,45 @@ function AgendaTaskRow({
   return (
     <div className="flex flex-col gap-3 px-4 py-3 lg:flex-row lg:items-center">
       <div className="min-w-0 flex-1">
-        <div className="flex min-w-0 flex-wrap items-center gap-2">
-          {isFocused ? (
-            <span className="inline-flex h-5 items-center gap-1 rounded bg-accent-soft px-1.5 text-[11px] font-medium text-accent-strong">
-              <Focus className="size-3" />
-              重点
+        <TaskRowDisclosure
+          taskId={task.id}
+          title={task.title}
+          shortTitle={task.shortTitle}
+          notes={task.notes}
+          projectName={task.project?.name ?? null}
+          status={task.status}
+          initialNotes={task.stickyNotes.map(serializeTaskStickyNote)}
+        >
+          <span className="mt-2 flex min-w-0 flex-wrap items-center gap-2">
+            {isFocused ? (
+              <span className="inline-flex h-5 items-center gap-1 rounded bg-accent-soft px-1.5 text-[11px] font-medium text-accent-strong">
+                <Focus className="size-3" />
+                重点
+              </span>
+            ) : null}
+            {isOverdue ? (
+              <span className="inline-flex h-5 items-center gap-1 rounded bg-danger/10 px-1.5 text-[11px] font-medium text-danger">
+                <Clock3 className="size-3" />
+                逾期
+              </span>
+            ) : null}
+            {isScheduled ? (
+              <span className="inline-flex h-5 items-center gap-1 rounded bg-surface-muted px-1.5 text-[11px] font-medium text-ink-secondary">
+                <ListTodo className="size-3" />
+                计划
+              </span>
+            ) : null}
+            <span className="truncate text-xs text-ink-secondary">
+              {taskSource(task)}
             </span>
-          ) : null}
-          {isOverdue ? (
-            <span className="inline-flex h-5 items-center gap-1 rounded bg-danger/10 px-1.5 text-[11px] font-medium text-danger">
-              <Clock3 className="size-3" />
-              逾期
-            </span>
-          ) : null}
-          {isScheduled ? (
-            <span className="inline-flex h-5 items-center gap-1 rounded bg-surface-muted px-1.5 text-[11px] font-medium text-ink-secondary">
-              <ListTodo className="size-3" />
-              计划
-            </span>
-          ) : null}
-          <div className="min-w-0 flex-1">
-            <TaskRowDisclosure
-              taskId={task.id}
-              title={task.title}
-              shortTitle={task.shortTitle}
-              notes={task.notes}
-              projectName={task.project?.name ?? null}
-              status={task.status}
-              initialNotes={task.stickyNotes.map(serializeTaskStickyNote)}
-            />
-
-          </div>
-        </div>
-        <p className="mt-1 truncate text-xs text-ink-secondary">
-          {taskSource(task)}
-        </p>
-        {task.dueDate ? (
-          <p className="mt-1 text-xs text-danger">截止 {formatDate(task.dueDate)}</p>
-        ) : null}
+            {reason ? (
+              <span className="text-xs leading-5 text-ai">{reason}</span>
+            ) : null}
+            {task.dueDate ? (
+              <span className="text-xs text-danger">建议 {formatDate(task.dueDate)}前完成</span>
+            ) : null}
+          </span>
+        </TaskRowDisclosure>
       </div>
       <div className="flex w-full flex-wrap items-center justify-end gap-2 lg:ml-auto lg:w-auto">
         <StatusBadge status={task.priority} />

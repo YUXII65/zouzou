@@ -30,6 +30,7 @@ export default defineConfig([
     ".public-service/**",
     "tools/**",
     "backups/**",
+    "miniprogram/**",
   ]),
   {
     files: ["**/*.{js,mjs,cjs,ts,tsx}"],

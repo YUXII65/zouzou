@@ -92,6 +92,9 @@ try {
   let clarification = first.clarification;
   const itemId = first.itemId;
 
+  if (!clarification?.translation?.normalizedIntent) {
+    throw new Error("首轮澄清没有先完成语言翻译");
+  }
   if (!clarification?.frame?.coreNeedHypothesis) {
     throw new Error("首轮澄清没有形成 coreNeedHypothesis");
   }
@@ -119,6 +122,31 @@ try {
   if (process.env.VERIFY_DEBUG) {
     console.log(JSON.stringify(plan, null, 2));
   }
+  if (plan?.source === "heuristic_fallback") {
+    throw new Error("计划落回了本地兜底，不能当作完整 AI 方案通过");
+  }
+  if (plan?.source === "agent_failed") {
+    throw new Error("普通模式 Agent 链路失败，不能自动通过");
+  }
+  if (!plan?.content?.usedTranslation || typeof plan.content.stepCount !== "number") {
+    throw new Error("计划没有带规划执行 Agent 轨迹（usedTranslation / stepCount）");
+  }
+  if (plan?.agent) {
+    const card = plan.userCard;
+    if (!card?.understanding || !card?.firstAction || !card?.how || !card?.doneWhen) {
+      throw new Error("普通模式 Agent 没有给用户完整行动卡");
+    }
+    if (/(?:可以选择|可选|二选一|看情况|根据情况|自行决定|自己决定|先比较|先调研)/.test(JSON.stringify(card))) {
+      throw new Error("普通模式行动卡把选择推回给了用户");
+    }
+    if (Array.isArray(plan.agent.usedFacts) && plan.agent.usedFacts.length === 0) {
+      throw new Error("普通模式 Agent 没有说明方案使用了哪条已确认事实");
+    }
+    if (plan.tasks.length > 6) {
+      throw new Error("三段链生成任务太多（安全上限 6）：" + plan.tasks.length);
+    }
+  }
+
   const methodHint = plan?.tasks?.[0]?.methodHint?.trim() ?? "";
   if (!methodHint || methodHint.length < 12) {
     throw new Error(`计划没有生成可执行的 methodHint：${methodHint || "空"}`);
@@ -139,6 +167,9 @@ try {
   }
   if (!persisted.aiSuggestionJson?.includes("coreNeedHypothesis")) {
     throw new Error("澄清没有把推进判断持久化到 aiSuggestionJson");
+  }
+  if (!persisted.aiSuggestionJson.includes('"translation"')) {
+    throw new Error("澄清没有把语言翻译持久化到 aiSuggestionJson");
   }
   if (!persisted.aiSuggestionJson.includes('"session"')) {
     throw new Error("澄清没有把 DecisionSession 持久化到 aiSuggestionJson");
@@ -167,7 +198,7 @@ try {
   }
   const savedTask = await prisma.task.findFirst({
     where: { userId: user.id },
-    select: { id: true, methodHint: true },
+    select: { id: true, methodHint: true, projectId: true },
   });
   if (!savedTask?.methodHint) {
     throw new Error("任务保存成功，但 methodHint 没有落库");
@@ -181,23 +212,73 @@ try {
   }
 
   // 用户必须真的能在页面上看到这条执行链，而不只是躺在数据库里。
-  const workspaceHtml = await getHtml("/workspace");
+  // v3.3 起书桌并进文件页（/workspace 只是重定向），而且没指定文件夹时全部收起，
+  // 任务和便利贴都不在 HTML 里。所以必须带着 project 参数打开对应文件夹再断言。
+  const workspacePath = savedTask.projectId
+    ? "/files?project=" + savedTask.projectId
+    : "/files?view=unassigned";
+  const workspaceHtml = await getHtml(workspacePath);
   if (!workspaceHtml.includes(savedSticky.nextStep)) {
-    throw new Error("工作台页面没有渲染便利贴的 nextStep，用户看不到执行入口");
+    throw new Error("文件页没有渲染便利贴的 nextStep，用户看不到执行入口");
   }
   const steps = JSON.parse(savedSticky.stepsJson);
   const firstStep = Array.isArray(steps) ? String(steps[0] ?? "") : "";
   if (firstStep && !workspaceHtml.includes(firstStep)) {
-    throw new Error("工作台页面没有渲染执行步骤，做法没有融进任务输出");
+    throw new Error("文件页没有渲染执行步骤，做法没有融进任务输出");
+  }
+
+  // 模糊输入：先补信息（可多问，但必须收口），收口后必须出路径
+  const vague = "我想做点什么，但说不清，最近一直没什么头绪。";
+  let vagueState = await post("/api/ai/inbox/clarify", {
+    mode: "socratic",
+    content: vague,
+  });
+  if (vagueState.clarification?.status !== "asking") {
+    throw new Error("模糊输入没有触发澄清提问");
+  }
+  const vagueItemId = vagueState.itemId;
+  const asked = [];
+  for (
+    let turn = 0;
+    turn < 5 && vagueState.clarification?.status === "asking";
+    turn += 1
+  ) {
+    const current = vagueState.clarification.history?.find(
+      (item) => !item.answer.length,
+    );
+    if (!current?.question || !current.options?.length) {
+      throw new Error("澄清提问没有给出问题或选项");
+    }
+    // 质量形状：必须是真正的取舍题（A 还是 B），不是分类题或偏好题
+    if (!/还是|或者/.test(current.question)) {
+      throw new Error(`澄清问题不像取舍题：${current.question}`);
+    }
+    asked.push(current.question);
+    vagueState = await post("/api/ai/inbox/clarify", {
+      mode: "socratic",
+      itemId: vagueItemId,
+      answer: [current.options[0]],
+    });
+  }
+  if (vagueState.clarification?.status !== "done") {
+    throw new Error("澄清没有收口，问得太久");
+  }
+  if (new Set(asked).size !== asked.length) {
+    throw new Error("澄清重复问了同一个问题");
+  }
+  const vaguePlan = await post("/api/ai/inbox/plan", { itemId: vagueItemId });
+  if (!vaguePlan?.tasks?.length) {
+    throw new Error("补全信息后没有生成执行路径");
   }
 
   console.log("PASS clarify-e2e");
-  console.log(`workspaceRender=nextStep+steps 可见`);
+  console.log(`filesRender=nextStep+steps 可见（` + workspacePath + `）`);
   console.log(`frame=${clarification.frame?.coreNeedHypothesis}`);
   console.log(`plan=${plan?.tasks?.[0]?.title}`);
   console.log(`methodHint=${methodHint}`);
   console.log(`savedTasks=${confirmed.taskCount}`);
   console.log(`stickyNextStep=${savedSticky.nextStep}`);
+  console.log(`askFlow=asked ${asked.length} -> ${vaguePlan.tasks[0].title}`);
 } finally {
   await prisma.user.delete({ where: { id: user.id } }).catch(() => {});
   await prisma.$disconnect();

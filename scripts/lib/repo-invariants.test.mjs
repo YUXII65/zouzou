@@ -63,6 +63,9 @@ const AUTH_HELPERS = [
   "getCurrentUser",
   "getAdminUser",
   "getMiniProgramUser",
+  // 只解析签名 session 拿 userId 的轻量入口。session cookie 是 HMAC 签名 +
+  // 带过期时间的，所以它同样是有效鉴权，只是不额外查一次 users（省一次跨洋往返）。
+  "readSessionUserId",
 ];
 
 function apiRoutes() {

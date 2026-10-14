@@ -168,7 +168,7 @@
       <view class="empty-state" wx:if="{{tasks.length === 0}}">
         <view class="empty-icon">◎</view>
         <view class="empty-title">今天还没有重点</view>
-        <view class="empty-hint">先记录一个想法，会先听懂你，再帮你拆成今天能做的事。</view>
+        <view class="empty-hint">先记录一个想法，会先听懂你，再陪你真正做起来。</view>
         <view class="empty-action" bindtap="onSubmit">记一个想法 →</view>
       </view>
       <view class="task-list" wx:else>
@@ -197,7 +197,6 @@
       </view>
     </view>
 
-    <view class="review-link" bindtap="onTabTap" data-key="review">去复盘 →</view>
   </view>
 
   <view class="bottom-nav">
@@ -208,10 +207,6 @@
     <view class="nav-item" data-key="desk" bindtap="onTabTap">
       <text class="nav-icon">▤</text>
       <text>书桌</text>
-    </view>
-    <view class="nav-item" data-key="review" bindtap="onTabTap">
-      <text class="nav-icon">▣</text>
-      <text>抽屉</text>
     </view>
   </view>
 </view>

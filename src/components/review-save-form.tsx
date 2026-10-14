@@ -13,11 +13,14 @@ export function ReviewSaveForm({
   summary,
   nextActions,
   savedAlready,
+  summaryLabel = "当日总结",
 }: {
   reviewId: string;
   summary: string;
   nextActions: string;
   savedAlready: boolean;
+  /** 项目复盘时换成"这次回看的总结"之类的说法 */
+  summaryLabel?: string;
 }) {
   const [submitting, setSubmitting] = useState(false);
   const [saved, setSaved] = useState(savedAlready);
@@ -56,7 +59,7 @@ export function ReviewSaveForm({
       <input type="hidden" name="id" value={reviewId} />
       <label className="block">
         <span className="mb-2 block text-xs font-medium text-ink-secondary">
-          当日总结
+          {summaryLabel}
         </span>
         <textarea
           name="summary"

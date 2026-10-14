@@ -27,20 +27,11 @@ export const metadata: Metadata = {
 export default async function RootLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
-  // 只查一次用户：管理员入口、游客提示条、角落的账号资料都从这里来
+  // 只查一次用户：管理员入口和游客提示条都从这里来
   const user = await getCurrentUser();
   const isAdmin = user ? isAdminUsername(user.username) : false;
   const isGuest = user ? isGuestUser(user) : false;
   const completedTaskCount = user?._count.tasks ?? 0;
-  const profileUser = user
-    ? {
-        username: user.username,
-        displayName: user.displayName,
-        avatarUrl: user.avatarUrl,
-        isGuest,
-      }
-    : null;
-
   return (
     <html lang="zh-CN" className="h-full antialiased">
       <body className="min-h-dvh text-ink">
@@ -51,7 +42,7 @@ export default async function RootLayout({
         */}
         <style dangerouslySetInnerHTML={{ __html: ASSET_GUARD_CSS }} />
         <script dangerouslySetInnerHTML={{ __html: ASSET_GUARD_SCRIPT }} />
-        <AppChrome isAdmin={isAdmin} user={profileUser} />
+        <AppChrome isAdmin={isAdmin} />
         <UsageTracker />
         <div className="lg:pl-[72px]">
           {isGuest ? <GuestBanner /> : null}

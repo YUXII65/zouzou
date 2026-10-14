@@ -5,9 +5,7 @@ const AI_QUESTION_KEY = "next_step_ai_question_asked";
 function tourIsActive() {
   try {
     const value = localStorage.getItem(TOUR_STORAGE_KEY);
-    return (
-      value === "1" || value === "2" || value === "3" || value === "4"
-    );
+    return value === "1" || value === "2" || value === "3";
   } catch {
     return false;
   }
@@ -33,11 +31,6 @@ export function notifyTourStep(step: TourStep) {
     // Ignore storage errors.
   }
   window.dispatchEvent(new CustomEvent(TOUR_EVENT, { detail: { step } }));
-}
-
-/** 首组计划任务全部收尾后，进入统一的第 4 步复盘引导。 */
-export function markFirstTaskGroupDone() {
-  notifyTourStep("4");
 }
 
 /** 当前是否处于新手引导中（用于图标是否展开文字等） */

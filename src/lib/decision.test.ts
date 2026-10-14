@@ -42,8 +42,7 @@ test("便利贴保存内容会把 fallback 放回执行步骤", () => {
   assert.equal(payload.nextStep, "去便利店买组合");
   assert.deepEqual(payload.steps, [
     "去便利店买组合",
-    "吃完记录饱腹感",
-    "如果主方案不可行：没有鸡胸就换卤蛋和豆干",
+    "吃完记录饱腹感\n例外：没有鸡胸就换卤蛋和豆干",
   ]);
 });
 
@@ -92,4 +91,34 @@ test("复盘结论会形成可回流的决策会话", () => {
   assert.equal(session.kind, "review");
   assert.equal(session.stage, "execute");
   assert.equal(session.nextAction, "明天按同一组合再吃一次");
+});
+test("执行卡片会去掉模型自己写的步骤序号，避免界面双重编号", () => {
+  const payload = stickyPayloadFromDecisionCard(
+    decisionCardFromTask({
+      title: "整理作品集",
+      shortTitle: "整理作品集",
+      recommendation: "先定用途",
+      executionSteps: ["1. 先定用途", "2、再筛素材", "第三步：排序"],
+      fallback: "",
+      methodHint: "按用途筛",
+      doneWhen: "有一版能发出去",
+    }),
+  );
+  assert.deepEqual(payload.steps, ["先定用途", "再筛素材", "排序"]);
+});
+
+test("便利贴最多保留三个真实阶段，多余动作合并进最后一块", () => {
+  const payload = stickyPayloadFromDecisionCard(
+    decisionCardFromTask({
+      title: "测试连续动作",
+      shortTitle: "测试步骤合并",
+      recommendation: "直接开始",
+      executionSteps: ["第一步：开始", "第二步：继续", "第三步：落笔", "第四步：检查", "第五步：提交"],
+      fallback: "",
+      methodHint: "直接做",
+      doneWhen: "做完",
+    }),
+  );
+  assert.equal(payload.steps.length, 3);
+  assert.equal(payload.steps[2], "落笔；检查；提交");
 });

@@ -102,7 +102,7 @@ async function verify(filePath) {
     process.exit(1);
   }
 
-  console.log(`\n校验通过：13 张表引用完整，共 ${dump.totalRows} 行。`);
+  console.log(`\n校验通过：${TABLES.length} 张表引用完整，共 ${dump.totalRows} 行。`);
 }
 
 async function restore(filePath, targetUrl) {

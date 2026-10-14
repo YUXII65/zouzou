@@ -155,7 +155,7 @@ export function decisionCardFromTask(
     doneWhen: compact(task.doneWhen),
     nextStep,
     confidence: recommendation ? 0.82 : 0.45,
-    explanation: task.methodHint ? `按这个做法推进：${task.methodHint}` : "",
+    explanation: task.methodHint || "",
   };
 }
 
@@ -163,7 +163,7 @@ export function decisionCardFromAdvice(
   advice: DecisionSourceAdvice,
   kind: DecisionKind = "coach",
 ): DecisionCard {
-  const steps = cleanList(advice.steps, 4);
+  const steps = cleanList(advice.steps);
   return {
     kind,
     title: compact(advice.title, 80),
@@ -178,13 +178,34 @@ export function decisionCardFromAdvice(
   };
 }
 
+function collapseStickySteps(steps: string[], limit = 3) {
+  if (steps.length <= limit) return steps;
+  const kept = steps.slice(0, Math.max(1, limit - 1));
+  const rest = steps.slice(Math.max(1, limit - 1));
+  return [...kept, rest.join("；")];
+}
+
+function stripLeadingStepNumber(value: string) {
+  return value
+    .replace(/^\s*(?:\d{1,2}\s*[.、)）]|第[一二三四五六七八九十]+步[:：]?)\s*/, "")
+    .trim();
+}
+
 export function stickyPayloadFromDecisionCard(
   card: DecisionCard,
 ): DecisionStickyPayload {
-  const steps = [
-    ...cleanList(card.executionSteps),
-    ...(card.fallback ? [`如果主方案不可行：${card.fallback}`] : []),
-  ];
+  // 便利贴只保留最多 3 个真实阶段；fallback 是例外说明，并入最后一块，
+  // 不单独占一个步骤，避免把两个动作摊成五六个步骤。
+  const steps = collapseStickySteps(
+    cleanList(card.executionSteps).map(stripLeadingStepNumber),
+  );
+  if (card.fallback) {
+    if (steps.length) {
+      steps[steps.length - 1] = `${steps[steps.length - 1]}\n例外：${card.fallback}`;
+    } else {
+      steps.push(`例外：${card.fallback}`);
+    }
+  }
   const nextStep = compact(card.nextStep) || steps[0] || card.recommendation;
 
   return {

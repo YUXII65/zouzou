@@ -148,6 +148,7 @@ export function AnchoredHint({
       <div
         ref={bubbleRef}
         role="note"
+        data-floating-layer="tour"
         style={{ top: position.top, left: position.left, width }}
         className="zouzou-panel fixed z-[61] rounded-xl p-4 shadow-pop animate-[zouzou-fade-in_240ms_ease-out]"
       >

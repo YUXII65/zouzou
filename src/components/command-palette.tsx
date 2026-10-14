@@ -3,52 +3,44 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
-  Archive,
   BarChart3,
-  Blocks,
-  BookOpen,
-  CalendarDays,
   Download,
+  FolderTree,
   Home,
   Search,
+  Sparkles,
+  UserRound,
 } from "lucide-react";
 import { cx } from "@/lib/utils";
 
 const actions = [
   {
-    id: "now",
-    label: "日历",
-    description: "查看今天要执行的任务",
+    id: "home",
+    label: "首页",
+    description: "记录想法，看今天要做什么",
     href: "/",
-    icon: CalendarDays,
+    icon: Home,
   },
   {
-    id: "projects",
-    label: "书桌",
-    description: "管理项目、任务和待办来源",
-    href: "/workspace",
-    icon: BookOpen,
+    id: "files",
+    label: "文件",
+    description: "按模式浏览文件夹和任务",
+    href: "/files",
+    icon: FolderTree,
   },
   {
-    id: "review",
-    label: "抽屉",
-    description: "生成并保存每日复盘",
-    href: "/review",
-    icon: Archive,
-  },
-  {
-    id: "tools",
-    label: "工具匣",
-    description: "按需启用小工具和个性化内容",
-    href: "/tools",
-    icon: Blocks,
+    id: "profile",
+    label: "个人",
+    description: "账号名片与三个模式的推进数量",
+    href: "/profile",
+    icon: UserRound,
   },
   {
     id: "landing",
     label: "营销落地页",
     description: "预览对外产品定位与演示",
     href: "/landing",
-    icon: Home,
+    icon: Sparkles,
   },
   {
     id: "export-json",

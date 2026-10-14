@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { hashPassword, verifyPassword } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { recordUsageEvent } from "@/lib/usage";
+import { safeNext } from "@/lib/safe-next";
 import { newUserEntryPath } from "@/lib/entry-policy";
 import {
   issueSessionToken,
@@ -32,13 +33,6 @@ function isUniqueConstraintError(error: unknown) {
   );
 }
 
-function safeNext(value: string | null) {
-  if (value && value.startsWith("/") && !value.startsWith("//")) {
-    return value;
-  }
-  return "/";
-}
-
 function redirectTo(path: string) {
   return new NextResponse(null, {
     status: 303,
@@ -55,6 +49,7 @@ function redirectWithSession(path: string, userId: string) {
     name: SESSION_COOKIE,
     value: issueSessionToken(userId),
     httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
     sameSite: "lax",
     path: "/",
     maxAge: SESSION_MAX_AGE_SECONDS,

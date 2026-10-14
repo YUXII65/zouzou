@@ -216,15 +216,6 @@ function WeeklySummary({ data }: { data: ToolboxInitialData }) {
           </p>
         </div>
       </div>
-      <div className="mt-3 flex justify-end">
-        <Link
-          href="/review"
-          className="zouzou-primary-button inline-flex h-8 items-center gap-1.5 rounded-md bg-accent px-3 text-xs font-medium text-white transition-colors hover:bg-accent-strong"
-        >
-          <ListChecks className="size-3.5" />
-          去复盘
-        </Link>
-      </div>
     </div>
   );
 }

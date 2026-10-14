@@ -188,9 +188,6 @@ try {
     await screenshot("04-sticky.png");
   }
 
-  await navigate(`${baseUrl}/review`, 'document.body.textContent.includes("当日复盘")');
-  await delay(500);
-  await screenshot("05-review.png");
 } finally {
   if (cdp) cdp.close();
   chrome.kill();

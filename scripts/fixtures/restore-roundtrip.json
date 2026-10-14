@@ -2,8 +2,12 @@
   "format": "zouzou-logical-dump",
   "version": 1,
   "createdAt": "2026-09-17T00:00:00.000Z",
-  "source": { "provider": "postgresql", "host": "fixture", "database": "fixture" },
-  "totalRows": 15,
+  "source": {
+    "provider": "postgresql",
+    "host": "fixture",
+    "database": "fixture"
+  },
+  "totalRows": 17,
   "counts": {
     "User": 1,
     "Project": 2,
@@ -17,7 +21,9 @@
     "ReviewTask": 1,
     "ReviewNextAction": 1,
     "AiUsageLog": 1,
-    "UsageEvent": 1
+    "UsageEvent": 1,
+    "ProjectStage": 1,
+    "ProjectTrack": 1
   },
   "data": {
     "User": [
@@ -43,7 +49,9 @@
         "createdFromInboxItemId": "i1",
         "lastReviewedAt": null,
         "createdAt": "2026-09-02T00:00:00.000Z",
-        "updatedAt": "2026-09-02T00:00:00.000Z"
+        "updatedAt": "2026-09-02T00:00:00.000Z",
+        "mode": "normal",
+        "cadence": null
       },
       {
         "id": "p2",
@@ -56,7 +64,9 @@
         "createdFromInboxItemId": null,
         "lastReviewedAt": "2026-09-10T00:00:00.000Z",
         "createdAt": "2026-09-03T00:00:00.000Z",
-        "updatedAt": "2026-09-03T00:00:00.000Z"
+        "updatedAt": "2026-09-03T00:00:00.000Z",
+        "mode": "normal",
+        "cadence": null
       }
     ],
     "InboxItem": [
@@ -77,7 +87,8 @@
         "confirmedAt": null,
         "processedAt": "2026-09-02T00:00:00.000Z",
         "createdAt": "2026-09-02T00:00:00.000Z",
-        "updatedAt": "2026-09-02T00:00:00.000Z"
+        "updatedAt": "2026-09-02T00:00:00.000Z",
+        "mode": null
       }
     ],
     "Task": [
@@ -102,7 +113,10 @@
         "planOrder": 1,
         "inboxItemId": "i1",
         "createdAt": "2026-09-02T01:00:00.000Z",
-        "updatedAt": "2026-09-02T01:00:00.000Z"
+        "updatedAt": "2026-09-02T01:00:00.000Z",
+        "methodHint": null,
+        "stageId": "ps1",
+        "trackId": "pt1"
       },
       {
         "id": "t2",
@@ -125,7 +139,10 @@
         "planOrder": null,
         "inboxItemId": null,
         "createdAt": "2026-09-04T00:00:00.000Z",
-        "updatedAt": "2026-09-11T00:00:00.000Z"
+        "updatedAt": "2026-09-11T00:00:00.000Z",
+        "methodHint": null,
+        "stageId": null,
+        "trackId": null
       }
     ],
     "TaskStickyNote": [
@@ -190,7 +207,9 @@
         "nextActions": null,
         "status": "final",
         "createdAt": "2026-09-11T16:00:00.000Z",
-        "updatedAt": "2026-09-11T16:00:00.000Z"
+        "updatedAt": "2026-09-11T16:00:00.000Z",
+        "projectId": null,
+        "decisionJson": null
       }
     ],
     "ReviewTask": [
@@ -245,6 +264,39 @@
         "detail": null,
         "metadata": null,
         "createdAt": "2026-09-11T05:00:00.000Z"
+      }
+    ],
+    "ProjectStage": [
+      {
+        "id": "ps1",
+        "userId": "u1",
+        "projectId": "p1",
+        "order": 1,
+        "title": "第一阶段",
+        "deliverable": "跑通恢复",
+        "doneWhen": null,
+        "status": "active",
+        "completedAt": null,
+        "nextStageJson": null,
+        "nextStageUpdatedAt": null,
+        "createdAt": "2026-09-02T00:00:00.000Z",
+        "updatedAt": "2026-09-02T00:00:00.000Z"
+      }
+    ],
+    "ProjectTrack": [
+      {
+        "id": "pt1",
+        "userId": "u1",
+        "projectId": "p1",
+        "order": 1,
+        "name": "主线",
+        "intent": "验证恢复流程",
+        "role": "main",
+        "status": "active",
+        "currentFocus": null,
+        "lastEventAt": null,
+        "createdAt": "2026-09-02T00:00:00.000Z",
+        "updatedAt": "2026-09-02T00:00:00.000Z"
       }
     ]
   }

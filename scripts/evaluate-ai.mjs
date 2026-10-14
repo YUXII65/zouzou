@@ -21,11 +21,7 @@ import path from "node:path";
 import { createHash } from "node:crypto";
 import "dotenv/config";
 import { extractJsonObject as extractJson } from "../src/lib/json-extract.ts";
-import {
-  OUTPUT_QUALITY_RULES,
-  PLAN_SYSTEM_PROMPT,
-  buildPlanUserPayload,
-} from "../src/lib/ai-prompts.ts";
+import { CHAIN_PROMPTS, createChainRunner } from "./lib/run-chain.mjs";
 import {
   checkPlanQuality,
   compareAgainstBaseline,
@@ -35,9 +31,8 @@ const root = path.resolve(import.meta.dirname, "..");
 const corpusPath = path.join(root, "scripts", "ai-eval-corpus.json");
 const corpus = JSON.parse(fs.readFileSync(corpusPath, "utf8"));
 
-const SYSTEM_PROMPT = `${PLAN_SYSTEM_PROMPT}\n\n${OUTPUT_QUALITY_RULES}`;
 /** 提示词指纹：对比基线时用它判断两次跑的到底是不是同一份 prompt */
-const PROMPT_HASH = createHash("sha256").update(SYSTEM_PROMPT).digest("hex").slice(0, 12);
+const PROMPT_HASH = createHash("sha256").update(CHAIN_PROMPTS).digest("hex").slice(0, 12);
 
 const apiKey = process.env.DEEPSEEK_API_KEY || process.env.OPENAI_API_KEY;
 const model =
@@ -56,8 +51,8 @@ const argOf = (name) => {
 if (args.includes("--print-prompt")) {
   console.log(`提示词指纹：${PROMPT_HASH}`);
   console.log(`模型：${model}`);
-  console.log("---- system prompt ----");
-  console.log(SYSTEM_PROMPT);
+  console.log("---- chain prompts ----");
+  console.log(CHAIN_PROMPTS);
   process.exit(0);
 }
 
@@ -76,54 +71,18 @@ const fileBase = label ? `ai-eval-baseline-${label}` : "ai-eval-baseline";
 const reportPath = path.join(root, "docs", `${fileBase}.md`);
 const resultsPath = path.join(root, "docs", `${fileBase}.json`);
 
+const chain = createChainRunner({ baseUrl, apiKey, model, debug });
+
+/** 跑生产同款三段链：翻译 -> 生成内容 -> 收敛。 */
 async function callPlan(aiCase) {
   const context = aiCase.context ?? {};
-  const projects = context.projects ?? [];
-  const maxTasks = aiCase.checks?.maxTasks ?? null;
-
-  const response = await fetch(`${baseUrl}/chat/completions`, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      model,
-      messages: [
-        { role: "system", content: SYSTEM_PROMPT },
-        {
-          role: "user",
-          content: buildPlanUserPayload({
-            currentDate: new Date().toLocaleDateString("sv-SE"),
-            content: aiCase.input,
-            projectNames: projects.map((project) => project.name),
-            projects,
-            memorySummary: context.memorySummary ?? null,
-            dimensionChoices: [],
-            contextEvidence: context.evidence ?? [],
-            maxTasks,
-          }),
-        },
-      ],
-      temperature: 0.2,
-      max_tokens: 2800,
-      ...(/deepseek/i.test(model) || /deepseek/i.test(baseUrl)
-        ? { reasoning_effort: "none" }
-        : {}),
-    }),
-    signal: AbortSignal.timeout(45000),
+  return chain.runChain(aiCase.input, {
+    maxTasks: aiCase.checks?.maxTasks ?? 3,
+    projects: context.projects ?? [],
+    memorySummary: context.memorySummary ?? null,
+    evidence: context.evidence ?? [],
+    decisionMemory: context.decisionMemory ?? [],
   });
-
-  if (!response.ok) {
-    throw new Error(`AI 请求失败：${response.status}`);
-  }
-
-  const data = await response.json();
-  const content = data.choices?.[0]?.message?.content ?? "";
-  if (!content && debug) {
-    console.log("EMPTY RESPONSE:", JSON.stringify(data).slice(0, 1200));
-  }
-  return content;
 }
 
 /** 用例自带的期待项 + 通用质量检查 */
@@ -162,11 +121,11 @@ for (const [index, aiCase] of cases.entries()) {
 
   let plan = null;
   let error = null;
-  let rawPlan = "";
+  let trace = null;
 
   try {
-    rawPlan = await callPlan(aiCase);
-    plan = JSON.parse(extractJson(rawPlan) ?? "{}");
+    trace = await callPlan(aiCase);
+    plan = trace.plan;
   } catch (caught) {
     error = caught.message;
   }
@@ -174,7 +133,7 @@ for (const [index, aiCase] of cases.entries()) {
   const issues = error ? [error] : runChecks(aiCase, plan);
   if (debug) {
     console.log(`\n---- ${aiCase.id} ----`);
-    console.log(rawPlan || error || "empty response");
+    console.log(trace ? JSON.stringify(trace.plan, null, 2) : error || "empty response");
   }
   rows.push({
     id: aiCase.id,

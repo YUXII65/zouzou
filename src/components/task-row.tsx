@@ -1,10 +1,8 @@
 "use client";
 
-import { StatusBadge } from "@/components/status-badge";
 import { TaskRowDisclosure } from "@/components/task-row-disclosure";
 import { TodayTaskActions } from "@/components/today-task-actions";
 import { formatDate, isSameDay } from "@/lib/date";
-import { taskModeLabel } from "@/lib/task-contract";
 import type { TaskStickyNoteData } from "@/lib/task-sticky";
 
 export function TaskRow({
@@ -53,17 +51,13 @@ export function TaskRow({
           projectName={projectName}
           status={task.status}
           initialNotes={task.stickyNotes ?? []}
-        />
-
-        <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-ink-secondary">
-          <span className="rounded-full border border-border bg-surface-muted px-2 py-0.5 text-[11px] font-medium text-ink-secondary">
-            {taskModeLabel(task.executionMode)}
-          </span>
-          <StatusBadge status={task.priority} />
+        >
           {task.dueDate ? (
-            <span className="text-danger">截止 {formatDate(task.dueDate)}</span>
+            <span className="mt-2 block text-xs text-danger">
+              建议 {formatDate(task.dueDate)}前完成
+            </span>
           ) : null}
-        </div>
+        </TaskRowDisclosure>
       </div>
 
       <div className="flex w-full items-center justify-end gap-2 lg:w-auto">

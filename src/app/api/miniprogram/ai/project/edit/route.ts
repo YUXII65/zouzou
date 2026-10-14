@@ -50,6 +50,7 @@ export async function POST(request: Request) {
       aiContext.summary,
       aiContext.evidence,
     ),
+    user.id
   );
 
   return NextResponse.json({ suggestion });

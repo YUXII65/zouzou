@@ -1,31 +1,7 @@
-import { EyeOff, Sparkles } from "lucide-react";
-import { ignoreInboxItem } from "@/app/actions";
+import { Loader2, Sparkles } from "lucide-react";
 import { QuickCapture } from "@/components/quick-capture";
-import { AiSettings } from "@/components/ai-settings";
-import { AiPreferences } from "@/components/ai-preferences";
 import { InboxClarification } from "@/components/inbox-clarification";
-import { InboxPlanEditor } from "@/components/inbox-plan-editor";
-import { SubmitButton } from "@/components/submit-button";
-import { StatusBadge } from "@/components/status-badge";
 import type { InboxClarification as InboxClarificationType } from "@/lib/ai";
-import type { InboxPlan } from "@/lib/ai";
-
-const actionLabels = {
-  create_project: "新建项目",
-  existing_project: "归入项目",
-  single_task: "创建任务",
-  ignore: "建议忽略",
-};
-
-function parsePlan(item: { aiPlanJson: string | null }): InboxPlan | null {
-  if (!item.aiPlanJson) return null;
-
-  try {
-    return JSON.parse(item.aiPlanJson) as InboxPlan;
-  } catch {
-    return null;
-  }
-}
 
 function parseClarification(item: {
   aiSuggestionJson: string | null;
@@ -63,8 +39,6 @@ function parseClarification(item: {
 
 export function AiTaskPlanner({
   pending,
-  quotaManaged = false,
-  serverAiConfigured = false,
 }: {
   pending: Array<{
     id: string;
@@ -72,91 +46,68 @@ export function AiTaskPlanner({
     aiPlanJson: string | null;
     aiSuggestionJson: string | null;
   }>;
-  quotaManaged?: boolean;
-  serverAiConfigured?: boolean;
 }) {
+  const hasActiveConversation = pending.length > 0;
+
   return (
-    <div className="space-y-4">
-      <QuickCapture pendingIds={pending.map((item) => item.id)} />
+    <div className="relative overflow-hidden rounded-[22px] border border-accent/15 bg-gradient-to-br from-accent-soft/55 via-surface to-ai-soft/45 p-4 shadow-sm sm:p-5">
+      <QuickCapture
+        pendingIds={pending.map((item) => item.id)}
+        embedded
+        suppressInput={hasActiveConversation}
+      />
 
       {pending.length ? (
-        <div className="space-y-3">
-          {pending.map((item) => {
+        <div className="mt-5 space-y-5">
+          {pending.map((item, index) => {
             const clarification = parseClarification(item);
-            const plan = parsePlan(item);
 
             return (
               <div
                 key={item.id}
-                className="zouzou-ai-card p-4"
+                className={
+                  index > 0
+                    ? "border-t border-border/60 pt-5"
+                    : ""
+                }
               >
-                {plan ? (
-                  <>
-                    <div className="flex items-start justify-between gap-3">
-                      <p className="text-sm leading-6 text-ink">
-                        {item.content}
-                      </p>
-                      <StatusBadge status={actionLabels[plan.action]} />
-                    </div>
-                    <InboxPlanEditor itemId={item.id} plan={plan} />
-                  </>
-                ) : clarification ? (
-                  <>
-                    <InboxClarification
-                      itemId={item.id}
-                      content={item.content}
-                      dimensions={clarification.dimensions}
-                      supplementPlaceholder={
-                        clarification.supplementPlaceholder
-                      }
-                      mode={clarification.mode}
-                      status={clarification.status}
-                      history={clarification.history}
-                      summary={clarification.summary}
-                      frame={clarification.frame}
-                    />
-                  </>
+                {clarification ? (
+                  <InboxClarification
+                    itemId={item.id}
+                    content={item.content}
+                    dimensions={clarification.dimensions}
+                    supplementPlaceholder={
+                      clarification.supplementPlaceholder
+                    }
+                    mode={clarification.mode}
+                    status={clarification.status}
+                    history={clarification.history}
+
+                    frame={clarification.frame}
+                  />
                 ) : (
-                  <div className="flex items-center justify-between gap-3">
-                    <p className="text-sm leading-6 text-ink">
+                  <div className="space-y-3">
+                    <div className="ml-auto max-w-[82%] rounded-xl rounded-tr-sm border border-border bg-surface-muted px-3 py-2 text-sm font-medium leading-6 text-ink">
                       {item.content}
-                    </p>
-                    <span className="inline-flex animate-[zouzou-soft-pulse_1.6s_ease-in-out_infinite] items-center gap-1.5 text-xs font-medium text-ink-secondary">
-                      <Sparkles className="size-3.5" />
-                      正在梳理...
-                    </span>
+                    </div>
+                    <div className="flex items-start gap-2">
+                      <span className="mt-1 flex size-6 shrink-0 items-center justify-center rounded-md bg-accent-soft text-accent-strong">
+                        <Sparkles className="size-3.5" />
+                      </span>
+                      <div className="rounded-xl rounded-tl-sm border border-border/70 bg-surface px-3 py-2.5 text-sm leading-6 text-ink">
+                        <span className="flex items-center gap-2 text-ink-muted">
+                          <Loader2 className="size-3.5 shrink-0 animate-spin text-accent/70" />
+                          <span>正在读你的原话...</span>
+                        </span>
+                      </div>
+                    </div>
                   </div>
                 )}
-
-                <div className="mt-3 flex justify-end border-t border-border/70 pt-3">
-                  <form action={ignoreInboxItem}>
-                    <input type="hidden" name="id" value={item.id} />
-                    <SubmitButton
-                      pendingText="忽略中..."
-                      className="zouzou-secondary-button inline-flex h-8 items-center gap-1.5 rounded-md border border-border bg-surface px-2.5 text-xs font-medium text-ink-secondary transition-colors hover:border-warning hover:text-warning"
-                    >
-                      <EyeOff className="size-3.5" />
-                      忽略
-                    </SubmitButton>
-                  </form>
-                </div>
               </div>
             );
           })}
         </div>
       ) : null}
-      <details id="ai-settings" className="zouzou-panel rounded-xl bg-surface">
-        <summary className="flex cursor-pointer list-none items-center gap-1.5 px-3 py-2 text-xs font-medium text-ink-secondary transition-colors hover:text-accent">
-          <Sparkles className="size-3.5" />
-          偏好设置
-        </summary>
-        <div className="space-y-3 border-t border-border p-3">
-          {quotaManaged ? null : (
-            <AiSettings serverConnected={serverAiConfigured} />
-          )}
-          <AiPreferences />
-        </div>
-      </details>
     </div>
   );
 }

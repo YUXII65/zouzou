@@ -119,8 +119,8 @@ const plans: Record<string, Plan> = {
     tasks: [
       {
         title: "写下网站的一句话定位",
-        time: "15 分钟",
-        priority: "今日第一步",
+        time: "继续",
+        priority: "现在开始",
       },
       {
         title: "整理 3-5 个代表作品",
@@ -146,8 +146,8 @@ const plans: Record<string, Plan> = {
     tasks: [
       {
         title: "定一个你最常用的场景主题",
-        time: "10 分钟",
-        priority: "今日第一步",
+        time: "今天",
+        priority: "现在开始",
       },
       {
         title: "准备 10 个场景短句并朗读",
@@ -156,7 +156,7 @@ const plans: Record<string, Plan> = {
       },
       {
         title: "找一个能对话的 AI 练习伙伴",
-        time: "15 分钟",
+        time: "继续",
         priority: "中",
       },
       {
@@ -173,17 +173,17 @@ const plans: Record<string, Plan> = {
     tasks: [
       {
         title: "定一个最容易开始的时间和动作",
-        time: "10 分钟",
-        priority: "今日第一步",
+        time: "今天",
+        priority: "现在开始",
       },
       {
         title: "只做 15 分钟，不要求练得多完整",
-        time: "15 分钟",
+        time: "继续",
         priority: "高",
       },
       {
         title: "记录今天做完后的身体感受",
-        time: "5 分钟",
+        time: "今天",
         priority: "中",
       },
     ],
@@ -195,12 +195,12 @@ const plans: Record<string, Plan> = {
     tasks: [
       {
         title: "选一个你最想持续聊的方向",
-        time: "10 分钟",
-        priority: "今日第一步",
+        time: "今天",
+        priority: "现在开始",
       },
       {
         title: "写下这个方向能帮到谁、解决什么问题",
-        time: "15 分钟",
+        time: "继续",
         priority: "高",
       },
       {
@@ -218,21 +218,21 @@ const plans: Record<string, Plan> = {
       {
         title: "把现有想法按“想做 / 该做 / 可放弃”分类",
         time: "20 分钟",
-        priority: "今日第一步",
+        priority: "现在开始",
       },
       {
         title: "选出本周只推进的一件重点",
-        time: "10 分钟",
+        time: "今天",
         priority: "高",
       },
       {
         title: "为其他想法设置“暂不处理”状态",
-        time: "10 分钟",
+        time: "今天",
         priority: "中",
       },
       {
         title: "写下为什么这件事比别的重要",
-        time: "15 分钟",
+        time: "继续",
         priority: "中",
       },
     ],
@@ -250,22 +250,22 @@ function buildCustomPlan(thought: string): Plan {
 
   return {
     projectName: `${short}起步`,
-    objective: `把“${firstLine}”推进成一件今天能开始的事，先不看完整的最终目标。`,
-    milestone: `让“${short}”出现第一个看得见的进展。`,
+    objective: `把“${firstLine}”真正做起来，做出第一个能看见的结果。`,
+    milestone: `让“${short}”出现一个能拿给别人看的真实结果。`,
     tasks: [
       {
-        title: `写下“${short}”今天能做的第一个动作`,
-        time: "10 分钟",
-        priority: "今日第一步",
+        title: `把“${short}”做出第一个能看见的结果`,
+        time: "今天",
+        priority: "现在开始",
       },
       {
-        title: "只做这个动作 15 分钟，不做完整计划",
-        time: "15 分钟",
+        title: "接着做下一步，把这件事继续往前推",
+        time: "继续",
         priority: "高",
       },
       {
-        title: "把做完的结果或卡住的地方记下来",
-        time: "5 分钟",
+        title: "把做出的结果拿给一个真实的人看",
+        time: "今天",
         priority: "中",
       },
     ],

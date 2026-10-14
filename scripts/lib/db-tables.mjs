@@ -33,6 +33,20 @@ export const TABLES = [
     restorePhase: 3,
   },
   {
+    name: "ProjectStage",
+    delegate: "projectStage",
+    dates: ["completedAt", "nextStageUpdatedAt", "createdAt", "updatedAt"],
+    // ProjectStage 只依赖 User / Project；必须在 Task 之前恢复
+    restorePhase: 3,
+  },
+  {
+    name: "ProjectTrack",
+    delegate: "projectTrack",
+    dates: ["lastEventAt", "createdAt", "updatedAt"],
+    // 依赖 User / Project，且被 Task.trackId 引用；必须在 Task 之前恢复
+    restorePhase: 3,
+  },
+  {
     name: "Task",
     delegate: "task",
     dates: [
@@ -166,8 +180,14 @@ export const REFERENCES = [
   ["Project.createdFromInboxItemId", "InboxItem", "id", true],
   ["InboxItem.userId", "User", "id", false],
   ["InboxItem.projectId", "Project", "id", true],
+  ["ProjectStage.userId", "User", "id", false],
+  ["ProjectStage.projectId", "Project", "id", false],
+  ["ProjectTrack.userId", "User", "id", false],
+  ["ProjectTrack.projectId", "Project", "id", false],
   ["Task.userId", "User", "id", false],
   ["Task.projectId", "Project", "id", true],
+  ["Task.stageId", "ProjectStage", "id", true],
+  ["Task.trackId", "ProjectTrack", "id", true],
   ["Task.inboxItemId", "InboxItem", "id", true],
   ["TaskStickyNote.userId", "User", "id", false],
   ["TaskStickyNote.taskId", "Task", "id", false],
@@ -179,6 +199,7 @@ export const REFERENCES = [
   ["AiFeedbackEvent.taskId", "Task", "id", true],
   ["AiFeedbackEvent.projectId", "Project", "id", true],
   ["Review.userId", "User", "id", false],
+  ["Review.projectId", "Project", "id", true],
   ["ReviewTask.userId", "User", "id", false],
   ["ReviewTask.reviewId", "Review", "id", false],
   ["ReviewTask.taskId", "Task", "id", false],

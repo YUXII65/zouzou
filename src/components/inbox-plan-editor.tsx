@@ -64,20 +64,20 @@ export function InboxPlanEditor({
         <p className="text-sm font-semibold text-success">
           {confirmResult.attachedTaskId
             ? "已接到当前任务，不再新增同级任务"
-            : "项目已整理，去书桌页查看并推进"}
+            : "项目已整理，去文件页查看并推进"}
         </p>
         <div className="mt-3 flex justify-end">
           <Link
             href={
               confirmResult.attachedTaskId
-                ? `/workspace?edit=${confirmResult.attachedTaskId}`
+                ? `/files?edit=${confirmResult.attachedTaskId}`
                 : confirmResult.projectId
-                  ? `/workspace?project=${confirmResult.projectId}`
-                  : "/workspace"
+                  ? `/files?project=${confirmResult.projectId}`
+                  : "/files"
             }
             className="zouzou-primary-button inline-flex h-9 items-center gap-2 rounded-lg bg-accent px-4 text-sm font-medium text-white transition-colors hover:bg-accent-strong"
           >
-            去书桌页
+            去文件页
             <ArrowRight className="size-4" />
           </Link>
         </div>
@@ -244,11 +244,10 @@ export function InboxPlanEditor({
         ))}
       </div>
 
-      <div className="rounded-lg bg-accent-soft/60 p-3 text-sm leading-6 text-ink-secondary">
-        <div className="flex items-start gap-2">
-          <Sparkles className="mt-1 size-4 shrink-0 text-accent" />
-          <span className="whitespace-pre-wrap">{plan.reason}</span>
-        </div>
+      {/* 目的只是让你知道它怎么理解的，不需要改，所以只留一行 */}
+      <div className="flex items-center gap-2 px-1 text-xs leading-5 text-ink-muted">
+        <Sparkles className="size-3.5 shrink-0 text-accent/70" />
+        <span className="truncate">{plan.reason}</span>
       </div>
 
       <div className="flex flex-col items-end gap-2">

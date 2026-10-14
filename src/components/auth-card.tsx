@@ -114,9 +114,9 @@ export function AuthCard({
           className="zouzou-panel rounded-xl p-6 sm:p-7"
         >
           <input type="hidden" name="next" value={next} />
-          <h2 className="text-sm font-semibold text-ink">注册 / 登录</h2>
+          <h2 className="text-sm font-semibold text-ink">加入我们</h2>
           <p className="mt-2 text-xs leading-5 text-ink-muted">
-            新用户名会自动注册，老用户名直接登录。
+            已有账号直接登录，新用户自动注册
           </p>
           <input
             name="username"
@@ -155,7 +155,7 @@ export function AuthCard({
           className="zouzou-panel rounded-xl p-6 sm:p-7"
         >
           <input type="hidden" name="next" value={next} />
-          <h2 className="text-sm font-semibold text-ink">注册 / 登录</h2>
+          <h2 className="text-sm font-semibold text-ink">加入我们</h2>
           <input
             name="username"
             required

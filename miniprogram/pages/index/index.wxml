@@ -142,6 +142,6 @@
       <view class="primary-button-plain cta-button-plain" bindtap="onLoginTap">注册/登录 →</view>
     </view>
 
-    <view class="footer">走走 v2.5 · Coded by 氵</view>
+    <view class="footer">走走 v3.5 · Coded by 氵</view>
   </view>
 </view>

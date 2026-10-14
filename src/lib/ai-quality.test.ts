@@ -69,6 +69,11 @@ test("taskDisposition 非法会被抓出来", () => {
   const issues = checkPlanQuality(plan({ taskDisposition: "parallel" }));
   assert.ok(issues.some((issue) => issue.includes("taskDisposition 非法")));
 });
+test("mode 非法会被抓出来", () => {
+  const issues = checkPlanQuality(plan({ mode: "someday" }));
+  assert.ok(issues.some((issue) => issue.includes("mode 非法")));
+});
+
 test("maxTurns 与 executionMode 不一致会被抓出来", () => {
   const issues = checkPlanQuality(plan({ tasks: [task({ executionMode: "quick", maxTurns: 3 })] }));
   assert.ok(issues.some((issue) => issue.includes("不一致")));
@@ -376,4 +381,44 @@ test("问句本身通用、但选项带上用户的对象时，不算没有引�
     withoutOptions.includes("问题没有引用用户原话里的具体对象"),
     "没有任何具体线索时仍要报出来",
   );
+});
+
+test("同一目标下的两个子步骤选择会被拦住", () => {
+  const issues = checkClarificationQuality(
+    {
+      done: false,
+      frame: {
+        surfaceRequest: "不知道怎么和上级沟通进度和困难",
+        coreNeedHypothesis: "先建立一条低风险的同步路径",
+        decisionFork: "遇到困难不敢说还是进度不知道何时同步",
+        decisiveUnknown: "上级更常通过什么方式了解进度",
+        whyItChangesPlan: "会改变第一次同步的对象和方式",
+        readiness: "ready",
+        missingSlots: [],
+        completionPrompt: "",
+        completionOptions: [],
+      },
+      question: {
+        key: "timing",
+        question: "你更想先解决遇到困难时不敢及时开口，还是日常进度不知道什么时候该同步？",
+        options: ["遇到困难不敢及时说", "日常进度不知何时同步"],
+      },
+    },
+    { originalIdea: "刚进入职场，不知道怎样和上级沟通进度和困难，总想等做完再说。" },
+  );
+  assert.ok(issues.some((issue) => issue.includes("两个子步骤")));
+});
+
+test("把「先想清楚」当任务会被拦住", () => {
+  const issues = checkPlanQuality(
+    plan({ tasks: [task({ title: "先想清楚要不要换工作再动手" })] }),
+  );
+  assert.ok(issues.some((issue) => issue.includes("把「想」当成任务动作")));
+});
+
+test("完成标准还停在「想」也会被拦住", () => {
+  const issues = checkPlanQuality(
+    plan({ tasks: [task({ doneWhen: "先想明白这件事值不值得做" })] }),
+  );
+  assert.ok(issues.some((issue) => issue.includes("完成标准还停在「想」")));
 });
