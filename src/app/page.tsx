@@ -20,7 +20,7 @@ import { after } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { loadHomeSupport } from "@/lib/home-support";
 import { buildAiContext } from "@/lib/ai-context";
-import { getCurrentUser } from "@/lib/auth";
+import { getCurrentUser, readSessionUserId } from "@/lib/auth";
 import { serializeTaskStickyNote } from "@/lib/task-sticky";
 import {
   endOfDay,
@@ -73,17 +73,19 @@ function taskSource(task: AgendaTask) {
 export const dynamic = "force-dynamic";
 
 export default async function TodayPage() {
-  const user = await getCurrentUser();
-  if (!user) redirect("/landing");
+  // 先只解 cookie 拿 userId（这一步不查库），让「查用户」和「查首页数据」落在同一轮往返。
+  // 详见 src/lib/home-support.ts 里对跨洋链路并发劣化的说明。
+  const userId = await readSessionUserId();
+  if (!userId) redirect("/landing");
   const now = new Date();
   const dayStart = startOfDay(now);
   const dayEnd = endOfDay(now);
   // 首页读路径保持并发：任务列表 + 新手状态 / 今日推荐 / 待整理 + 待确认的阶段门。
-  // 详见 src/lib/home-support.ts 里对跨洋链路并发劣化的说明。
-  const [support, tasks, readyStage] = await Promise.all([
-    loadHomeSupport({ userId: user.id, createdAt: user.createdAt, now }),
+  const [user, support, tasks, readyStage] = await Promise.all([
+    getCurrentUser(),
+    loadHomeSupport({ userId, now }),
     prisma.task.findMany({
-      where: { userId: user.id },
+      where: { userId },
       include: {
         project: { select: { name: true } },
         inboxItem: { select: { id: true } },
@@ -97,7 +99,7 @@ export default async function TodayPage() {
       orderBy: { createdAt: "desc" },
     }),
     prisma.projectStage.findFirst({
-      where: { userId: user.id, status: "ready" },
+      where: { userId, status: "ready" },
       orderBy: [{ updatedAt: "desc" }, { id: "asc" }],
       select: {
         id: true,
@@ -106,6 +108,7 @@ export default async function TodayPage() {
       },
     }),
   ]);
+  if (!user) redirect("/landing");
   const { firstRun, focusSuggestions, pendingInbox } = support;
 
 

@@ -3,7 +3,8 @@ import { ProfileNameCard } from "@/components/profile-card";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { AiSettings } from "@/components/ai-settings";
 import { prisma } from "@/lib/prisma";
-import { isGuestUser, requireUser } from "@/lib/auth";
+import { isGuestUser, getCurrentUser, readSessionUserId } from "@/lib/auth";
+import { redirect } from "next/navigation";
 import { normalizeProjectMode, type ProjectMode } from "@/lib/work-mode";
 import { isOpenTaskStatus } from "@/lib/task-flow";
 
@@ -14,14 +15,20 @@ export const metadata = {
 export const dynamic = "force-dynamic";
 
 export default async function ProfilePage() {
-  const user = await requireUser();
-  const projects = await prisma.project.findMany({
-    where: { userId: user.id },
-    select: {
-      mode: true,
-      tasks: { select: { status: true } },
-    },
-  });
+  // 先解 cookie 拿 userId（不查库），把「查用户」和项目统计并到同一轮往返。
+  const userId = await readSessionUserId();
+  if (!userId) redirect("/login");
+  const [user, projects] = await Promise.all([
+    getCurrentUser(),
+    prisma.project.findMany({
+      where: { userId },
+      select: {
+        mode: true,
+        tasks: { select: { status: true } },
+      },
+    }),
+  ]);
+  if (!user) redirect("/login");
 
   const serverConnected = Boolean(
     process.env.DEEPSEEK_API_KEY || process.env.OPENAI_API_KEY,

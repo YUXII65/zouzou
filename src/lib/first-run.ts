@@ -52,13 +52,15 @@ SELECT
      WHERE "userId" = $1 AND key = $2 AND source = $3
      LIMIT 1) AS "tourValue",
   (SELECT count(*) FROM projects WHERE "userId" = $1) AS "projectCount",
-  (SELECT count(*) FROM tasks WHERE "userId" = $1) AS "taskCount"
+  (SELECT count(*) FROM tasks WHERE "userId" = $1) AS "taskCount",
+  (SELECT "createdAt" FROM users WHERE id = $1) AS "userCreatedAt"
 `;
 
 type FirstRunRow = {
   tourValue: string | null;
   projectCount: number | string;
   taskCount: number | string;
+  userCreatedAt: Date | string | null;
 };
 
 export async function getFirstRunState(
@@ -74,7 +76,11 @@ export async function getFirstRunState(
   const row = rows[0];
 
   return resolveFirstRunState({
-    createdAt,
+    // 调用方没传 createdAt 时用同一条 SQL 里取回的值，
+    // 这样「查用户」可以并进这一批，不用为了 createdAt 先单独查一次 users。
+    createdAt:
+      createdAt ??
+      (row?.userCreatedAt ? new Date(row.userCreatedAt) : null),
     tourValue: row?.tourValue ?? null,
     projectCount: Number(row?.projectCount ?? 0),
     taskCount: Number(row?.taskCount ?? 0),

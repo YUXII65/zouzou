@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { after } from "next/server";
 import { History, ListTodo } from "lucide-react";
 import { Panel, PanelHeader } from "@/components/panel";
@@ -17,7 +18,7 @@ import {
   UNASSIGNED_ID,
 } from "@/components/file-browser";
 import { prisma } from "@/lib/prisma";
-import { requireUser } from "@/lib/auth";
+import { getCurrentUser, readSessionUserId } from "@/lib/auth";
 import { getFirstRunState } from "@/lib/first-run";
 import { serializeTaskStickyNote } from "@/lib/task-sticky";
 import { buildTaskContract } from "@/lib/task-contract";
@@ -35,15 +36,21 @@ export default async function FilesPage({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
-  const user = await requireUser();
+  // 先解 cookie 拿 userId（不查库），把「查用户」并进 repair / firstRun 那一批，
+  // 于是读路径从 3 个串行往返压到 2 个。
+  const userId = await readSessionUserId();
+  if (!userId) redirect("/login");
   const params = await searchParams;
 
   // 新手状态只读、repair 是写：两者互不依赖可以并发。
   // repair 必须在读项目/任务之前完成，否则可能读到归属改到一半的数据。
+  const userPromise = getCurrentUser();
   const [firstRun] = await Promise.all([
-    getFirstRunState(user.id, user.createdAt),
-    repairUnassignedInboxProjects(user.id),
+    getFirstRunState(userId),
+    repairUnassignedInboxProjects(userId),
   ]);
+  const user = await userPromise;
+  if (!user) redirect("/login");
   const projectParam =
     typeof params.project === "string" ? params.project : "";
   const viewParam = typeof params.view === "string" ? params.view : "";

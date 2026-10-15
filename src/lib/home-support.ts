@@ -26,6 +26,7 @@ export type HomeSupport = {
  * 之前这里要发 6~7 条查询（新手状态 3 条 + 待整理 + 今日推荐 + 任务列表），
  * 而跨洋链路上查询一多就互相拖慢：3 条计数单独跑只要 700ms，一起跑要 2.4 秒。
  * 合成一条 SQL 后首页的读路径只剩「这条 + 任务列表」两次往返。
+ * 2026-10-15 起把 users.createdAt 也并进这条 SQL，首页读路径进一步收敛到 1 次往返。
  */
 const HOME_SUPPORT_SQL = `
 WITH pref AS (
@@ -45,7 +46,8 @@ SELECT
   (SELECT COALESCE(json_agg(pref), '[]'::json) FROM pref) AS preferences,
   (SELECT count(*) FROM projects WHERE "userId" = $1) AS "projectCount",
   (SELECT count(*) FROM tasks WHERE "userId" = $1) AS "taskCount",
-  (SELECT COALESCE(json_agg(inbox), '[]'::json) FROM inbox) AS inbox
+  (SELECT COALESCE(json_agg(inbox), '[]'::json) FROM inbox) AS inbox,
+  (SELECT "createdAt" FROM users WHERE id = $1) AS "userCreatedAt"
 `;
 
 type HomeSupportRow = {
@@ -53,11 +55,11 @@ type HomeSupportRow = {
   projectCount: number | string;
   taskCount: number | string;
   inbox: PendingInboxItem[] | null;
+  userCreatedAt: Date | string | null;
 };
 
 export async function loadHomeSupport(input: {
   userId: string;
-  createdAt: Date | null;
   now: Date;
 }): Promise<HomeSupport> {
   const rows = await prisma.$queryRawUnsafe<HomeSupportRow[]>(
@@ -76,7 +78,7 @@ export async function loadHomeSupport(input: {
 
   // 判定规则走 first-run.ts 里的同一条，避免两处走样。
   const firstRun = resolveFirstRunState({
-    createdAt: input.createdAt,
+    createdAt: row?.userCreatedAt ? new Date(row.userCreatedAt) : null,
     tourValue: preferences.get(FIRST_RUN_PREFERENCE.key) ?? null,
     projectCount: Number(row?.projectCount ?? 0),
     taskCount: Number(row?.taskCount ?? 0),
