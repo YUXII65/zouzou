@@ -84,6 +84,13 @@ Page({
   touchStart: null,
 
   onLoad() {
+    // 已登录用户不必再看落地页，直接进主界面；首跑引导由 today 页接管。
+    const { getToken } = require("../../utils/api");
+    if (getToken()) {
+      wx.reLaunch({ url: "/pages/today/today" });
+      return;
+    }
+
     const scenarioIndex = Math.floor(Math.random() * DEMO_SCENARIOS.length);
     this.setData({
       scenarioIndex,

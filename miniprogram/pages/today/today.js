@@ -7,6 +7,31 @@ const PRIORITY_OPTIONS = [
   { value: "urgent", label: "紧急" }
 ];
 
+const TODAY_CACHE_KEY = "next_step_mp_today_cache";
+const TODAY_CACHE_TTL = 24 * 60 * 60 * 1000;
+
+function readTodayCache() {
+  const { getToken } = require("../../utils/api");
+  const token = getToken();
+  if (!token) return null;
+  const cached = wx.getStorageSync(TODAY_CACHE_KEY);
+  if (!cached || typeof cached !== "object") return null;
+  if (cached.token !== token) return null;
+  if (!cached.at || Date.now() - cached.at > TODAY_CACHE_TTL) return null;
+  return cached.data || null;
+}
+
+function writeTodayCache(data) {
+  const { getToken } = require("../../utils/api");
+  const token = getToken();
+  if (!token || !data) return;
+  try {
+    wx.setStorageSync(TODAY_CACHE_KEY, { token, at: Date.now(), data });
+  } catch (error) {
+    // 缓存写入失败不影响正常流程。
+  }
+}
+
 function parseJson(value) {
   if (!value) return null;
   try {
@@ -67,6 +92,7 @@ Page({
   },
 
   onLoad() {
+    this._todayCacheRestored = false;
     this.updateClock();
   },
 
@@ -82,6 +108,7 @@ Page({
   onShow() {
     this.updateClock();
     this.syncUserHeader();
+    this.restoreTodayCache();
     this.loadToday();
     this.ensureOnboarding();
   },
@@ -98,6 +125,97 @@ Page({
       .catch(() => {});
   },
 
+  restoreTodayCache() {
+    if (this._todayCacheRestored) return;
+    this._todayCacheRestored = true;
+    const cached = readTodayCache();
+    if (cached) this.applyTodayResult(cached);
+  },
+
+  applyTodayResult(result) {
+    this.setData({
+      completedToday: result.completedToday || 0,
+      totalToday: result.totalToday || 0,
+      streak: result.streak || 0,
+      weekDone: result.weekDone || 0,
+      pendingItems: (result.pendingItems || []).map((item) => {
+        const plan = parseJson(item.aiPlanJson);
+        const clarification = parseJson(item.aiSuggestionJson);
+        const rawDimensions = normalizeDimensions(clarification);
+        const clarifyStatus = clarification && clarification.status
+          ? clarification.status
+          : rawDimensions.length
+            ? "asking"
+            : "done";
+        const dimensions = clarifyStatus === "done" ? [] : rawDimensions;
+        const actionLabels = {
+          create_project: "新建项目",
+          existing_project: "归入项目",
+          single_task: "创建任务",
+          ignore: "建议忽略"
+        };
+        const hasPlan = Boolean(plan && plan.action !== "ignore" && Array.isArray(plan.tasks) && plan.tasks.length);
+        const action = hasPlan
+          ? (actionLabels[plan.action] || "已整理")
+          : dimensions.length
+            ? "需要补充"
+            : clarifyStatus === "done"
+              ? "信息够了"
+              : "正在梳理...";
+
+        return {
+          id: item.id,
+          content: item.content,
+          action,
+          reason: plan && plan.reason ? plan.reason : "",
+          showProjectFields: Boolean(plan && (plan.action !== "single_task" || plan.projectName)),
+          projectName: plan && plan.projectName ? plan.projectName : "",
+          projectObjective: plan && plan.projectObjective ? plan.projectObjective : "",
+          projectMilestone: plan && plan.projectMilestone ? plan.projectMilestone : "",
+          planTasks: hasPlan
+            ? plan.tasks.map((task) => {
+                const index = priorityIndex(task.priority);
+                return {
+                  title: task.title || "",
+                  shortTitle: task.shortTitle || "",
+                  notes: task.notes || "",
+                  doneWhen: task.doneWhen || "",
+                  methodHint: task.methodHint || "",
+                  priority: PRIORITY_OPTIONS[index].value,
+                  priorityIndex: index,
+                  priorityLabel: PRIORITY_OPTIONS[index].label,
+                  scheduledDate: task.scheduledDate || "",
+                  dueDate: task.dueDate || ""
+                };
+              })
+            : [],
+          dimensions,
+          clarifyStatus,
+          clarifyMode: clarification && clarification.mode ? clarification.mode : "",
+          supplement: "",
+          supplementPlaceholder: clarification && clarification.supplementPlaceholder
+            ? clarification.supplementPlaceholder
+            : "如果这些选项都不准确，可以补充两句。"
+        };
+      }),
+      tasks: (result.tasks || []).map((task) => ({
+        ...task,
+        displayTitle: task.shortTitle && task.shortTitle.trim() ? task.shortTitle.trim() : fallbackTitle(task.title),
+        priorityLabel: (PRIORITY_OPTIONS.find((item) => item.value === task.priority) || PRIORITY_OPTIONS[1]).label,
+        actionLabel: task.status === "todo"
+          ? "下一步"
+          : task.status === "in_progress"
+            ? "完成"
+            : "重新开始",
+        nextStatus: task.status === "todo"
+          ? "in_progress"
+          : task.status === "in_progress"
+            ? "done"
+            : "todo"
+      }))
+    });
+  },
+
   loadToday() {
     const { getToken, getToday } = require("../../utils/api");
     if (!getToken()) {
@@ -107,87 +225,8 @@ Page({
 
     getToday()
       .then((result) => {
-        this.setData({
-          completedToday: result.completedToday || 0,
-          totalToday: result.totalToday || 0,
-          streak: result.streak || 0,
-          weekDone: result.weekDone || 0,
-          pendingItems: (result.pendingItems || []).map((item) => {
-            const plan = parseJson(item.aiPlanJson);
-            const clarification = parseJson(item.aiSuggestionJson);
-            const rawDimensions = normalizeDimensions(clarification);
-            const clarifyStatus = clarification && clarification.status
-              ? clarification.status
-              : rawDimensions.length
-                ? "asking"
-                : "done";
-            const dimensions = clarifyStatus === "done" ? [] : rawDimensions;
-            const actionLabels = {
-              create_project: "新建项目",
-              existing_project: "归入项目",
-              single_task: "创建任务",
-              ignore: "建议忽略"
-            };
-            const hasPlan = Boolean(plan && plan.action !== "ignore" && Array.isArray(plan.tasks) && plan.tasks.length);
-            const action = hasPlan
-              ? (actionLabels[plan.action] || "已整理")
-              : dimensions.length
-                ? "需要补充"
-                : clarifyStatus === "done"
-                  ? "信息够了"
-                  : "正在梳理...";
-
-            return {
-              id: item.id,
-              content: item.content,
-              action,
-              reason: plan && plan.reason ? plan.reason : "",
-              showProjectFields: Boolean(plan && (plan.action !== "single_task" || plan.projectName)),
-              projectName: plan && plan.projectName ? plan.projectName : "",
-              projectObjective: plan && plan.projectObjective ? plan.projectObjective : "",
-              projectMilestone: plan && plan.projectMilestone ? plan.projectMilestone : "",
-              planTasks: hasPlan
-                ? plan.tasks.map((task) => {
-                    const index = priorityIndex(task.priority);
-                    return {
-                      title: task.title || "",
-                      shortTitle: task.shortTitle || "",
-                      notes: task.notes || "",
-                      doneWhen: task.doneWhen || "",
-                      methodHint: task.methodHint || "",
-                      priority: PRIORITY_OPTIONS[index].value,
-                      priorityIndex: index,
-                      priorityLabel: PRIORITY_OPTIONS[index].label,
-                      scheduledDate: task.scheduledDate || "",
-                      dueDate: task.dueDate || ""
-                    };
-                  })
-                : [],
-              dimensions,
-              clarifyStatus,
-              clarifyMode: clarification && clarification.mode ? clarification.mode : "",
-              supplement: "",
-              supplementPlaceholder: clarification && clarification.supplementPlaceholder
-                ? clarification.supplementPlaceholder
-                : "如果这些选项都不准确，可以补充两句。"
-            };
-          }),
-          tasks: (result.tasks || []).map((task) => ({
-            ...task,
-            displayTitle: task.shortTitle && task.shortTitle.trim() ? task.shortTitle.trim() : fallbackTitle(task.title),
-            priorityLabel: (PRIORITY_OPTIONS.find((item) => item.value === task.priority) || PRIORITY_OPTIONS[1]).label,
-            actionLabel: task.status === "todo"
-              ? "下一步"
-              : task.status === "in_progress"
-                ? "完成"
-                : "重新开始",
-            nextStatus: task.status === "todo"
-              ? "in_progress"
-              : task.status === "in_progress"
-                ? "done"
-                : "todo"
-          }))
-        });
+        this.applyTodayResult(result);
+        writeTodayCache(result);
       })
       .catch((error) => {
         if (error.statusCode === 401) {

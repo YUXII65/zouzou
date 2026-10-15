@@ -30,6 +30,31 @@ function formatDate(value) {
 const PROJECT_STATUSES = ["active", "paused", "completed", "archived"];
 const PROJECT_STATUS_LABELS = ["进行中", "已暂停", "已完成", "已归档"];
 
+const WORKSPACE_CACHE_KEY = "next_step_mp_workspace_cache";
+const WORKSPACE_CACHE_TTL = 24 * 60 * 60 * 1000;
+
+function readWorkspaceCache() {
+  const { getToken } = require("../../utils/api");
+  const token = getToken();
+  if (!token) return null;
+  const cached = wx.getStorageSync(WORKSPACE_CACHE_KEY);
+  if (!cached || typeof cached !== "object") return null;
+  if (cached.token !== token) return null;
+  if (!cached.at || Date.now() - cached.at > WORKSPACE_CACHE_TTL) return null;
+  return cached.data || null;
+}
+
+function writeWorkspaceCache(data) {
+  const { getToken } = require("../../utils/api");
+  const token = getToken();
+  if (!token || !data) return;
+  try {
+    wx.setStorageSync(WORKSPACE_CACHE_KEY, { token, at: Date.now(), data });
+  } catch (error) {
+    // 缓存写入失败不影响正常流程。
+  }
+}
+
 function fallbackTitle(title) {
   const headline = String(title || "").split(/[，,。；;！？!\n]/)[0].trim() || String(title || "");
   return headline.length > 18 ? `${headline.slice(0, 17).trim()}…` : headline;
@@ -103,10 +128,22 @@ Page({
       userInitial: displayName.slice(0, 1)
     });
   },
+  onLoad() {
+    this._workspaceCacheRestored = false;
+  },
+
   onShow() {
+    this.restoreWorkspaceCache();
     this.loadWorkspace();
     this.syncUserHeader();
     this.ensureOnboarding();
+  },
+
+  restoreWorkspaceCache() {
+    if (this._workspaceCacheRestored) return;
+    this._workspaceCacheRestored = true;
+    const cached = readWorkspaceCache();
+    if (cached) this.applyWorkspaceResult(cached);
   },
 
   ensureOnboarding() {
@@ -130,17 +167,8 @@ Page({
 
     getWorkspace()
       .then((result) => {
-        const projects = result.projects || [];
-        const unassociatedTasks = result.unassociatedTasks || [];
-        const keepUnassigned = this.data.showUnassigned && unassociatedTasks.length > 0;
-        const currentIdExists = projects.some((project) => project.id === this.data.activeProjectId);
-        const activeProjectId = keepUnassigned
-          ? ""
-          : currentIdExists
-            ? this.data.activeProjectId
-            : (projects[0] && projects[0].id) || "";
-        const showUnassigned = keepUnassigned || (!projects.length && unassociatedTasks.length > 0);
-        this.applyWorkspace(projects, unassociatedTasks, activeProjectId, showUnassigned);
+        this.applyWorkspaceResult(result);
+        writeWorkspaceCache(result);
       })
       .catch((error) => {
         if (error.statusCode === 401) {
@@ -149,6 +177,20 @@ Page({
         }
         wx.showToast({ title: "书桌没加载出来", icon: "none" });
       });
+  },
+
+  applyWorkspaceResult(result) {
+    const projects = result.projects || [];
+    const unassociatedTasks = result.unassociatedTasks || [];
+    const keepUnassigned = this.data.showUnassigned && unassociatedTasks.length > 0;
+    const currentIdExists = projects.some((project) => project.id === this.data.activeProjectId);
+    const activeProjectId = keepUnassigned
+      ? ""
+      : currentIdExists
+        ? this.data.activeProjectId
+        : (projects[0] && projects[0].id) || "";
+    const showUnassigned = keepUnassigned || (!projects.length && unassociatedTasks.length > 0);
+    this.applyWorkspace(projects, unassociatedTasks, activeProjectId, showUnassigned);
   },
 
   applyWorkspace(projects, unassociatedTasks, activeProjectId, showUnassigned) {
