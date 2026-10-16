@@ -5,7 +5,7 @@
       <text class="brand-name">走走</text>
     </view>
     <view class="top-actions">
-      <view class="top-icon" bindtap="onToolsTap">▦</view>
+      <view class="top-icon" bindtap="onBackTap">‹</view>
       <view class="avatar" bindtap="onProfileTap"><image wx:if="{{userAvatar}}" src="{{userAvatar}}" mode="aspectFill"></image><text wx:else>{{userInitial}}</text></view>
     </view>
   </view>
@@ -13,7 +13,7 @@
   <view class="content">
     <view class="page-heading">
       <text class="eyebrow">让想法，走成下一步</text>
-      <text class="page-title">抽屉</text>
+      <text class="page-title">复盘</text>
       <text class="page-subtitle">每日复盘，并给出明天的执行建议</text>
     </view>
 
@@ -87,9 +87,5 @@
     </view>
   </view>
 
-  <view class="bottom-nav">
-    <view class="nav-item" data-key="today" bindtap="onTabTap"><text class="nav-icon">▦</text><text>日历</text></view>
-    <view class="nav-item" data-key="desk" bindtap="onTabTap"><text class="nav-icon">▤</text><text>书桌</text></view>
-    <view class="nav-item nav-item-active" data-key="review" bindtap="onTabTap"><text class="nav-icon">▣</text><text>抽屉</text></view>
-  </view>
+  <bottom-nav active="" theme="{{theme}}"></bottom-nav>
 </view>

@@ -2,11 +2,14 @@
   "cases": [
     {
       "id": "simple-edit",
-      "title": "已经说清楚的简单修改",
+      "title": "说清楚的简单修改也先确认一轮",
       "input": "把这句话改得口语一点：明天记得带身份证。",
       "expect": {
-        "shouldAsk": false,
-        "mustNotMention": ["你最想要什么", "第一步做什么"]
+        "shouldAsk": true,
+        "mustNotMention": [
+          "你最想要什么",
+          "第一步做什么"
+        ]
       }
     },
     {
@@ -15,11 +18,36 @@
       "input": "我想做一个个人网站，可能是作品集也可能是博客，还没想清楚，但想尽快有个能展示的东西。",
       "expect": {
         "shouldAsk": true,
-        "mustMentionAny": ["网站", "作品", "文章", "展示", "谁看", "读者", "招聘", "内容", "放上去", "东西", "现成", "手上"],
-        "mustNotMention": ["你最想要什么", "第一步做什么"]
+        "mustMentionAny": [
+          "网站",
+          "作品",
+          "文章",
+          "展示",
+          "谁看",
+          "读者",
+          "招聘",
+          "内容",
+          "放上去",
+          "东西",
+          "现成",
+          "手上"
+        ],
+        "mustNotMention": [
+          "你最想要什么",
+          "第一步做什么"
+        ]
       },
       "followUps": [
-        { "answer": ["作品集"], "expect": { "mustBuildOn": ["作品"] } }
+        {
+          "answer": [
+            "作品集"
+          ],
+          "expect": {
+            "mustBuildOn": [
+              "作品"
+            ]
+          }
+        }
       ]
     },
     {
@@ -28,17 +56,45 @@
       "input": "我想学 AI、做个人网站、运营账号、学英语、健身、准备课程，感觉都很重要，但每天都推进不下去。",
       "context": {
         "memorySummary": "用户近期接受 2 次 AI 计划，忽略 1 次；当前未完成任务 8 个，累计完成 3 个。",
-        "evidence": ["当前未完成任务 8 个", "用户近期忽略过 AI 计划"]
+        "evidence": [
+          "当前未完成任务 8 个",
+          "用户近期忽略过 AI 计划"
+        ]
       },
       "expect": {
         "shouldAsk": true,
-        "mustMentionAny": ["六件", "重要", "保", "拖", "必须"],
-        "mustReferenceObjects": ["学 AI", "做个人网站", "运营账号", "学英语", "健身", "准备课程"],
+        "mustMentionAny": [
+          "六件",
+          "重要",
+          "保",
+          "拖",
+          "必须"
+        ],
+        "mustReferenceObjects": [
+          "学 AI",
+          "做个人网站",
+          "运营账号",
+          "学英语",
+          "健身",
+          "准备课程"
+        ],
         "minObjectRefs": 2,
-        "mustNotMention": ["你最想要什么", "优先级是什么"]
+        "mustNotMention": [
+          "你最想要什么",
+          "优先级是什么"
+        ]
       },
       "followUps": [
-        { "answer": ["学 AI"], "expect": { "mustBuildOn": ["学 AI"] } }
+        {
+          "answer": [
+            "学 AI"
+          ],
+          "expect": {
+            "mustBuildOn": [
+              "学 AI"
+            ]
+          }
+        }
       ]
     },
     {
@@ -55,12 +111,22 @@
           }
         ],
         "memorySummary": "活跃项目：下一步（V1.5 AI 记忆与反馈闭环）。最近复盘：继续推进 AI 记忆与反馈闭环。",
-        "evidence": ["下一步 已停 14 天", "最近复盘提到继续推进 AI 记忆与反馈闭环"]
+        "evidence": [
+          "下一步 已停 14 天",
+          "最近复盘提到继续推进 AI 记忆与反馈闭环"
+        ]
       },
       "expect": {
         "shouldAsk": true,
-        "mustMentionAny": ["V1.5", "任务", "项目", "下一步"],
-        "mustNotMention": ["你最近怎么样"]
+        "mustMentionAny": [
+          "V1.5",
+          "任务",
+          "项目",
+          "下一步"
+        ],
+        "mustNotMention": [
+          "你最近怎么样"
+        ]
       }
     },
     {
@@ -69,9 +135,18 @@
       "input": "我做一个任务。我有一个计划。我不知道干什么。",
       "expect": {
         "shouldAsk": true,
-        "readinessAny": ["needs_context", "needs_meaning"],
+        "readinessAny": [
+          "needs_context",
+          "needs_meaning"
+        ],
         "requiresMissingSlots": true,
-        "mustMentionAny": ["具体", "什么", "计划", "说不清", "哪件"],
+        "mustMentionAny": [
+          "具体",
+          "什么",
+          "计划",
+          "说不清",
+          "哪件"
+        ],
         "mustNotMention": [
           "个人网站",
           "健身",
@@ -86,8 +161,18 @@
       "input": "我想换一个笔记软件，但不知道选哪个，市面上的工具太多了。",
       "expect": {
         "shouldAsk": true,
-        "mustMentionAny": ["笔记", "同步", "协作", "手机", "电脑", "价格", "迁移"],
-        "mustNotMention": ["最好用的工具是什么"]
+        "mustMentionAny": [
+          "笔记",
+          "同步",
+          "协作",
+          "手机",
+          "电脑",
+          "价格",
+          "迁移"
+        ],
+        "mustNotMention": [
+          "最好用的工具是什么"
+        ]
       }
     },
     {
@@ -96,8 +181,17 @@
       "input": "我想和室友谈清楚家务分担，但怕把关系弄僵。",
       "expect": {
         "shouldAsk": true,
-        "mustMentionAny": ["室友", "家务", "关系", "边界", "约定", "分工"],
-        "mustNotMention": ["你想怎么沟通"]
+        "mustMentionAny": [
+          "室友",
+          "家务",
+          "关系",
+          "边界",
+          "约定",
+          "分工"
+        ],
+        "mustNotMention": [
+          "你想怎么沟通"
+        ]
       }
     },
     {
@@ -106,8 +200,18 @@
       "input": "我想提升自己。",
       "expect": {
         "shouldAsk": true,
-        "mustMentionAny": ["提升", "哪", "具体", "方面", "件", "什么"],
-        "mustNotMention": ["你最想要什么", "第一步做什么"]
+        "mustMentionAny": [
+          "提升",
+          "哪",
+          "具体",
+          "方面",
+          "件",
+          "什么"
+        ],
+        "mustNotMention": [
+          "你最想要什么",
+          "第一步做什么"
+        ]
       }
     },
     {
@@ -116,8 +220,21 @@
       "input": "我最近特别想辞职。",
       "expect": {
         "shouldAsk": true,
-        "mustMentionAny": ["辞职", "持续", "具体", "触发", "原因", "多久", "念头", "冒出来"],
-        "mustNotMention": ["你最想要什么", "别冲动", "冷静一下"]
+        "mustMentionAny": [
+          "辞职",
+          "持续",
+          "具体",
+          "触发",
+          "原因",
+          "多久",
+          "念头",
+          "冒出来"
+        ],
+        "mustNotMention": [
+          "你最想要什么",
+          "别冲动",
+          "冷静一下"
+        ]
       }
     },
     {
@@ -126,11 +243,32 @@
       "input": "我想减肥，但每次都坚持不下来。",
       "expect": {
         "shouldAsk": true,
-        "mustMentionAny": ["减肥", "坚持", "断", "环节", "饿", "停", "原因", "哪"],
-        "mustNotMention": ["你最想要什么", "你的目标是什么"]
+        "mustMentionAny": [
+          "减肥",
+          "坚持",
+          "断",
+          "环节",
+          "饿",
+          "停",
+          "原因",
+          "哪"
+        ],
+        "mustNotMention": [
+          "你最想要什么",
+          "你的目标是什么"
+        ]
       },
       "followUps": [
-        { "answer": ["饿得受不了"], "expect": { "mustBuildOn": ["饿"] } }
+        {
+          "answer": [
+            "饿得受不了"
+          ],
+          "expect": {
+            "mustBuildOn": [
+              "饿"
+            ]
+          }
+        }
       ]
     },
     {
@@ -139,17 +277,31 @@
       "input": "朋友让我帮他的公司做个官网，我不知道该不该接。",
       "expect": {
         "shouldAsk": true,
-        "mustMentionAny": ["接", "时间", "精力", "官网", "不接", "帮忙", "能力", "卡"],
-        "mustNotMention": ["你最想要什么"]
+        "mustMentionAny": [
+          "接",
+          "时间",
+          "精力",
+          "官网",
+          "不接",
+          "帮忙",
+          "能力",
+          "卡"
+        ],
+        "mustNotMention": [
+          "你最想要什么"
+        ]
       }
     },
     {
       "id": "over-specified-request",
-      "title": "已经说得很细，不该再追问",
+      "title": "说得再细也先确认一轮关键事实",
       "input": "帮我写一封邮件给房东，说明厨房水龙头从周二开始漏水，我已经用毛巾垫着，希望他这周五前安排师傅上门，我的电话是13800000000。",
       "expect": {
-        "shouldAsk": false,
-        "mustNotMention": ["你最想要什么", "第一步做什么"]
+        "shouldAsk": true,
+        "mustNotMention": [
+          "你最想要什么",
+          "第一步做什么"
+        ]
       }
     },
     {
@@ -157,15 +309,92 @@
       "title": "用户两轮都说“你帮我定”",
       "input": "我想学 AI、做个人网站、运营账号、学英语、健身、准备课程，但都推进不下去。",
       "followUps": [
-        { "answer": ["都行，你帮我定"], "expect": { "done": false } },
-        { "answer": ["没有，都差不多"] },
-        { "answer": ["真的随便，你定吧"], "expect": { "done": true } }
+        {
+          "answer": [
+            "都行，你帮我定"
+          ],
+          "expect": {
+            "done": false
+          }
+        },
+        {
+          "answer": [
+            "没有，都差不多"
+          ]
+        },
+        {
+          "answer": [
+            "真的随便，你定吧"
+          ],
+          "expect": {
+            "done": true
+          }
+        }
       ],
       "expect": {
         "shouldAsk": true,
-        "mustReferenceObjects": ["学 AI", "做个人网站", "运营账号", "学英语", "健身", "准备课程"],
+        "mustReferenceObjects": [
+          "学 AI",
+          "做个人网站",
+          "运营账号",
+          "学英语",
+          "健身",
+          "准备课程"
+        ],
         "minObjectRefs": 2,
-        "mustNotMention": ["你最想要什么"]
+        "mustNotMention": [
+          "你最想要什么"
+        ]
+      }
+    },
+    {
+      "id": "friend-distance",
+      "title": "多年朋友越来越没话聊",
+      "input": "和一个认识很多年的朋友最近越来越没话聊，见面也尴尬。",
+      "expect": {
+        "shouldAsk": true,
+        "mustMentionAny": [
+          "朋友",
+          "没话",
+          "尴尬",
+          "关系",
+          "见面",
+          "对方",
+          "这次"
+        ],
+        "mustNotMention": [
+          "你最想要什么",
+          "第一步做什么"
+        ]
+      }
+    },
+    {
+      "id": "relationship-end",
+      "title": "感情走到尽头，想结束又舍不得",
+      "input": "一段谈了很多年的感情走到尽头，我想结束，又舍不得这几年的投入。",
+      "expect": {
+        "shouldAsk": true,
+        "mustMentionAny": [
+          "感情",
+          "结束",
+          "舍不得",
+          "分开",
+          "关系",
+          "对方",
+          "这次"
+        ],
+        "mustNotMention": [
+          "你最想要什么",
+          "第一步做什么"
+        ]
+      }
+    },
+    {
+      "id": "pure-knowledge-first-question",
+      "title": "纯知识问题也先问清用途",
+      "input": "复利是什么？",
+      "expect": {
+        "shouldAsk": true
       }
     }
   ]

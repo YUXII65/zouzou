@@ -22,39 +22,37 @@
 
     <view class="pending-list" wx:if="{{pendingItems.length > 0}}">
       <view class="pending-card" wx:for="{{pendingItems}}" wx:key="id" wx:for-item="pending" wx:for-index="itemIndex">
-        <view class="pending-head">
-          <view class="pending-content">{{pending.content}}</view>
-          <view class="pending-action">{{pending.action}}</view>
+        <view
+          class="chat-turn chat-turn-{{turn.role}}"
+          wx:for="{{pending.turns}}"
+          wx:key="index"
+          wx:for-item="turn"
+          wx:for-index="turnIndex"
+        >
+          <view class="chat-bubble chat-bubble-{{turn.role}}">{{turn.text}}</view>
         </view>
 
-        <view class="pending-clarify" wx:if="{{pending.dimensions.length > 0}}">
-          <view class="clarify-dimension" wx:for="{{pending.dimensions}}" wx:key="key" wx:for-item="dimension" wx:for-index="dimensionIndex">
-            <view class="clarify-question">{{dimension.question}}</view>
-            <view class="pending-options">
-              <view
-                class="pending-option {{option.selected ? 'pending-option-selected' : ''}}"
-                wx:for="{{dimension.options}}"
-                wx:key="label"
-                wx:for-item="option"
-                wx:for-index="optionIndex"
-                data-item-index="{{itemIndex}}"
-                data-dimension-index="{{dimensionIndex}}"
-                data-option-index="{{optionIndex}}"
-                bindtap="onClarifyOptionTap"
-              >{{option.label}}</view>
-            </view>
-          </view>
-          <textarea
-            class="clarify-supplement"
-            value="{{pending.supplement}}"
-            maxlength="500"
-            placeholder="{{pending.supplementPlaceholder}}"
+        <view class="chat-options" wx:if="{{pending.options.length > 0}}">
+          <view
+            class="chat-option {{option.selected ? 'chat-option-selected' : ''}}"
+            wx:for="{{pending.options}}"
+            wx:key="label"
+            wx:for-item="option"
+            wx:for-index="optionIndex"
             data-item-index="{{itemIndex}}"
-            bindinput="onClarifySupplementInput"
-          ></textarea>
-          <view class="pending-confirm {{submittingClarifyId ? 'pending-confirm-disabled' : ''}}" data-item-index="{{itemIndex}}" bindtap="onClarifySubmit">
-            {{submittingClarifyId === pending.id ? '正在整理...' : '确定方向，给我下一步'}}
-          </view>
+            data-option-index="{{optionIndex}}"
+            bindtap="onClarifyOptionTap"
+          >{{option.label}}</view>
+        </view>
+
+        <view class="chat-tools" wx:if="{{pending.options.length > 0}}">
+          <view class="chat-direct-toggle" data-item-index="{{itemIndex}}" bindtap="onClarifyDirectToggle">想自己说</view>
+          <view class="chat-confirm" wx:if="{{pending.multi}}" data-item-index="{{itemIndex}}" bindtap="onClarifyMultiConfirm">确定</view>
+        </view>
+
+        <view class="chat-direct" wx:if="{{pending.directInput}}">
+          <input class="chat-input" value="{{pending.typed}}" placeholder="输入你想说的话" data-item-index="{{itemIndex}}" bindinput="onClarifyTypedInput" />
+          <view class="chat-send" data-item-index="{{itemIndex}}" bindtap="onClarifyDirectSend">发送</view>
         </view>
 
         <view
@@ -92,16 +90,6 @@
       </view>
     </view>
 
-    <view class="panel" wx:if="{{directAnswers.length}}">
-      <view class="panel-header">
-        <text class="panel-title">直接回答</text>
-      </view>
-      <view class="plan-reason" wx:for="{{directAnswers}}" wx:key="id">
-        <text class="plan-reason-icon">✦</text>
-        <text>{{item.content}}</text>
-      </view>
-    </view>
-
     <view class="panel tasks-panel">
       <view class="panel-header">
         <text class="panel-title">今日建议</text>
@@ -125,9 +113,16 @@
             <view class="task-meta-row">
               <text class="task-priority">{{item.priorityLabel}}</text>
               <text class="task-meta">{{item.projectName}}</text>
+              <text class="task-reason" wx:if="{{item.reason}}">{{item.reason}}</text>
             </view>
             <text class="task-due" wx:if="{{item.dueDateText}}">截止 {{item.dueDateText}}</text>
             <view class="task-detail" wx:if="{{expandedTaskId === item.id}}">
+              <view class="task-sticky" wx:if="{{item.sticky}}">
+                <view class="task-sticky-title">{{item.sticky.title}}</view>
+                <view class="task-sticky-copy" wx:if="{{item.sticky.encouragement}}">{{item.sticky.encouragement}}</view>
+                <view class="task-sticky-step" wx:for="{{item.sticky.steps}}" wx:key="*this" wx:for-item="step">{{index + 1}}. {{step}}</view>
+                <view class="task-sticky-next" wx:if="{{item.sticky.nextStep}}">现在可以做：{{item.sticky.nextStep}}</view>
+              </view>
               <view class="task-detail-title">{{item.title}}</view>
               <view class="task-detail-copy" wx:if="{{item.notes && item.notes !== item.title}}">{{item.notes}}</view>
               <view class="task-detail-standard" wx:if="{{item.doneWhen}}">完成标准：{{item.doneWhen}}</view>

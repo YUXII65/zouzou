@@ -143,8 +143,8 @@ test("翻译 Agent 首轮必须保留一次提问", () => {
   for (const token of [
     "history 为空",
     "forceQuestion 为 true",
-    "默认必须给一个只有用户知道的事实/条件题",
-    "唯一例外：responseMode 判定为 answer",
+    "question 不许为 null，必须给一个只有用户知道的事实/条件题",
+    "涉及他个人时间、能力、关系、感情、情绪、健康、习惯、钱、风险或现实代价的事",
     "低风险小任务也至少完成两轮提问",
     "history 已有回答且 forceQuestion 不为 true",
   ]) {
@@ -252,6 +252,19 @@ test("计划 user 消息保留结构化澄清历史", () => {
   assert.deepEqual(payload.clarificationSummary, { realProblem: "先验证需求" });
 });
 
+test("翻译 Agent 不再有直接回答出口", () => {
+  for (const token of [
+    "没有“直接回答”这个出口",
+    "把它落到一个能验收的动作或计划上",
+    "涉及他个人时间、能力、关系、感情、情绪、健康、习惯、钱、风险或现实代价的事",
+  ]) {
+    assert.ok(
+      CLARIFICATION_TRANSLATION_SYSTEM_PROMPT.includes(token),
+      `翻译 Agent 缺少去 answer 约束：${token}`,
+    );
+  }
+});
+
 test("翻译 Agent 遇到配置依赖任务也要补关键事实", () => {
   for (const token of [
     "设备、预算、时间窗口、对方的真实偏好",
@@ -302,15 +315,13 @@ test("计划质检 Agent 拦住准备动作和推回决定", () => {
   }
 });
 
-test("问答与做事分流：answer 是一等出口，不限制模型输出什么", () => {
+test("翻译 Agent 的 responseMode 只剩 action / plan", () => {
   assert.ok(
-    CLARIFICATION_TRANSLATION_SYSTEM_PROMPT.includes("answer|action|plan"),
+    CLARIFICATION_TRANSLATION_SYSTEM_PROMPT.includes('"responseMode":"action|plan"'),
   );
+  assert.ok(!CLARIFICATION_TRANSLATION_SYSTEM_PROMPT.includes("answer：他要的就是"));
   assert.ok(
-    CLARIFICATION_TRANSLATION_SYSTEM_PROMPT.includes("该回答就回答，该动手就动手"),
-  );
-  assert.ok(
-    !CLARIFICATION_TRANSLATION_SYSTEM_PROMPT.includes("不要选 answer"),
+    CLARIFICATION_TRANSLATION_SYSTEM_PROMPT.includes("没有“直接回答”这个出口"),
   );
   assert.ok(CLARIFICATION_TRANSLATION_SYSTEM_PROMPT.includes("推进成现实里的一件事"));
 });

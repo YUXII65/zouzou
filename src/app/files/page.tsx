@@ -11,7 +11,6 @@ import { FirstRunTour } from "@/components/first-run-tour";
 import { FilesFirstSticker } from "@/components/files-first-sticker";
 import { FIRST_RUN_TOUR_ENABLED } from "@/lib/tour";
 import { REVIEW_ENABLED } from "@/lib/review-feature";
-import { parseStagePreview } from "@/lib/project-progress-types";
 import { generateLongtermStagePreview } from "@/lib/project-progress-agent";
 import {
   FileBrowser,
@@ -20,8 +19,7 @@ import {
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser, readSessionUserId } from "@/lib/auth";
 import { getFirstRunState } from "@/lib/first-run";
-import { serializeTaskStickyNote } from "@/lib/task-sticky";
-import { buildTaskContract } from "@/lib/task-contract";
+import { buildFilesView } from "@/lib/files-view";
 import { repairUnassignedInboxProjects } from "@/lib/inbox-project";
 import { toDateInputValue } from "@/lib/date";
 
@@ -58,101 +56,19 @@ export default async function FilesPage({
   const reviewParam =
     typeof params.review === "string" ? params.review : "";
 
-  const [projects, tasks] = await Promise.all([
-    prisma.project.findMany({
-      where: { userId: user.id },
-      include: {
-        tasks: {
-          include: {
-            stickyNotes: { orderBy: { createdAt: "desc" } },
-          },
-          orderBy: [{ planOrder: "asc" }, { createdAt: "desc" }],
-        },
-        reviews: {
-          orderBy: { reviewDate: "desc" },
-          take: 12,
-          select: { id: true, reviewDate: true },
-        },
-        stages: {
-          where: { status: { in: ["active", "ready"] } },
-          orderBy: [{ order: "desc" }, { id: "asc" }],
-          take: 1,
-          select: {
-            id: true,
-            order: true,
-            status: true,
-            deliverable: true,
-            doneWhen: true,
-            nextStageJson: true,
-          },
-        },
-        tracks: {
-          where: { status: { not: "archived" } },
-          orderBy: [{ order: "asc" }, { id: "asc" }],
-          select: {
-            id: true,
-            name: true,
-            intent: true,
-            role: true,
-            status: true,
-            currentFocus: true,
-          },
-        },
-      },
-      orderBy: { updatedAt: "desc" },
-    }),
-    prisma.task.findMany({
-      where: { userId: user.id },
-      include: {
-        project: true,
-        stickyNotes: { orderBy: { createdAt: "desc" } },
-      },
-      orderBy: { createdAt: "desc" },
-    }),
-  ]);
+  // 文件页数据走两端共用的视图契约，小程序文件页消费同一份。
+  const view = await buildFilesView({ userId: user.id });
+  const {
+    projects: browserProjects,
+    unassociatedTasks: browserUnassociatedTasks,
+    missingStagePreviewIds,
+  } = view;
 
-  // 旧任务没有任务合同，第一次打开文件页时补齐，避免列表缺少执行方式。
-  const legacyTasks = tasks.filter((task) => !task.executionMode).slice(0, 20);
-  if (legacyTasks.length) {
-    await Promise.all(
-      legacyTasks.map((task) => {
-        const contract = buildTaskContract(
-          task.title + " " + (task.notes ?? ""),
-          task.title,
-        );
-        return prisma.task.update({
-          where: { id: task.id, userId: user.id },
-          data: {
-            executionMode: contract.executionMode,
-            doneWhen: contract.doneWhen,
-            methodHint: contract.methodHint,
-            maxTurns: contract.maxTurns,
-            toolPolicy: contract.toolPolicy,
-          },
-          select: { id: true },
-        });
-      }),
-    );
-  }
-
-  // 已经进入「待确认」但还没生成下一阶段总结的阶段，进页面时补一次。
-  // 这样长期项目做完当前阶段后是「直接看到总结」，而不是还要手点「生成」。
-  const stagesMissingPreview: string[] = [];
-  for (const project of projects) {
-    const stage = project.stages[0];
-    if (
-      project.mode === "longterm" &&
-      stage &&
-      (stage.status === "active" || stage.status === "ready") &&
-      !stage.nextStageJson
-    ) {
-      stagesMissingPreview.push(stage.id);
-    }
-  }
+  // 已经进入「待确认」但还没生成下一阶段总结的阶段，进页面时后台补一次。
   // 一次打开页面最多补 3 个，避免 longterm 项目多时集中打 AI。
-  if (stagesMissingPreview.length) {
+  if (missingStagePreviewIds.length) {
     after(async () => {
-      for (const stageId of stagesMissingPreview.slice(0, 3)) {
+      for (const stageId of missingStagePreviewIds.slice(0, 3)) {
         await generateLongtermStagePreview({
           userId: user.id,
           stageId,
@@ -161,29 +77,10 @@ export default async function FilesPage({
     });
   }
 
-  const unassociatedTasks = tasks.filter((task) => !task.projectId);
-  const browserProjects = projects.map((project) => ({
-    ...project,
-    reviews: project.reviews,
-    // 主线永远排在最前，支线按创建顺序跟在后面。
-    tracks: [...project.tracks].sort((a, b) =>
-      a.role === b.role ? 0 : a.role === "main" ? -1 : 1,
-    ),
-    stage: project.stages[0]
-      ? {
-          ...project.stages[0],
-          nextStage: parseStagePreview(project.stages[0].nextStageJson),
-        }
-      : null,
-    tasks: project.tasks.map((task) => ({
-      ...task,
-      stickyNotes: task.stickyNotes.map(serializeTaskStickyNote),
-    })),
-  }));
-  const browserUnassociatedTasks = unassociatedTasks.map((task) => ({
-    ...task,
-    stickyNotes: task.stickyNotes.map(serializeTaskStickyNote),
-  }));
+  const tasks = [
+    ...browserProjects.flatMap((project) => project.tasks),
+    ...browserUnassociatedTasks,
+  ];
 
   const editingTask = editParam
     ? (tasks.find((task) => task.id === editParam) ?? null)
@@ -210,7 +107,7 @@ export default async function FilesPage({
   // 手上没有明确要打开哪个文件夹时，全部保持收起状态。
   const initialProjectId = showUnassigned
     ? UNASSIGNED_ID
-    : (projects.find((project) => project.id === projectParam)?.id ?? null);
+    : (browserProjects.find((project) => project.id === projectParam)?.id ?? null);
 
   return (
     <>

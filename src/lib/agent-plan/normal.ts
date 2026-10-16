@@ -29,11 +29,7 @@ import {
   PLAN_AGENT_SYSTEM_PROMPT,
   PLAN_CRITIC_SYSTEM_PROMPT,
 } from "@/lib/agent-plan/prompts";
-import {
-  generateDirectAnswer,
-  runContentAgent,
-  type ContentAgentResult,
-} from "@/lib/agent-plan/content";
+import { runContentAgent } from "@/lib/agent-plan/content";
 import { buildDecisionSession } from "@/lib/decision";
 import { readPlanTracks } from "@/lib/project-track";
 import { toDateInputValue } from "@/lib/date";
@@ -270,55 +266,6 @@ export function isContentAgentEnabled() {
   return process.env.CONTENT_AGENT_PLAN !== "false";
 }
 
-function createDirectAnswerPlan(input: {
-  translation: InboxClarificationTranslation;
-  summary?: InboxClarificationSummary | null;
-  answer: NonNullable<ContentAgentResult["directAnswer"]>;
-}): InboxPlan {
-  return {
-    action: "answer",
-    responseMode: "answer",
-    directAnswer: input.answer.answer,
-    projectName: null,
-    projectObjective: null,
-    projectMilestone: null,
-    tasks: [],
-    mode: "normal",
-    reason:
-      input.answer.reason ||
-      input.summary?.workingAssumption ||
-      input.translation.normalizedIntent,
-    source: "model",
-    userCard: {
-      understanding:
-        input.summary?.realProblem || input.translation.normalizedIntent,
-      firstAction:
-        input.answer.nextAction ||
-        "先看完这段回答，确认它是否解决了你的问题。",
-      how: input.answer.answer.slice(0, 400),
-      doneWhen: "你已经得到能直接使用的答案。",
-      ifWrongThen: input.summary?.ifWrongThen || undefined,
-    },
-    session: buildDecisionSession({
-      stage: "execute",
-      kind: "plan",
-      coreNeedHypothesis:
-        input.summary?.realProblem || input.translation.normalizedIntent,
-      recommendation: input.answer.answer,
-      nextAction: input.answer.nextAction || "",
-      fallback: input.summary?.ifWrongThen || "",
-      confidence: 0.88,
-    }),
-    content: {
-      enabled: true,
-      stepCount: 0,
-      usedTranslation: true,
-      responseMode: "answer",
-      answer: input.answer.answer,
-    },
-  };
-}
-
 export async function planNormalWithAgents(
   input: NormalAgentInput,
 ): Promise<NormalAgentOutcome> {
@@ -357,31 +304,6 @@ export async function planNormalWithAgents(
         baseUrl: input.baseUrl,
       })
     ).translation;
-  // 直接回答是主链的一等出口：翻译判定「要的是知道 / 判断」时不走方案 Agent，
-  // 直接把答案交给用户（InboxPlan.action = "answer"）。回答没拿到就继续走方案链，不空手。
-  if (translation.responseMode === "answer") {
-    const directAnswer = await generateDirectAnswer({
-      content: input.content,
-      translation,
-      history: input.history,
-      summary: input.summary,
-      evidence: input.evidence,
-      decisionMemory: input.decisionMemory,
-      apiKey: input.apiKey,
-      model: input.model,
-      baseUrl: input.baseUrl,
-    });
-    if (directAnswer) {
-      return {
-        status: "ok",
-        plan: createDirectAnswerPlan({
-          translation,
-          summary: input.summary,
-          answer: directAnswer,
-        }),
-      };
-    }
-  }
 
   const brief = {
     route: "normal" as const,
@@ -495,8 +417,6 @@ export async function planNormalWithAgents(
 
   let agentPlan: NormalAgentPlan | null = null;
   let contentTrace: InboxPlanContentTrace | null = null;
-  let directAnswer: ContentAgentResult["directAnswer"] = null;
-
   if (isContentAgentEnabled()) {
     const content = await runContentAgent({
       content: input.content,
@@ -512,7 +432,6 @@ export async function planNormalWithAgents(
       model: input.model,
       baseUrl: input.baseUrl,
     });
-    directAnswer = content.directAnswer ?? null;
     if (content.plan) {
       agentPlan = content.plan;
       contentTrace = {
@@ -525,17 +444,6 @@ export async function planNormalWithAgents(
         steps: content.plan.steps,
       };
     }
-  }
-
-  if (directAnswer) {
-    return {
-      status: "ok",
-      plan: createDirectAnswerPlan({
-        translation,
-        summary: input.summary,
-        answer: directAnswer,
-      }),
-    };
   }
 
   if (!agentPlan) {

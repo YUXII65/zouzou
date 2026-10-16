@@ -22,13 +22,14 @@
 - 苏格拉底提问段（`SOCRATIC_CLARIFY_SYSTEM_PROMPT`）
 - 理解 Agent（`NORMAL_BRIEF_SYSTEM_PROMPT`）
 - `ANSWER_MODE_ENABLED` 开关（它同时承担「允许直答」和「切回旧链」两个互相打架的职责）
+- 直接回答出口（`answer` / `DIRECT_ANSWER_SYSTEM_PROMPT` / `generateDirectAnswer` / `createDirectAnswerPlan`）
 - 首页模式选择器（`mode-picker.tsx`）
 
-## 直答（responseMode = answer）
+## 没有直接回答出口
 
-- `responseMode`（answer / action / plan）由第 1 段翻译 Agent 自己判。answer / action / plan 都是正常结果，**没有默认项**：不要在提示词里写「默认 action」「只有…才准选 answer」「不要选 answer」这类限制。
-- 主链 `planNormalWithAgents` 遇到 `responseMode === "answer"` 直接走回答 Agent（`src/lib/agent-plan/content.ts` 的 `generateDirectAnswer`），产出 `InboxPlan.action="answer"`、不产任务。
-- answer 不受「至少两轮澄清」约束：缺会改变答案的事实才问，不缺就直接收口。回答生成只有这一份实现，主链与旧回退链共用。
+- `responseMode` 只有 action / plan，由第 1 段翻译 Agent 判，**没有默认项**。2026-10-16 起 answer 出口已移除：知识、事实、比较、推荐、判断类输入也按 action / plan 处理，落到一个能验收的动作或计划上。
+- 任何输入首轮都必须澄清，不再有「answer 不受至少两轮约束」的豁免。
+- `generateDirectAnswer` / `DIRECT_ANSWER_SYSTEM_PROMPT` / `createDirectAnswerPlan` 已删除；`InboxPlanResponseMode` 与 confirm / UI 里的 `answer` 分支只为读取历史数据保留，不要在新链路里产生 answer。
 
 ## 澄清规则
 
@@ -141,7 +142,7 @@
 - 判断「已经替用户做出决定」的标准：推荐本身要包含答案——要买的具体东西、要用的具体工具、要做的具体判断。凡是「先去了解 / 先去拍照 / 再筛选 / 再决定 / 挑出几个组合」这类把决定推迟给用户的写法都不合格。不能把「自己去设计几个方案」当第一任务。
 - 目标和里程碑必须具体到对象、范围、可检查的结果，禁止「初版」「最小一步」「先确认方向」「核心方向」「现实限制」这类空泛说法。
 - 载体必须是「这件事真正发生的地方」，不是「先记一下 / 先写下来」。只有目标本身就是记录、复盘，或记录是验证结果的必要证据时，「写下来」才算产出。
-- answer / 必要信息补充放在便利贴里，不再单独做回答页或新的出口。
+- 必要的信息补充放在便利贴里，不再单独做回答页或新的出口。
 - 复盘生成的下一步任务要精炼：每条两行（精简标题 + 具体说明），具体内容放进任务正文展开，不标序号、不写竖线。任务标题生成好再上屏，不能让用户看到「先有正文再总结标题」的过程。
 - 确认 AI 计划时，新任务必须自动生成第一张便利贴：`recommendation` 作为便利贴主内容、`executionSteps` 作为步骤、`nextStep` 作为当前动作，`fallback` 只落库、不写进便利贴。
 - 首启引导（`completeFirstRun` / `planOnboarding`）必须走同一条决策链：`generateFirstRunPlan` 返回 `taskRecommendation / taskExecutionSteps / taskFallback`，落库时用 `decisionCardFromTask` + `stickyPayloadFromDecisionCard` 生成第一张便利贴。prompt 放在 `ai-prompts.ts` 的 `FIRST_RUN_PLAN_SYSTEM_PROMPT`，和评测脚本共用同一份，不要再写回内联字符串。

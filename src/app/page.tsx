@@ -15,57 +15,14 @@ import { TaskRowDisclosure } from "@/components/task-row-disclosure";
 import { AiTaskPlanner } from "@/components/ai-task-planner";
 import { TodayFocusControls } from "@/components/today-focus-controls";
 import { after } from "next/server";
-import { prisma } from "@/lib/prisma";
-import { loadHomeSupport } from "@/lib/home-support";
 import { buildAiContext } from "@/lib/ai-context";
 import { getCurrentUser, readSessionUserId } from "@/lib/auth";
-import { serializeTaskStickyNote } from "@/lib/task-sticky";
-import {
-  endOfDay,
-  formatDate,
-  isSameDay,
-  startOfDay,
-  toDateInputValue,
-} from "@/lib/date";
+import { buildTodayView, type TodayViewTask } from "@/lib/today-view";
+import { formatDate, toDateInputValue } from "@/lib/date";
 
-const priorityOrder: Record<string, number> = {
-  urgent: 0,
-  high: 1,
-  medium: 2,
-  low: 3,
-};
 
-type AgendaTask = {
-  id: string;
-  title: string;
-  shortTitle: string | null;
-  notes: string | null;
-  priority: string;
-  status: string;
-  dueDate: Date | null;
-  scheduledDate: Date | null;
-  focusDate: Date | null;
-  stickyNotes: Array<{
-    id: string;
-    taskId: string;
-    sourceMessage: string;
-    title: string;
-    encouragement: string;
-    stepsJson: string;
-    nextStep: string;
-    createdAt: Date;
-  }>;
-  doneWhen: string | null;
-  methodHint: string | null;
-  project: { name: string } | null;
-  inboxItem: { id: string } | null;
-  reviewNextAction: {
-    review: { reviewDate: Date };
-  } | null;
-};
-
-function taskSource(task: AgendaTask) {
-  return task.project?.name ?? "未关联项目";
+function taskSource(task: TodayViewTask) {
+  return task.projectName ?? "未关联项目";
 }
 
 export const dynamic = "force-dynamic";
@@ -76,112 +33,27 @@ export default async function TodayPage() {
   const userId = await readSessionUserId();
   if (!userId) redirect("/landing");
   const now = new Date();
-  const dayStart = startOfDay(now);
-  const dayEnd = endOfDay(now);
-  // 首页读路径保持并发：任务列表 + 新手状态 / 今日推荐 / 待整理。
-  const [user, support, tasks] = await Promise.all([
+  // 首页数据走两端共用的今日视图契约，小程序消费同一份。
+  const [user, view] = await Promise.all([
     getCurrentUser(),
-    loadHomeSupport({ userId, now }),
-    prisma.task.findMany({
-      where: { userId },
-      include: {
-        project: { select: { name: true } },
-        inboxItem: { select: { id: true } },
-        reviewNextAction: {
-          select: {
-            review: { select: { reviewDate: true } },
-          },
-        },
-        stickyNotes: { orderBy: { createdAt: "desc" } },
-      },
-      orderBy: { createdAt: "desc" },
-    }),
+    buildTodayView({ userId, now }),
   ]);
   if (!user) redirect("/landing");
-  const { firstRun, focusSuggestions, pendingInbox } = support;
+  const {
+    firstRun,
+    focusSuggestions,
+    pendingInbox,
+    plannedTasks,
+    completedTodayTasks,
+  } = view;
+  const dateKey = toDateInputValue(now);
+  const todayTasks = [...plannedTasks, ...completedTodayTasks];
 
-
-  const openTasks = tasks.filter(
-    (task) => task.status !== "done" && task.status !== "cancelled",
-  );
-
-  const agenda = [...openTasks].sort((a, b) => {
-    function rank(task: AgendaTask) {
-      if (task.focusDate && isSameDay(task.focusDate, now)) return 0;
-      if (task.dueDate && task.dueDate < dayStart) return 1;
-      if (
-        task.scheduledDate &&
-        task.scheduledDate >= dayStart &&
-        task.scheduledDate <= dayEnd
-      ) {
-        return 2;
-      }
-      return 3;
-    }
-
-    const rankDiff = rank(a) - rank(b);
-    if (rankDiff !== 0) return rankDiff;
-    return (
-      (priorityOrder[a.priority] ?? 9) - (priorityOrder[b.priority] ?? 9)
-    );
-  });
-
-  const todayRelevant = agenda.filter((task) => {
-    if (task.focusDate && isSameDay(task.focusDate, now)) return true;
-    if (task.dueDate && task.dueDate < dayStart) return true;
-    if (
-      task.scheduledDate &&
-      task.scheduledDate >= dayStart &&
-      task.scheduledDate <= dayEnd
-    ) {
-      return true;
-    }
-    return false;
-  });
-
-  // 今天完成的也留在「今日建议」里：按 completedAt 落在今天判断，
-  // 过了 0 点自然就不在今天，等于每天自动清空。
-  const completedTodayTasks = tasks
-    .filter(
-      (task) =>
-        task.status === "done" &&
-        task.completedAt &&
-        task.completedAt >= dayStart &&
-        task.completedAt <= dayEnd,
-    )
-    .sort(
-      (a, b) =>
-        (b.completedAt?.getTime() ?? 0) - (a.completedAt?.getTime() ?? 0),
-    )
-    .slice(0, 5);
-
-  // 「今日建议」的待办部分交给模型取舍：当天已有推荐时按推荐取，
-  // 规则只在没有推荐时兜底、以及推荐名额因完成/取消空出来时补位。
-  const ruleOrdered = todayRelevant.length ? todayRelevant : agenda;
-  const openById = new Map(openTasks.map((task) => [task.id, task]));
-  const recommendedOpen = (focusSuggestions ?? [])
-    .map((item) => openById.get(item.taskId))
-    .filter((task): task is (typeof openTasks)[number] => Boolean(task));
-
-  const recommendedIds = new Set(recommendedOpen.map((task) => task.id));
-  const backfill = ruleOrdered.filter((task) => !recommendedIds.has(task.id));
-  const focusTarget = focusSuggestions
-    ? Math.min(3, focusSuggestions.length)
-    : 3;
-  const plannedTasks = [...recommendedOpen, ...backfill].slice(0, focusTarget);
-
-  const reasonByTaskId = new Map(
-    (focusSuggestions ?? []).map((item) => [item.taskId, item.reason]),
-  );
   // 用户读页面 / 打字的时间足够把 AI 上下文查好：放到响应之后预热，提交时直接命中缓存，
   // 省掉第一次 5~6 秒的跨洋查询（见 AGENTS.md「性能优化」一节）。
   after(() =>
     buildAiContext({ kind: "inbox_plan", userId: user.id }).catch(() => {}),
   );
-
-  const dateKey = toDateInputValue(now);
-
-  const todayTasks = [...plannedTasks, ...completedTodayTasks];
 
   return (
     <>
@@ -189,7 +61,7 @@ export default async function TodayPage() {
         <FirstRunTour
           initialStep={firstRun.tourStep}
           context="home"
-          hasTasks={tasks.length > 0}
+          hasTasks={todayTasks.length > 0}
           enabled={firstRun.isFirstRun}
         />
       ) : null}
@@ -213,13 +85,7 @@ export default async function TodayPage() {
         {todayTasks.length ? (
           <div className="divide-y divide-border">
             {plannedTasks.map((task) => (
-              <AgendaTaskRow
-                key={task.id}
-                task={task}
-                now={now}
-                dayStart={dayStart}
-                reason={reasonByTaskId.get(task.id) ?? null}
-              />
+              <AgendaTaskRow key={task.id} task={task} />
             ))}
             {completedTodayTasks.length ? (
               <div className="flex items-center gap-1.5 bg-surface-muted/60 px-4 py-2 text-xs font-medium text-ink-muted">
@@ -228,12 +94,7 @@ export default async function TodayPage() {
               </div>
             ) : null}
             {completedTodayTasks.map((task) => (
-              <AgendaTaskRow
-                key={task.id}
-                task={task}
-                now={now}
-                dayStart={dayStart}
-              />
+              <AgendaTaskRow key={task.id} task={task} />
             ))}
           </div>
         ) : (
@@ -249,23 +110,10 @@ export default async function TodayPage() {
 }
 
 
-function AgendaTaskRow({
-  task,
-  now,
-  dayStart,
-  reason,
-}: {
-  task: AgendaTask;
-  now: Date;
-  dayStart: Date;
-  reason?: string | null;
-}) {
-  const isFocused = task.focusDate && isSameDay(task.focusDate, now);
-  const isOverdue = task.dueDate && task.dueDate < dayStart;
-  const isScheduled =
-    task.scheduledDate &&
-    task.scheduledDate >= dayStart &&
-    task.scheduledDate <= endOfDay(now);
+function AgendaTaskRow({ task }: { task: TodayViewTask }) {
+  const isFocused = task.isFocused;
+  const isOverdue = task.isOverdue;
+  const isScheduled = task.isScheduled;
 
   return (
     <div className="flex flex-col gap-3 px-4 py-3 lg:flex-row lg:items-center">
@@ -275,9 +123,9 @@ function AgendaTaskRow({
           title={task.title}
           shortTitle={task.shortTitle}
           notes={task.notes}
-          projectName={task.project?.name ?? null}
+          projectName={task.projectName}
           status={task.status}
-          initialNotes={task.stickyNotes.map(serializeTaskStickyNote)}
+          initialNotes={task.stickyNotes}
         >
           <span className="mt-2 flex min-w-0 flex-wrap items-center gap-2">
             {isFocused ? (
@@ -301,8 +149,8 @@ function AgendaTaskRow({
             <span className="truncate text-xs text-ink-secondary">
               {taskSource(task)}
             </span>
-            {reason ? (
-              <span className="text-xs leading-5 text-ai">{reason}</span>
+            {task.reason ? (
+              <span className="text-xs leading-5 text-ai">{task.reason}</span>
             ) : null}
             {task.dueDate ? (
               <span className="text-xs text-danger">建议 {formatDate(task.dueDate)}前完成</span>

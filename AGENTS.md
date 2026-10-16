@@ -24,10 +24,16 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 
 - 第 1 段翻译 Agent（`translateIdea`）：用户原话 → 结构化 `translation`（`desiredOutcome` / `workingAssumption` / `ifWrongThen`），判 `readiness` 和 `responseMode`，**提问也由这一段负责**。
 - 第 2 段方案 Agent（`PLAN_AGENT_SYSTEM_PROMPT`）：澄清收口后直接产出唯一执行路径 + 任务，填 `executionMode` / `doneWhen` / `maxTurns` / `toolPolicy` / `methodHint` / `recommendation` / `executionSteps` / `fallback`，只承接已定好的 `workMode`，不自己判 mode。
-- 澄清**最少 2 轮、最多 4 轮**（到上限强制收口）；`responseMode === "answer"` 不受「至少两轮」约束，直接走回答 Agent、不产任务。
+- 澄清**最少 2 轮、最多 4 轮**（到上限强制收口）；没有「直接回答」出口（2026-10-16 移除），任何输入都先澄清，再产出行动卡 / 任务。
 - 三种模式 normal / longterm / explore 按「有没有终点」分，**用户永远不选模式**；模式在澄清收口之后、生成之前判定。
 - 生产链只有这一条，旧三段链只作失败回退。全部细节见 [`docs/ai-pipeline.md`](docs/ai-pipeline.md)。
 
+## 小程序与网页共用一份数据契约
+
+- 三页各有唯一契约：今天页 `src/lib/today-view.ts`、文件页 `src/lib/files-view.ts`、个人页 `src/lib/profile-view.ts`；网页页面和 `/api/miniprogram/*` 都调同一份。
+- 禁止在小程序端另写取数聚合（旧的 `src/lib/miniprogram-today.ts` 已删除）；小程序页面只做渲染和局部交互，不判业务分支（不判 `answer`、不拼 `dimensions`、不自己造状态）。
+- 新增页面/区块时先抽共享视图函数，再让两端各自渲染；契约模块不要依赖 `next/headers` 这类 HTTP 运行时（纯函数抽到独立模块，如 `src/lib/guest-user.ts`）。
+- 跨端行为也只能有一份实现：长期项目「进入下一阶段」共用 `src/lib/project-stage-advance.ts`（小程序走 `POST /api/miniprogram/projects/stage/advance`）；「今天要做」的 AI 取舍共用 `src/lib/today-focus-generate.ts`（小程序走 `POST /api/miniprogram/today/focus`）。不要在小程序端自己写事务或另调模型。任务执行合同字段（executionMode / doneWhen / methodHint / maxTurns / toolPolicy）统一走 `src/lib/task-contract-fields.ts` 的 `taskContractData`，任何入口都不要自己推断一遍。任务状态变更统一走 `src/lib/task-status.ts` 的 `applyTaskStatus`（小程序走 `POST /api/miniprogram/tasks/status`），阶段门控、阶段预览调度和完成反馈都在那里。复盘保存统一走 `src/lib/review-save.ts` 的 `saveReviewData`（小程序走 `POST /api/miniprogram/review/save`），decisionJson、下一步任务同步都在那里。项目编辑统一走 `src/lib/project-update.ts` 的 `updateProjectData`（小程序走 `POST /api/miniprogram/projects/update`），状态校验和 `ensureCurrentProjectStage` 都在那里。AI 辅助编辑统一走 `src/lib/ai-edit-suggestions.ts` 的 `buildTaskEditSuggestion` / `buildProjectEditSuggestion`（含 decisionMemory 上下文），不要在小程序里另拼一份上下文。
 ## 常用命令
 
 ```bash
@@ -36,6 +42,7 @@ pnpm build          # 生产构建；EdgeOne 用 pnpm build:edgeone
 pnpm typecheck      # tsc --noEmit
 pnpm lint           # eslint（扁平配置）
 pnpm test           # node:test，含 src/**/*.test.ts 与 scripts/**/*.test.mjs
+pnpm verify:miniprogram  # 小程序静态检查（事件实现 + 标签配对）
 pnpm eval:ai        # 计划结构 + methodHint
 pnpm eval:clarify   # 澄清（单轮 + 多轮）
 pnpm eval:mode      # 模式判定（--gate 默认 0.9）
@@ -51,6 +58,7 @@ pnpm check:online   # 上线前检查
 | 改动 | 门禁 |
 | --- | --- |
 | 任何改动（提交前） | `pnpm typecheck` + `pnpm lint` + `pnpm test` |
+| 小程序页面 / 接口 | `pnpm verify:miniprogram` |
 | 提示词、计划结构、任务字段 | `pnpm eval:ai`；动了首启计划再加 `pnpm eval:first-run` |
 | 澄清逻辑 / 澄清 UI | `pnpm eval:clarify` + `pnpm verify:clarify-flow`（需本地服务） |
 | 澄清重试、幂等、pending 清理 | `pnpm verify:clarify-retry` |

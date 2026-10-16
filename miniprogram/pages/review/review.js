@@ -19,8 +19,9 @@ Page({
     weekProjects: 0
   },
 
-  onLoad() {
-    const date = this.formatToday();
+  onLoad(options) {
+    const queryDate = options && typeof options.date === "string" ? options.date : "";
+    const date = /^\d{4}-\d{2}-\d{2}$/.test(queryDate) ? queryDate : this.formatToday();
     this.setData({ date });
     this.loadReview();
   },
@@ -178,14 +179,12 @@ Page({
 
   onProfileTap() { wx.navigateTo({ url: "/pages/profile/profile" }); },
 
-  onToolsTap() {
-    wx.reLaunch({ url: "/pages/tools/tools" });
+  onBackTap() {
+    const pages = getCurrentPages();
+    if (pages.length > 1) {
+      wx.navigateBack();
+      return;
+    }
+    wx.reLaunch({ url: "/pages/workspace/workspace" });
   },
-
-  onTabTap(event) {
-    const key = event.currentTarget.dataset.key;
-    const routes = { today: "/pages/today/today", desk: "/pages/workspace/workspace", review: "/pages/review/review" };
-    if (key === "review" || !routes[key]) return;
-    wx.reLaunch({ url: routes[key] });
-  }
 });

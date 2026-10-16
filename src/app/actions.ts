@@ -4,11 +4,7 @@ import { randomBytes, randomUUID } from "node:crypto";
 import { revalidatePath } from "next/cache";
 import { after } from "next/server";
 import { redirect } from "next/navigation";
-import type {
-  Priority,
-  ProjectStatus,
-  TaskStatus,
-} from "@prisma/client";
+import type { TaskStatus } from "@prisma/client";
 import { prisma, withTransactionRetry } from "@/lib/prisma";
 import { safeNext } from "@/lib/safe-next";
 import { isAdminUsername } from "@/lib/admin";
@@ -24,7 +20,6 @@ import {
 import { startOfDay, toDateInputValue } from "@/lib/date";
 import { buildAiContext, invalidateAiContext } from "@/lib/ai-context";
 import { createReviewDraft } from "@/lib/review-ai";
-import { syncReviewRelations } from "@/lib/review-relations";
 import { recordAiFeedback } from "@/lib/feedback";
 import { recordUsageEvent } from "@/lib/usage";
 import {
@@ -41,12 +36,19 @@ import {
   serializeTaskStickyNote,
   type TaskStickyNoteData,
 } from "@/lib/task-sticky";
-import { writeTodayFocus } from "@/lib/today-focus";
-import { buildTaskContract } from "@/lib/task-contract";
+import { generateTodayFocus } from "@/lib/today-focus-generate";
+import { priority, taskContractData } from "@/lib/task-contract-fields";
+import { applyTaskStatus } from "@/lib/task-status";
+import { saveReviewData } from "@/lib/review-save";
+import { projectStatus, updateProjectData } from "@/lib/project-update";
+import {
+  buildProjectEditSuggestion,
+  buildTaskEditSuggestion,
+} from "@/lib/ai-edit-suggestions";
+import { advanceProjectStage } from "@/lib/project-stage-advance";
 import {
   decisionCardFromAdvice,
   decisionCardFromTask,
-  decisionSessionFromReview,
   routeDecisionKind,
   stickyPayloadFromDecisionCard,
 } from "@/lib/decision";
@@ -61,22 +63,15 @@ import {
   advanceExploreAfterTask,
   generateLongtermStagePreview,
 } from "@/lib/project-progress-agent";
-import { MAX_LONGTERM_STAGES, parseStagePreview } from "@/lib/project-progress-types";
 import {
   appendTaskContinuation,
-  formatReviewNextActions,
   OPEN_TASK_STATUSES,
-  parseReviewNextActions,
-  shouldSyncReviewActions,
 } from "@/lib/task-flow";
 import {
   generateFirstRunPlan,
   generateSocraticClarification,
   generateTaskCoachAdvice,
-  generateTaskEditSuggestion,
   generateTaskShortTitle,
-  generateProjectEditSuggestion,
-  suggestTodayFocus,
   type FirstRunPlanResult,
   type InboxClarification,
   type InboxPlan,
@@ -87,21 +82,12 @@ import {
   type TodaySuggestion,
 } from "@/lib/ai";
 
-const projectStatuses: ProjectStatus[] = [
-  "active",
-  "paused",
-  "completed",
-  "archived",
-];
-
 const taskStatuses: TaskStatus[] = [
   "todo",
   "in_progress",
   "done",
   "cancelled",
 ];
-
-const priorities: Priority[] = ["low", "medium", "high", "urgent"];
 
 function text(formData: FormData, key: string) {
   const value = String(formData.get(key) ?? "").trim();
@@ -145,77 +131,10 @@ function dateString(value: string | null | undefined) {
   return new Date(year, month - 1, day);
 }
 
-function projectStatus(value: string): ProjectStatus {
-  return projectStatuses.includes(value as ProjectStatus)
-    ? (value as ProjectStatus)
-    : "active";
-}
-
 function taskStatus(value: string): TaskStatus {
   return taskStatuses.includes(value as TaskStatus)
     ? (value as TaskStatus)
     : "todo";
-}
-
-const TASK_EXECUTION_MODES = [
-  "quick",
-  "tool",
-  "produce",
-  "explore",
-  "project",
-] as const;
-const TASK_TOOL_POLICIES = ["none", "read", "confirm-write"] as const;
-
-/**
- * 把「任务要怎么做」这层合同统一落到数据库字段上。
- * 优先使用 AI / 表单给出的值，缺失时按标题与备注重新推断，保证旧入口也有契约。
- */
-function taskContractData(input: {
-  title: string;
-  notes?: string | null;
-  executionMode?: FormDataEntryValue | null;
-  doneWhen?: FormDataEntryValue | null;
-  methodHint?: FormDataEntryValue | null;
-  maxTurns?: FormDataEntryValue | number | null;
-  toolPolicy?: FormDataEntryValue | null;
-}) {
-  const inferred = buildTaskContract(
-    `${input.title} ${input.notes ?? ""}`.trim(),
-    input.title,
-  );
-  const rawMode = typeof input.executionMode === "string" ? input.executionMode : "";
-  const rawPolicy = typeof input.toolPolicy === "string" ? input.toolPolicy : "";
-  const rawDoneWhen = typeof input.doneWhen === "string" ? input.doneWhen.trim() : "";
-  const rawMethodHint =
-    typeof input.methodHint === "string" ? input.methodHint.trim() : "";
-  const rawMaxTurns = Number(
-    typeof input.maxTurns === "string" || typeof input.maxTurns === "number"
-      ? input.maxTurns
-      : Number.NaN,
-  );
-
-  return {
-    executionMode: (TASK_EXECUTION_MODES as readonly string[]).includes(rawMode)
-      ? rawMode
-      : inferred.executionMode,
-    doneWhen: rawDoneWhen || inferred.doneWhen,
-    methodHint: rawMethodHint
-      ? rawMethodHint.slice(0, 240)
-      : inferred.methodHint,
-    maxTurns:
-      Number.isFinite(rawMaxTurns) && rawMaxTurns > 0
-        ? Math.min(Math.floor(rawMaxTurns), 5)
-        : inferred.maxTurns,
-    toolPolicy: (TASK_TOOL_POLICIES as readonly string[]).includes(rawPolicy)
-      ? rawPolicy
-      : inferred.toolPolicy,
-  };
-}
-
-function priority(value: string): Priority {
-  return priorities.includes(value as Priority)
-    ? (value as Priority)
-    : "medium";
 }
 
 function taskReturnTo(value: string | null) {
@@ -704,22 +623,8 @@ export async function getTaskEditSuggestion(input: {
   idea: string;
 }): Promise<TaskEditSuggestion> {
   const user = await requireUser();
-  const aiContext = await buildAiContext({
-    kind: "task_edit",
-    taskId: input.taskId,
-    userId: user.id,
-  });
-  const { taskId: _taskId, ...suggestionInput } = input;
-  void _taskId;
-  return withAiQuota("task_edit", () =>
-    generateTaskEditSuggestion(
-      suggestionInput,
-      aiContext.summary,
-      aiContext.evidence,
-      aiContext.decisionMemory,
-    ),
-    user.id
-  );
+  // 实现收在 src/lib/ai-edit-suggestions.ts，小程序走同一个函数。
+  return buildTaskEditSuggestion(input, user.id);
 }
 
 export async function ensureTaskShortTitle(input: {
@@ -775,22 +680,7 @@ export async function getProjectEditSuggestion(input: {
   idea: string;
 }): Promise<ProjectEditSuggestion> {
   const user = await requireUser();
-  const aiContext = await buildAiContext({
-    kind: "project_edit",
-    projectId: input.projectId,
-    userId: user.id,
-  });
-  const { projectId: _projectId, ...suggestionInput } = input;
-  void _projectId;
-  return withAiQuota("project_edit", () =>
-    generateProjectEditSuggestion(
-      suggestionInput,
-      aiContext.summary,
-      aiContext.evidence,
-      aiContext.decisionMemory,
-    ),
-    user.id
-  );
+  return buildProjectEditSuggestion(input, user.id);
 }
 
 export async function getTaskCoachAdvice(input: {
@@ -1277,61 +1167,8 @@ export async function generateTodaySuggestion(
   void _formData;
   const user = await requireUser();
 
-  const [tasks, latestReview, activeProjects] = await Promise.all([
-    prisma.task.findMany({
-      where: {
-        userId: user.id,
-        status: { in: ["todo", "in_progress"] },
-      },
-      include: { project: true },
-      orderBy: [{ createdAt: "desc" }, { id: "asc" }],
-      take: 50,
-    }),
-    prisma.review.findFirst({
-      where: { userId: user.id },
-      select: { summary: true },
-      orderBy: { reviewDate: "desc" },
-    }),
-    prisma.project.findMany({
-      where: { status: "active", userId: user.id },
-      select: {
-        name: true,
-        objective: true,
-        currentMilestone: true,
-      },
-      orderBy: [{ updatedAt: "desc" }, { id: "asc" }],
-      take: 10,
-    }),
-  ]);
-
-  const aiContext = await buildAiContext({
-    kind: "today_focus",
-    userId: user.id,
-  });
-  const suggestions = await withAiQuota("today_focus", () =>
-    suggestTodayFocus(
-      tasks.map((task) => ({
-        id: task.id,
-        title: task.title,
-        projectName: task.project?.name ?? null,
-        priority: task.priority,
-        dueDate: task.dueDate,
-        scheduledDate: task.scheduledDate,
-        planOrder: task.planOrder,
-        batchId: task.inboxItemId,
-      })),
-      {
-        reviewSummary: latestReview?.summary ?? undefined,
-        projects: activeProjects,
-      },
-      aiContext.summary,
-      aiContext.evidence,
-      aiContext.decisionMemory,
-    ),
-    user.id
-  );
-
-  await writeTodayFocus(user.id, suggestions);
+  // 今日推荐只在 src/lib/today-focus-generate.ts 里实现，小程序走同一个函数。
+  const suggestions = await generateTodayFocus(user.id);
   revalidatePath("/");
   return suggestions;
 }
@@ -1443,45 +1280,17 @@ export async function saveReview(formData: FormData) {
   const id = text(formData, "id");
   const summary = text(formData, "summary");
   const rawNextActions = text(formData, "nextActions") ?? "";
-
   if (!id || !summary) return;
 
-  const nextActions = parseReviewNextActions(rawNextActions);
-  const nextActionsText = formatReviewNextActions(nextActions);
-  const existingReview = await prisma.review.findFirst({
-    where: { id, userId: user.id },
-    select: { status: true, nextActions: true, projectId: true },
-  });
-  if (!existingReview) return;
-
-  const shouldSyncActions = shouldSyncReviewActions(
-    existingReview.status,
-    existingReview.nextActions,
-    nextActionsText,
-  );
-  const decisionSession = decisionSessionFromReview({
+  // 复盘保存的唯一实现在 src/lib/review-save.ts，小程序走同一个函数。
+  const result = await saveReviewData({
+    userId: user.id,
+    reviewId: id,
     summary,
-    nextAction: nextActions[0]?.title ?? null,
+    nextActions: rawNextActions,
   });
-
-  const review = await prisma.review.update({
-    where: { id, userId: user.id },
-    data: {
-      summary,
-      nextActions: nextActionsText,
-      decisionJson: JSON.stringify(decisionSession),
-      status: "final",
-    },
-  });
-
-  // 已保存过的同一批下一步只更新复盘正文，不再重复创建或替换任务。
-  if (shouldSyncActions) {
-    await syncReviewRelations(review, nextActions, user.id);
-  }
-  await recordUsageEvent({ userId: user.id, event: "review_saved" });
-  invalidateAiContext(user.id);
-
-  return { date: toDateInputValue(review.reviewDate) };
+  if (!result) return;
+  return { date: result.date };
 }
 
 export async function createProject(formData: FormData) {
@@ -1523,30 +1332,18 @@ export async function updateProject(formData: FormData) {
   const id = text(formData, "id");
   const name = text(formData, "name");
   const objective = text(formData, "objective");
-
   if (!id || !name || !objective) return;
 
-  const currentMilestone = text(formData, "currentMilestone");
-  const project = await prisma.project.update({
-    where: { id, userId: user.id },
-    data: {
-      name,
-      objective,
-      status: projectStatus(String(formData.get("status") ?? "active")),
-      ...(formData.get("mode") !== null
-        ? { mode: normalizeProjectMode(formData.get("mode")) }
-        : {}),
-      currentMilestone,
-      notes: text(formData, "notes"),
-    },
-    select: { id: true, mode: true, objective: true },
-  });
-  await ensureCurrentProjectStage(prisma, {
+  // 项目编辑的唯一实现在 src/lib/project-update.ts，小程序走同一个函数。
+  await updateProjectData({
     userId: user.id,
-    projectId: project.id,
-    mode: project.mode,
-    milestone: currentMilestone,
-    objective: project.objective,
+    projectId: id,
+    name,
+    objective,
+    status: String(formData.get("status") ?? "active"),
+    mode: formData.get("mode") !== null ? String(formData.get("mode")) : null,
+    currentMilestone: text(formData, "currentMilestone"),
+    notes: text(formData, "notes"),
   });
 
   revalidatePath("/");
@@ -1593,152 +1390,27 @@ export async function confirmStagePreviewAction(formData: FormData) {
   const stageId = text(formData, "stageId");
   if (!stageId) return;
 
-  // 事务里创建的新阶段，事务外要立刻补一份「下一阶段」预览（见下方）。
-  let createdNextStageId: string | null = null;
-
-  await withTransactionRetry(async (tx) => {
-    const stage = await tx.projectStage.findFirst({
-      where: { id: stageId, userId: user.id },
-      include: {
-        project: { select: { id: true, userId: true } },
-      },
-    });
-    if (!stage || stage.status !== "ready") return;
-
-    const preview = parseStagePreview(stage.nextStageJson);
-    if (!preview?.tasks.length) return;
-
-    await tx.$queryRaw`SELECT id FROM projects WHERE id = ${stage.projectId} FOR UPDATE`;
-
-    // 原子抢占：同一个 ready 阶段只能有一个请求把它推进到下一阶段。
-    const claimed = await tx.projectStage.updateMany({
-      where: { id: stage.id, userId: user.id, status: "ready" },
-      data: { status: "completed", completedAt: new Date() },
-    });
-    if (claimed.count === 0) return;
-
-    // 防止历史重复请求或脏数据已经创建过下一阶段。
-    const existingNextStage = await tx.projectStage.findFirst({
-      where: {
-        projectId: stage.projectId,
-        userId: user.id,
-        order: { gt: stage.order },
-      },
-      select: { id: true },
-    });
-    if (existingNextStage) return;
-
-    const plannedTasks = preview.tasks.slice(0, 4);
-    if (!plannedTasks.length || stage.order >= MAX_LONGTERM_STAGES) {
-      await tx.project.update({
-        where: { id: stage.projectId, userId: user.id },
-        data: { status: "paused" },
-      });
-      return;
-    }
-
-    const shouldCreateNextStage =
-      plannedTasks.length >= 2 ||
-      plannedTasks.some((task) =>
-        /等|等待|审批|签字|回复|反馈|到账|排期|对方|外部/.test(task.title),
-      );
-
-    let targetStageId = stage.id;
-    if (shouldCreateNextStage) {
-      const nextStage = await tx.projectStage.create({
-        data: {
-          userId: user.id,
-          projectId: stage.projectId,
-          order: stage.order + 1,
-          title: "当前阶段",
-          deliverable: preview.nextMilestone,
-          status: "active",
-        },
-        select: { id: true },
-      });
-      targetStageId = nextStage.id;
-      // 只有后面还有阶段才需要为它预生成「下一阶段」；到上限就别再打一次 AI。
-      if (stage.order + 1 < MAX_LONGTERM_STAGES) {
-        createdNextStageId = nextStage.id;
-      }
-    } else {
-      // 只有一条真实动作时，不单独造一个阶段，并回当前阶段继续推进。
-      await tx.projectStage.update({
-        where: { id: stage.id, userId: user.id },
-        data: {
-          status: "active",
-          completedAt: null,
-          nextStageJson: null,
-          nextStageUpdatedAt: null,
-        },
-      });
-    }
-
-    for (const [index, plannedTask] of plannedTasks.entries()) {
-      const created = await tx.task.create({
-        data: {
-          userId: user.id,
-          title: plannedTask.title,
-          shortTitle: plannedTask.shortTitle,
-          notes: plannedTask.notes,
-          projectId: stage.projectId,
-          stageId: targetStageId,
-          status: "todo",
-          priority: priority(plannedTask.priority),
-          scheduledDate: dateString(plannedTask.scheduledDate),
-          dueDate: dateString(plannedTask.dueDate),
-          planOrder: index,
-          ...taskContractData({
-            title: plannedTask.title,
-            notes: plannedTask.notes,
-            executionMode: plannedTask.executionMode,
-            doneWhen: plannedTask.doneWhen,
-            methodHint: plannedTask.methodHint,
-            maxTurns: plannedTask.maxTurns,
-            toolPolicy: plannedTask.toolPolicy,
-          }),
-        },
-        select: { id: true },
-      });
-
-      const sticky = stickyPayloadFromDecisionCard(
-        decisionCardFromTask(plannedTask),
-      );
-      await tx.taskStickyNote.create({
-        data: {
-          userId: user.id,
-          taskId: created.id,
-          sourceMessage: "长期阶段衔接 Agent",
-          title: sticky.title,
-          encouragement: sticky.encouragement,
-          stepsJson: JSON.stringify(sticky.steps),
-          nextStep: sticky.nextStep,
-        },
-      });
-    }
-
-    await tx.project.update({
-      where: { id: stage.projectId, userId: user.id },
-      data: { currentMilestone: preview.nextMilestone, status: "active" },
-    });
-  });
+  // 阶段推进只在 src/lib/project-stage-advance.ts 里实现，小程序走同一个函数。
+  const result = await advanceProjectStage({ userId: user.id, stageId });
 
   // 新阶段的「下一阶段」预览放到响应之后生成：点「进入下一阶段」应该立刻进去，
   // 不该等一次模型调用；等用户看页面的时间，这份预览已经在后台备好了。
-  const nextStageIdForPreview = createdNextStageId;
-  if (nextStageIdForPreview) {
+  if (result.nextStageId) {
+    const nextStageId = result.nextStageId;
     after(() =>
       generateLongtermStagePreview({
         userId: user.id,
-        stageId: nextStageIdForPreview,
+        stageId: nextStageId,
       }).catch(() => {}),
     );
   }
 
-  invalidateAiContext(user.id);
-  revalidatePath("/");
-  revalidatePath("/files");
-  revalidatePath("/workspace");
+  if (result.advanced) {
+    invalidateAiContext(user.id);
+    revalidatePath("/");
+    revalidatePath("/files");
+    revalidatePath("/workspace");
+  }
 }
 
 export async function deleteProject(formData: FormData) {
@@ -2007,97 +1679,13 @@ export async function setTaskStatus(formData: FormData) {
   const user = await requireUser();
   const id = text(formData, "id");
   const status = taskStatus(String(formData.get("status") ?? "todo"));
-
   if (!id) return;
 
-  // 「完成」是终态；服务端也拦住，不能只依赖按钮 disabled。
-  const transitionFilter = { status: { not: "done" as const } };
-  const updated = await prisma.task.updateManyAndReturn({
-    where: { id, userId: user.id, ...transitionFilter },
-    data: {
-      status,
-      completedAt: status === "done" ? new Date() : null,
-      completedBy: status === "done" ? "user" : null,
-    },
-    select: {
-      title: true,
-      status: true,
-      priority: true,
-      scheduledDate: true,
-      dueDate: true,
-      projectId: true,
-    },
-  });
-
-  if (!updated.length) return;
-
-  const updatedTask = updated[0];
-  if (updatedTask.projectId) {
-    const stageGate = await syncProjectStageGate(prisma, {
-      userId: user.id,
-      projectId: updatedTask.projectId,
-    });
-    scheduleLongtermStagePreview({
-      userId: user.id,
-      projectId: updatedTask.projectId,
-      gate: stageGate,
-    });
-  }
-  const reviewNextStatus =
-    status === "done"
-      ? "done"
-      : status === "cancelled"
-        ? "cancelled"
-        : "pending";
-
-  // 状态按钮必须尽快返回。统计、偏好学习和复盘联动放到响应完成后执行，
-  // 避免 Neon 的网络往返和整页重渲染阻塞用户操作。
-  after(async () => {
-    const backgroundTasks: Promise<unknown>[] = [
-      prisma.reviewNextAction.updateMany({
-        where: { taskId: id, userId: user.id },
-        data: { status: reviewNextStatus },
-      }),
-    ];
-
-    if (status === "done" || status === "cancelled") {
-      backgroundTasks.push(
-        advanceExploreAfterTask({ userId: user.id, taskId: id }),
-      );
-    }
-
-    if (status === "done") {
-      backgroundTasks.push(
-        recordAiFeedback({
-          userId: user.id,
-          source: "task",
-          action: "task_completed",
-          taskId: id,
-          projectId: updatedTask.projectId,
-          afterJson: taskSnapshot(updatedTask),
-        }),
-        recordUsageEvent({
-          userId: user.id,
-          event: "task_completed",
-          detail: id,
-        }),
-      );
-    } else if (status === "cancelled") {
-      backgroundTasks.push(
-        recordAiFeedback({
-          userId: user.id,
-          source: "task",
-          action: "task_cancelled",
-          taskId: id,
-          projectId: updatedTask.projectId,
-          afterJson: taskSnapshot(updatedTask),
-        }),
-      );
-    }
-
-    await Promise.all(backgroundTasks).catch(() => {});
-  });
-  invalidateAiContext(user.id);
+  // 任务状态变更的唯一实现在 src/lib/task-status.ts，小程序走同一个函数。
+  await applyTaskStatus({ userId: user.id, taskId: id, status });
+  revalidatePath("/");
+  revalidatePath("/files");
+  revalidatePath("/workspace");
 }
 
 export async function markTodayFocus(formData: FormData) {

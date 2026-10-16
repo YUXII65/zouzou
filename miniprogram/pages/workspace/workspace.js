@@ -40,6 +40,9 @@ function normalizeMode(mode) {
 
 function decorateTask(task) {
   const dueDate = parseDate(task.dueDate);
+  const stickyNote = Array.isArray(task.stickyNotes) && task.stickyNotes.length
+    ? task.stickyNotes[0]
+    : null;
   const today = formatDateKey(new Date());
   const scheduledDate = parseDate(task.scheduledDate);
   const focusDate = parseDate(task.focusDate);
@@ -48,6 +51,15 @@ function decorateTask(task) {
 
   return {
     ...task,
+    sticky: stickyNote
+      ? {
+          id: stickyNote.id,
+          title: stickyNote.title,
+          encouragement: stickyNote.encouragement,
+          steps: Array.isArray(stickyNote.steps) ? stickyNote.steps : [],
+          nextStep: stickyNote.nextStep,
+        }
+      : null,
     displayTitle: task.shortTitle && task.shortTitle.trim() ? task.shortTitle.trim() : fallbackTitle(task.title),
     priorityLabel: PRIORITY_LABELS[task.priority] || "中",
     dueDateText: formatDate(dueDate),
@@ -62,20 +74,41 @@ function decorateTask(task) {
   };
 }
 
+/** 阶段总结取句尾结论，避免把一整段交付物直接铺出来（与网页 StagePreviewPanel 一致）。 */
+function shortStageSummary(text, fallback, limit) {
+  const source = String(text || "").trim();
+  if (!source) return fallback;
+  const clauses = source
+    .split(/[，,。；;：:\n、]/)
+    .map((part) => part.trim())
+    .filter(Boolean);
+  const candidate = clauses.length > 1 ? clauses[clauses.length - 1] : clauses[0];
+  const out = candidate || fallback;
+  return out.length > limit ? out.slice(0, limit) + "…" : out;
+}
+
 function decorateStage(stage) {
   if (!stage) return null;
   const nextStage = stage.nextStage || null;
   const nextTasks = nextStage && Array.isArray(nextStage.tasks) ? nextStage.tasks : [];
   return {
     ...stage,
-    summary: nextStage && nextStage.currentSummary
-      ? nextStage.currentSummary
-      : stage.deliverable || "正在整理当前阶段",
-    nextSummary: nextStage && nextStage.nextSummary
-      ? nextStage.nextSummary
-      : nextStage && nextStage.nextMilestone
-        ? nextStage.nextMilestone
-        : "正在整理下一阶段",
+    summary: shortStageSummary(
+      nextStage && nextStage.currentSummary
+        ? nextStage.currentSummary
+        : stage.deliverable,
+      "正在整理当前阶段",
+      18
+    ),
+    nextSummary: shortStageSummary(
+      nextStage && nextStage.nextSummary
+        ? nextStage.nextSummary
+        : nextStage && nextStage.nextMilestone
+          ? nextStage.nextMilestone
+          : "",
+      "正在整理下一阶段",
+      18
+    ),
     nextOrder: Math.min((Number(stage.order) || 1) + 1, 5),
     canAdvance: stage.status === "ready" && nextTasks.length > 0
   };
@@ -102,6 +135,13 @@ function decorateProject(project) {
     doneCount: doneTasks.length,
     allDone: openTasks.length === 0 && doneTasks.length > 0,
     stage: decorateStage(project.stage),
+    reviews: Array.isArray(project.reviews)
+      ? project.reviews.map((review) => ({
+          id: review.id,
+          dateText: formatDate(review.reviewDate),
+          dateValue: formatDateKey(review.reviewDate),
+        }))
+      : [],
     tracks: Array.isArray(project.tracks) ? project.tracks : []
   };
 }
@@ -141,7 +181,8 @@ Page({
     openId: "",
     taskView: "open",
     expandedTaskId: "",
-    submittingTaskId: ""
+    submittingTaskId: "",
+    submittingStageId: ""
   },
 
   onLoad() {
@@ -249,6 +290,38 @@ Page({
     this.setData({
       expandedTaskId: this.data.expandedTaskId === taskId ? "" : taskId
     });
+  },
+
+  // 复盘目前是独立页面：文件页只负责给入口（与网页探索项目的「复盘」一致）。
+  onOpenReview(event) {
+    const date = event.currentTarget.dataset.date;
+    const url = date
+      ? `/pages/review/review?date=${date}`
+      : "/pages/review/review";
+    wx.navigateTo({ url });
+  },
+
+  onAdvanceStage(event) {
+    const stageId = event.currentTarget.dataset.id;
+    if (!stageId || this.data.submittingStageId) return;
+    const { advanceStage } = require("../../utils/api");
+    this.setData({ submittingStageId: stageId });
+    wx.showLoading({ title: "正在进入下一阶段..." });
+    advanceStage(stageId)
+      .then(() => {
+        wx.hideLoading();
+        this.setData({ submittingStageId: "" });
+        this.loadWorkspace();
+      })
+      .catch((error) => {
+        wx.hideLoading();
+        this.setData({ submittingStageId: "" });
+        if (error && error.statusCode === 401) {
+          wx.reLaunch({ url: "/pages/login/login" });
+          return;
+        }
+        wx.showToast({ title: "没能进入下一阶段，再试一次", icon: "none" });
+      });
   },
 
   onTaskStatusTap(event) {

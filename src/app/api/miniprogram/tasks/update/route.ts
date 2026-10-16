@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getMiniProgramUser } from "@/lib/miniprogram-auth";
 import { prisma } from "@/lib/prisma";
-import { buildTaskContract } from "@/lib/task-contract";
+import { taskContractData } from "@/lib/task-contract-fields";
 import { syncProjectStageGate } from "@/lib/project-stage";
 import { advanceExploreAfterTask } from "@/lib/project-progress-agent";
 import { after } from "next/server";
@@ -43,6 +43,8 @@ export async function POST(request: Request) {
     focusDate?: string;
     projectId?: string;
     doneWhen?: string;
+    methodHint?: string;
+    executionMode?: string;
   };
   try {
     body = (await request.json()) as typeof body;
@@ -84,7 +86,14 @@ export async function POST(request: Request) {
       ? (body.priority as (typeof priorities)[number])
       : "medium";
   const notes = body.notes?.trim().slice(0, 500) || null;
-  const contract = buildTaskContract(`${title} ${notes ?? ""}`.trim(), title);
+  // 与网页任务编辑共用同一套字段规范化（src/lib/task-contract-fields.ts）。
+  const contract = taskContractData({
+    title,
+    notes,
+    executionMode: body.executionMode ?? null,
+    doneWhen: body.doneWhen ?? null,
+    methodHint: body.methodHint ?? null,
+  });
   const completedAt =
     status === "done"
       ? new Date()
@@ -112,7 +121,8 @@ export async function POST(request: Request) {
             : "user"
           : null,
       executionMode: contract.executionMode,
-      doneWhen: body.doneWhen?.trim().slice(0, 500) || contract.doneWhen,
+      methodHint: contract.methodHint,
+      doneWhen: contract.doneWhen,
       maxTurns: contract.maxTurns,
       toolPolicy: contract.toolPolicy,
     },

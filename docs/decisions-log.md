@@ -197,3 +197,31 @@
 - 原规则：首页在有待确认阶段时显示一张「「XX」这一阶段完成了 / 交付物原文 / 下一阶段 →」的提醒卡；文件页只要当前没有推进中的任务就显示「没有推进中的任务 / 写下想法时 AI 会把它拆成这里的任务。」。
 - 推翻原因：浏览器批注——首页那张卡「删掉」；文件页的空状态在**任务已经全部做完**的项目里显示这句是错的（截了两处：普通项目「已完成 1」、长期项目「已完成 16」），要「换成已全部完成」。
 - 现在：首页不放阶段提醒卡（阶段推进只在文件页）；文件页在「完成过任务、当前无推进中」时显示「已全部完成」，只有一件都没做过才提示去写想法。门禁：`scripts/verify-explore-tracks.mjs` 的三条空状态断言。
+
+## 2026-10-16 · 移除「直接回答」出口
+
+- 原规则：翻译 Agent 可以把 `responseMode` 判成 answer，主链直接产出一段回答、不产任务；answer 不受「至少两轮澄清」约束，也没有独立的澄清卡。
+- 推翻原因：关系、感情这类输入最容易被判成 answer——用户还没被问清事实，就先拿到一篇通用建议；小程序端还因此长出了一个网页端没有的「直接回答」面板，和「一切都先澄清、再给行动卡」的形态不一致。
+- 现在：`responseMode` 只有 action / plan；任何输入首轮都必须澄清；`generateDirectAnswer` / `DIRECT_ANSWER_SYSTEM_PROMPT` / `createDirectAnswerPlan` 已删除。`InboxPlanResponseMode`、confirm 路由和两端 UI 里的 answer 分支只作历史数据兼容。
+- 门禁：`pnpm eval:clarify`（16 例全部要求首轮提问）+ `src/lib/ai-prompts.test.ts` 的 responseMode 断言。
+
+## 2026-10-16 · 小程序改为消费网页同一份视图契约
+
+- 原规则：网页 `src/app/page.tsx` 直接查库、自己排序取任务；小程序另有 `src/lib/miniprogram-today.ts` 聚合一套，字段名和筛选规则都不同。
+- 推翻原因：同一件事两份定义，网页迭代后小程序没跟上，只能靠手工打补丁对齐，永远滞后——用户看到的一直是旧版本。
+- 现在：新增 `src/lib/today-view.ts` 的 `buildTodayView` 作为今天页唯一契约，网页首页、`/api/miniprogram/today`、`/api/miniprogram/prefetch` 共用；`src/lib/miniprogram-today.ts` 已删除；小程序 `pages/today` 直接消费 `pendingInbox` / `plannedTasks` / `completedTodayTasks` / `stats`。
+- 同一轮把文件页（`src/lib/files-view.ts`）和个人页（`src/lib/profile-view.ts`）也收敛了：网页 `/files`、`/profile` 与小程序 `/api/miniprogram/workspace`、`/api/miniprogram/me` 都调同一份；小程序个人页因此第一次拿到真实的三模式推进计数。
+
+## 2026-10-16 · 跨端行为也收敛成一份实现
+
+- 原规则：长期项目「进入下一阶段」只写在网页 server action 里，小程序没有对应接口（文件页只能看阶段、不能推进）；「今天要做」的 AI 取舍也只在网页 action 里，小程序只能按规则取前三条。
+- 推翻原因：数据契约同源之后，行为还分叉，用户在小程序里做不了网页能做的事，又变成「小程序是旧版本」。
+- 现在：阶段推进抽到 `src/lib/project-stage-advance.ts`，今日推荐抽到 `src/lib/today-focus-generate.ts`，网页 action 与小程序 API 调同一份；小程序端只保留 UI 交互。
+- 门禁：`pnpm typecheck` + `pnpm test` + `pnpm build`；新增的两个小程序 API 都带鉴权（仓库不变量测试覆盖）。
+
+## 2026-10-16 · 清掉小程序的旧导航概念（日历 / 书桌 / 抽屉）
+
+- 原规则：小程序的复盘页自带一套 v2.5 底部导航「日历 / 书桌 / 抽屉」，新手引导第 4 步引导用户「点抽屉复盘」，复盘页顶部图标跳 `/pages/tools/tools`。
+- 推翻原因：抽屉（tools）早已退役、网页侧也撤销了这条引导（见 `_open-questions.md`），这些文案指向的入口根本不存在；三页结构现在是首页 / 文件 / 个人。
+- 现在：复盘页改用全局 `bottom-nav`、标题是「复盘」、顶部图标是返回（无上一页时回文件页）；新手引导去掉「抽屉复盘」变成 3 步；`pages/tools` 降级成纯兜底跳转（进页面即回文件页），与网页 `/tools` → `/files` 的 302 一致。
+- 门禁：小程序静态检查（每个页面的 bind 事件都有实现、`<view>` 标签成对）。

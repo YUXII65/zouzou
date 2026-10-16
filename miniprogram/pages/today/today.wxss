@@ -291,3 +291,28 @@
 .task-detail-copy { margin-top: 10rpx; padding-top: 10rpx; border-top: 1rpx solid #e5eefb; color: #4d6d94; font-size: 22rpx; line-height: 1.6; white-space: pre-wrap; }
 .task-detail-standard { margin-top: 10rpx; padding-top: 10rpx; border-top: 1rpx solid #e5eefb; color: #4d6d94; font-size: 22rpx; line-height: 1.6; }
 .task-detail-edit { display: inline-block; margin-top: 12rpx; color: #2f63e6; font-size: 22rpx; font-weight: 600; }
+.task-sticky { margin-bottom: 14rpx; padding: 18rpx; border-radius: 14rpx; background: rgba(212, 134, 43, 0.08); }
+.task-sticky-title { color: #182238; font-size: 24rpx; font-weight: 700; }
+.task-sticky-copy { display: block; margin-top: 8rpx; color: #4d6d94; font-size: 22rpx; line-height: 1.6; }
+.task-sticky-step { margin-top: 8rpx; color: #182238; font-size: 23rpx; line-height: 1.6; }
+.task-sticky-next { margin-top: 10rpx; padding: 12rpx; border-radius: 12rpx; background: rgba(255, 255, 255, 0.72); color: #182238; font-size: 22rpx; line-height: 1.6; }
+
+/* 对话式澄清：与网页端 ChatClarify 对齐 */
+.chat-turn { display: flex; margin-bottom: 14rpx; }
+.chat-turn-user { justify-content: flex-end; }
+.chat-turn-ai { justify-content: flex-start; }
+.chat-bubble { max-width: 82%; padding: 16rpx 20rpx; border-radius: 18rpx; font-size: 26rpx; line-height: 1.6; white-space: pre-wrap; }
+.chat-bubble-user { background: #e8f0ff; color: #182238; border-top-right-radius: 6rpx; }
+.chat-bubble-ai { border: 1rpx solid #e3ecf7; border-radius: 18rpx 18rpx 18rpx 6rpx; background: #ffffff; color: #182238; }
+.chat-options { display: flex; flex-wrap: wrap; gap: 12rpx; margin: 6rpx 0 14rpx; }
+.chat-option { padding: 14rpx 22rpx; border: 1rpx solid #dce8f7; border-radius: 999rpx; background: #ffffff; color: #1e45b4; font-size: 24rpx; }
+.chat-option-selected { border-color: #2f63e6; background: #e8f0ff; }
+.chat-tools { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10rpx; }
+.chat-direct-toggle { color: #4d6d94; font-size: 23rpx; }
+.chat-confirm { padding: 10rpx 22rpx; border-radius: 999rpx; background: #2f63e6; color: #ffffff; font-size: 23rpx; font-weight: 600; }
+.chat-direct { display: flex; align-items: center; gap: 12rpx; margin-bottom: 12rpx; }
+.chat-input { flex: 1; min-width: 0; padding: 14rpx 18rpx; border: 1rpx solid #dce8f7; border-radius: 14rpx; background: #ffffff; font-size: 24rpx; }
+.chat-send { flex-shrink: 0; padding: 14rpx 24rpx; border-radius: 14rpx; background: #2f63e6; color: #ffffff; font-size: 24rpx; font-weight: 600; }
+
+/* 今日建议的推荐理由：与网页端同源展示 */
+.task-reason { margin-top: 4rpx; color: #2f63e6; font-size: 22rpx; line-height: 1.5; }

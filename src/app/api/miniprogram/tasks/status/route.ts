@@ -1,14 +1,12 @@
 import { NextResponse } from "next/server";
 import { getMiniProgramUser } from "@/lib/miniprogram-auth";
-import { prisma } from "@/lib/prisma";
-import { syncProjectStageGate } from "@/lib/project-stage";
-import { advanceExploreAfterTask } from "@/lib/project-progress-agent";
-import { after } from "next/server";
+import {
+  applyTaskStatus,
+  TASK_STATUSES,
+  type TaskStatusValue,
+} from "@/lib/task-status";
 
 export const dynamic = "force-dynamic";
-
-const allowedStatuses = ["todo", "in_progress", "done", "cancelled"] as const;
-type AllowedStatus = (typeof allowedStatuses)[number];
 
 export async function POST(request: Request) {
   const user = await getMiniProgramUser(request);
@@ -24,55 +22,16 @@ export async function POST(request: Request) {
   }
 
   const taskId = body.taskId?.trim();
-  const status = body.status as AllowedStatus;
-  if (!taskId || !allowedStatuses.includes(status)) {
+  const status = body.status as TaskStatusValue;
+  if (!taskId || !TASK_STATUSES.includes(status)) {
     return NextResponse.json({ error: "invalid_status" }, { status: 400 });
   }
 
-  const task = await prisma.task.findFirst({
-    where: { id: taskId, userId: user.id },
-    select: { id: true, projectId: true, status: true },
+  // 与网页任务状态按钮共用同一份实现（src/lib/task-status.ts）。
+  const result = await applyTaskStatus({ userId: user.id, taskId, status });
+  return NextResponse.json({
+    ok: true,
+    status: result.status,
+    unchanged: !result.changed,
   });
-  if (!task) {
-    return NextResponse.json({ error: "not_found" }, { status: 404 });
-  }
-
-  // 「完成」是终态；客户端按钮之外再加一层服务端保护。
-  if (task.status === "done" && status !== "done") {
-    return NextResponse.json({ ok: true, status: "done", unchanged: true });
-  }
-
-  const reviewNextStatus =
-    status === "done"
-      ? "done"
-      : status === "cancelled"
-        ? "cancelled"
-        : "pending";
-
-  await prisma.$transaction([
-    prisma.task.update({
-      where: { id: task.id, userId: user.id },
-      data: {
-        status,
-        completedAt: status === "done" ? new Date() : null,
-        completedBy: status === "done" ? "user" : null,
-      },
-    }),
-    prisma.reviewNextAction.updateMany({
-      where: { taskId: task.id, userId: user.id },
-      data: { status: reviewNextStatus },
-    }),
-  ]);
-
-  if (task.projectId) {
-    await syncProjectStageGate(prisma, {
-      userId: user.id,
-      projectId: task.projectId,
-    });
-  }
-  if (status === "done" || status === "cancelled") {
-    after(() => advanceExploreAfterTask({ userId: user.id, taskId: task.id }));
-  }
-
-  return NextResponse.json({ ok: true, status });
 }

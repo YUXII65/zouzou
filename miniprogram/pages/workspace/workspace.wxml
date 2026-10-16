@@ -12,6 +12,12 @@
         <text wx:if="{{task.dueDateText}}">建议 {{task.dueDateText}}前完成</text>
       </view>
       <view class="task-detail" wx:if="{{expandedTaskId === task.id}}">
+        <view class="task-sticky" wx:if="{{task.sticky}}">
+          <view class="task-sticky-title">{{task.sticky.title}}</view>
+          <view class="task-sticky-copy" wx:if="{{task.sticky.encouragement}}">{{task.sticky.encouragement}}</view>
+          <view class="task-sticky-step" wx:for="{{task.sticky.steps}}" wx:key="*this" wx:for-item="step">{{index + 1}}. {{step}}</view>
+          <view class="task-sticky-next" wx:if="{{task.sticky.nextStep}}">现在可以做：{{task.sticky.nextStep}}</view>
+        </view>
         <view class="task-detail-title">{{task.title}}</view>
         <view class="task-detail-copy" wx:if="{{task.notes && task.notes !== task.title}}">{{task.notes}}</view>
         <view class="task-detail-standard" wx:if="{{task.doneWhen}}">完成标准：{{task.doneWhen}}</view>
@@ -49,6 +55,12 @@
           <text class="stage-label">下一阶段 · 第 {{project.stage.nextOrder}}/5 阶段 · 预览</text>
           <text class="stage-copy">{{project.stage.nextSummary}}</text>
         </view>
+        <view
+          class="stage-advance {{submittingStageId ? 'stage-advance-disabled' : ''}}"
+          wx:if="{{project.stage.canAdvance}}"
+          data-id="{{project.stage.id}}"
+          catchtap="onAdvanceStage"
+        >{{submittingStageId === project.stage.id ? '正在进入...' : '进入下一阶段'}}</view>
       </view>
 
       <view class="track-list" wx:if="{{project.modeKey === 'explore' && project.tracks.length}}">
@@ -56,6 +68,13 @@
           <text class="track-role">{{track.role === 'main' ? '主线' : '支线'}}</text>
           <text class="track-name">{{track.name}}</text>
         </view>
+      </view>
+
+      <view class="review-block" wx:if="{{project.modeKey === 'explore'}}">
+        <view class="review-head">复盘记录</view>
+        <view class="review-empty" wx:if="{{!project.reviews.length}}">还没有复盘记录</view>
+        <view class="review-item" wx:for="{{project.reviews}}" wx:key="id" wx:for-item="review" data-date="{{review.dateValue}}" bindtap="onOpenReview">{{review.dateText}}</view>
+        <view class="review-generate" bindtap="onOpenReview">生成复盘</view>
       </view>
 
       <view class="task-switch">
@@ -72,7 +91,7 @@
       </view>
 
       <view class="file-task-list" wx:if="{{taskView === 'open' && project.openTasks.length}}">
-        <template is="file-task" wx:for="{{project.openTasks}}" wx:key="id" data="{{task: item, expandedTaskId: expandedTaskId, submittingTaskId: submittingTaskId}}"></template>
+        <template is="file-task" wx:for="{{project.openTasks}}" wx:key="id" data="{{task: item, expandedTaskId: expandedTaskId, submittingTaskId: submittingTaskId, submittingStageId: submittingStageId}}"></template>
       </view>
       <view class="file-task-list" wx:if="{{taskView === 'done' && project.doneTasks.length}}">
         <template is="file-task" wx:for="{{project.doneTasks}}" wx:key="id" data="{{task: item, expandedTaskId: expandedTaskId, submittingTaskId: submittingTaskId}}"></template>

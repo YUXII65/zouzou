@@ -488,3 +488,21 @@
   font-size: 21rpx;
   line-height: 1.6;
 }
+
+/* 任务展开里的便利贴：与今日页、网页端 TaskStickyInline 对齐 */
+.task-sticky { margin-bottom: 14rpx; padding: 18rpx; border-radius: 14rpx; background: rgba(212, 134, 43, 0.08); }
+.task-sticky-title { color: #182238; font-size: 24rpx; font-weight: 700; }
+.task-sticky-copy { display: block; margin-top: 8rpx; color: #4d6d94; font-size: 22rpx; line-height: 1.6; }
+.task-sticky-step { margin-top: 8rpx; color: #182238; font-size: 23rpx; line-height: 1.6; }
+.task-sticky-next { margin-top: 10rpx; padding: 12rpx; border-radius: 12rpx; background: rgba(255, 255, 255, 0.72); color: #182238; font-size: 22rpx; line-height: 1.6; }
+
+/* 长期项目：进入下一阶段（与网页 StagePreviewPanel 对齐） */
+.stage-advance { display: flex; align-items: center; justify-content: center; height: 68rpx; margin-top: 14rpx; border-radius: 14rpx; background: #2f63e6; color: #ffffff; font-size: 24rpx; font-weight: 600; }
+.stage-advance-disabled { opacity: 0.55; }
+
+/* 探索项目：复盘入口（与网页探索项目的「复盘」对齐） */
+.review-block { margin-top: 14rpx; padding: 18rpx; border: 1rpx solid #e3ecf7; border-radius: 14rpx; background: #f7faff; }
+.review-head { color: #4d6d94; font-size: 22rpx; font-weight: 600; }
+.review-empty { margin-top: 10rpx; color: #8296b0; font-size: 22rpx; }
+.review-item { margin-top: 10rpx; padding: 12rpx 16rpx; border-radius: 12rpx; background: #ffffff; color: #1e45b4; font-size: 23rpx; }
+.review-generate { display: flex; align-items: center; justify-content: center; height: 64rpx; margin-top: 12rpx; border-radius: 12rpx; background: #ffffff; border: 1rpx solid #dce8f7; color: #1e45b4; font-size: 23rpx; font-weight: 600; }

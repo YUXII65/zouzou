@@ -1,3 +1,4 @@
+// 该文件由 scripts/sync-sample-ideas.mjs 从 src/lib/sample-ideas.ts 生成，请勿手改。
 const sampleIdeas = [
   {
     "title": "干了四年的工作，想走又说不清为什么",

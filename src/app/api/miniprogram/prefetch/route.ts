@@ -1,5 +1,5 @@
 import { getMiniProgramUserByToken } from "@/lib/miniprogram-auth";
-import { buildTodayPayload } from "@/lib/miniprogram-today";
+import { buildTodayView, withLegacyTodayFields } from "@/lib/today-view";
 
 // 微信「数据预拉取 / 数据周期性更新」回调接口。
 // 微信服务器会在小程序冷启动前带 appid / timestamp / token 来 GET 这个地址，
@@ -29,7 +29,10 @@ export async function GET(request: Request) {
   }
 
   try {
-    const data = await buildTodayPayload(user);
+    // 过渡期兼容：旧小程序包读旧字段名。
+    const data = withLegacyTodayFields(
+      await buildTodayView({ userId: user.id }),
+    );
     return jsonResponse(JSON.stringify({ v: 1, ok: true, data }));
   } catch (error) {
     console.error("[miniprogram prefetch]", error);

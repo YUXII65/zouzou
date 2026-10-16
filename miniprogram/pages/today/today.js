@@ -69,6 +69,45 @@ function normalizeDimensions(clarification) {
   })).filter((dimension) => dimension.options.length > 0);
 }
 
+function buildClarifyTurns(clarification, content) {
+  const turns = [];
+  if (content) turns.push({ role: "user", text: content });
+  const history = clarification && Array.isArray(clarification.history)
+    ? clarification.history
+    : [];
+  if (history.length) {
+    history.forEach((entry) => {
+      const answered = Array.isArray(entry.answer) && entry.answer.length > 0;
+      turns.push({
+        role: "ai",
+        text: entry.question || "",
+        reflection: entry.reflection || "",
+        options: answered ? [] : (Array.isArray(entry.options) ? entry.options : []),
+        multi: Boolean(entry.multi),
+        key: entry.key || ""
+      });
+      if (answered) turns.push({ role: "user", text: entry.answer.join("、") });
+    });
+    return turns;
+  }
+  const first = normalizeDimensions(clarification)[0];
+  if (first) {
+    turns.push({
+      role: "ai",
+      text: first.question,
+      options: first.options.map((option) => option.label),
+      multi: Boolean(first.multi),
+      key: first.key
+    });
+  }
+  return turns;
+}
+
+function currentClarifyQuestion(turns) {
+  const last = turns.length ? turns[turns.length - 1] : null;
+  return last && last.role === "ai" ? last : null;
+}
+
 Page({
   data: {
     theme: "light",
@@ -78,7 +117,6 @@ Page({
     samples: sampleIdeasForDate(3),
     priorityLabels: PRIORITY_OPTIONS.map((item) => item.label),
     pendingItems: [],
-    directAnswers: [],
     tasks: [],
     submittingPlanId: "",
     submittingClarifyId: "",
@@ -143,7 +181,7 @@ Page({
 
   applyTodayResult(result) {
     this.setData({
-      pendingItems: (result.pendingItems || []).map((item) => {
+      pendingItems: (result.pendingInbox || []).map((item) => {
         const plan = parseJson(item.aiPlanJson);
         const clarification = parseJson(item.aiSuggestionJson);
         const rawDimensions = normalizeDimensions(clarification);
@@ -179,6 +217,9 @@ Page({
                 ? "信息够了"
                 : "正在梳理...";
 
+        const turns = buildClarifyTurns(clarification, item.content);
+        const question = clarifyStatus === "done" ? null : currentClarifyQuestion(turns);
+        const askingOptions = question && Array.isArray(question.options) ? question.options : [];
         return {
           id: item.id,
           content: item.content,
@@ -192,18 +233,41 @@ Page({
           dimensions,
           clarifyStatus,
           clarifyMode: clarification && clarification.mode ? clarification.mode : "",
-          supplement: "",
+          turns,
+          options: askingOptions.map((label) => ({ label, selected: false })),
+          multi: Boolean(question && question.multi),
+          questionKey: question && question.key ? question.key : "",
+          typed: "",
+          directInput: false,
           supplementPlaceholder: clarification && clarification.supplementPlaceholder
             ? clarification.supplementPlaceholder
             : "如果这些选项都不准确，可以补充两句。"
         };
       }),
-      tasks: (result.tasks || []).map((task) => {
+      tasks: [
+        ...(result.plannedTasks || []),
+        ...(result.completedTodayTasks || []),
+      ].map((task) => {
         const isDone = task.status === "done";
+        const stickyNote =
+          Array.isArray(task.stickyNotes) && task.stickyNotes.length
+            ? task.stickyNotes[0]
+            : null;
         return {
           ...task,
+          projectName: task.projectName || "未关联项目",
+          dueDateText: task.dueDate ? String(task.dueDate).slice(0, 10) : "",
           displayTitle: task.shortTitle && task.shortTitle.trim() ? task.shortTitle.trim() : fallbackTitle(task.title),
           priorityLabel: (PRIORITY_OPTIONS.find((item) => item.value === task.priority) || PRIORITY_OPTIONS[1]).label,
+          sticky: stickyNote
+            ? {
+                id: stickyNote.id,
+                title: stickyNote.title,
+                encouragement: stickyNote.encouragement,
+                steps: Array.isArray(stickyNote.steps) ? stickyNote.steps : [],
+                nextStep: stickyNote.nextStep,
+              }
+            : null,
           canChangeStatus: !isDone,
           actionLabel: isDone
             ? "完成"
@@ -235,6 +299,7 @@ Page({
       .then((result) => {
         this.applyTodayResult(result);
         writeTodayCache(result);
+        this.maybeGenerateFocus(result);
       })
       .catch((error) => {
         if (error.statusCode === 401) {
@@ -245,26 +310,30 @@ Page({
       });
   },
 
-  finishResolvedPlan(itemId, planResult) {
+  // 当天还没有 AI 推荐时补算一次；每天只试一次，失败也不打断页面。
+  maybeGenerateFocus(result) {
+    const focus = result && Array.isArray(result.focusSuggestions)
+      ? result.focusSuggestions
+      : [];
+    if (focus.length) return;
+    const dateKey = (result && result.date) || "";
+    if (!dateKey) return;
+    const guardKey = "next_step_today_focus_attempt";
+    try {
+      if (wx.getStorageSync(guardKey) === dateKey) return;
+      wx.setStorageSync(guardKey, dateKey);
+    } catch (error) {
+      // 存储不可用时仍然尝试一次。
+    }
+    const { refreshTodayFocus } = require("../../utils/api");
+    refreshTodayFocus()
+      .then(() => this.loadToday())
+      .catch(() => {});
+  },
+
+  finishResolvedPlan(itemId) {
     const { confirmPlan } = require("../../utils/api");
-    const plan = planResult && planResult.plan ? planResult.plan : planResult;
-    return confirmPlan({ itemId }).then((result) => {
-      const answer =
-        (result && result.directAnswer) ||
-        (plan && plan.directAnswer) ||
-        (plan && plan.userCard && plan.userCard.how) ||
-        (plan && plan.userCard && plan.userCard.understanding) ||
-        "";
-      if (answer) {
-        const current = this.data.directAnswers || [];
-        if (!current.some((item) => item.id === itemId)) {
-          this.setData({
-            directAnswers: [...current, { id: itemId, content: answer }]
-          });
-        }
-      }
-      return result;
-    });
+    return confirmPlan({ itemId }).then((result) => result);
   },
 
   onContentInput(event) {
@@ -330,63 +399,66 @@ Page({
 
   onClarifyOptionTap(event) {
     const itemIndex = Number(event.currentTarget.dataset.itemIndex);
-    const dimensionIndex = Number(event.currentTarget.dataset.dimensionIndex);
     const optionIndex = Number(event.currentTarget.dataset.optionIndex);
     const item = this.data.pendingItems[itemIndex];
-    if (!item || !item.dimensions[dimensionIndex]) return;
+    if (!item || !item.options || !item.options[optionIndex]) return;
+    if (this.data.submittingClarifyId) return;
 
-    const dimensions = item.dimensions.map((dimension, currentDimensionIndex) => {
-      if (currentDimensionIndex !== dimensionIndex) return dimension;
-      return {
-        ...dimension,
-        options: dimension.options.map((option, currentOptionIndex) => ({
-          ...option,
-          selected: dimension.multi
-            ? currentOptionIndex === optionIndex
-              ? !option.selected
-              : option.selected
-            : currentOptionIndex === optionIndex
-        }))
-      };
-    });
-
-    this.setData({ [`pendingItems[${itemIndex}].dimensions`]: dimensions });
-  },
-
-  onClarifySupplementInput(event) {
-    const itemIndex = Number(event.currentTarget.dataset.itemIndex);
-    if (Number.isNaN(itemIndex)) return;
-    this.setData({ [`pendingItems[${itemIndex}].supplement`]: event.detail.value });
-  },
-
-  onClarifySubmit(event) {
-    const itemIndex = Number(event.currentTarget.dataset.itemIndex);
-    const item = this.data.pendingItems[itemIndex];
-    if (!item || this.data.submittingClarifyId) return;
-
-    const selected = item.dimensions
-      .flatMap((dimension) =>
-        dimension.options
-          .filter((option) => option.selected)
-          .map((option) => option.label)
-      )
-      .filter(Boolean)
-      .slice(0, 6);
-    const dimensionChoices = item.dimensions.map((dimension) =>
-      dimension.options
-        .filter((option) => option.selected)
-        .map((option) => option.label)
-        .join("、")
-    );
-    const supplement = String(item.supplement || "").trim();
-    const answer = selected.length ? selected : supplement ? [supplement] : [];
-    if (!answer.length) {
-      wx.showToast({ title: "选一个方向，或补充两句", icon: "none" });
+    if (item.multi) {
+      const options = item.options.map((option, index) =>
+        index === optionIndex ? { ...option, selected: !option.selected } : option
+      );
+      this.setData({ [`pendingItems[${itemIndex}].options`]: options });
       return;
     }
+    this.commitClarifyAnswer(itemIndex, [item.options[optionIndex].label]);
+  },
+
+  onClarifyMultiConfirm(event) {
+    const itemIndex = Number(event.currentTarget.dataset.itemIndex);
+    const item = this.data.pendingItems[itemIndex];
+    if (!item) return;
+    const answer = (item.options || [])
+      .filter((option) => option.selected)
+      .map((option) => option.label);
+    if (!answer.length) {
+      wx.showToast({ title: "先选一项", icon: "none" });
+      return;
+    }
+    this.commitClarifyAnswer(itemIndex, answer);
+  },
+
+  onClarifyDirectToggle(event) {
+    const itemIndex = Number(event.currentTarget.dataset.itemIndex);
+    const item = this.data.pendingItems[itemIndex];
+    if (!item) return;
+    this.setData({ [`pendingItems[${itemIndex}].directInput`]: !item.directInput });
+  },
+
+  onClarifyTypedInput(event) {
+    const itemIndex = Number(event.currentTarget.dataset.itemIndex);
+    if (Number.isNaN(itemIndex)) return;
+    this.setData({ [`pendingItems[${itemIndex}].typed`]: event.detail.value });
+  },
+
+  onClarifyDirectSend(event) {
+    const itemIndex = Number(event.currentTarget.dataset.itemIndex);
+    const item = this.data.pendingItems[itemIndex];
+    if (!item) return;
+    const typed = String(item.typed || "").trim();
+    if (!typed) {
+      wx.showToast({ title: "先说一句", icon: "none" });
+      return;
+    }
+    this.commitClarifyAnswer(itemIndex, [typed]);
+  },
+
+  commitClarifyAnswer(itemIndex, answer) {
+    const item = this.data.pendingItems[itemIndex];
+    if (!item || this.data.submittingClarifyId) return;
     const { advanceClarify, planInbox } = require("../../utils/api");
     this.setData({ submittingClarifyId: item.id });
-    wx.showLoading({ title: "正在判断..." });
+    wx.showLoading({ title: "正在想下一个问题..." });
     const next = item.clarifyMode === "socratic"
       ? advanceClarify(item.id, answer)
       : Promise.resolve(null);
@@ -395,38 +467,40 @@ Page({
         if (item.clarifyMode !== "socratic") {
           return planInbox({
             itemId: item.id,
-            option: dimensionChoices.find(Boolean) || answer.join("、"),
-            dimensionChoices,
-            supplement
+            option: answer.join("、"),
+            dimensionChoices: [answer.join("、")],
           });
         }
         const result = response && response.result ? response.result : response;
         const clarification = result && result.clarification ? result.clarification : result;
         if (clarification && clarification.status !== "done") {
+          const turns = buildClarifyTurns(clarification, item.content);
+          const question = currentClarifyQuestion(turns);
+          const askingOptions = question && Array.isArray(question.options) ? question.options : [];
+          this.setData({
+            [`pendingItems[${itemIndex}].turns`]: turns,
+            [`pendingItems[${itemIndex}].options`]: askingOptions.map((label) => ({ label, selected: false })),
+            [`pendingItems[${itemIndex}].multi`]: Boolean(question && question.multi),
+            [`pendingItems[${itemIndex}].questionKey`]: question && question.key ? question.key : "",
+            [`pendingItems[${itemIndex}].typed`]: "",
+            [`pendingItems[${itemIndex}].directInput`]: false,
+          });
+          wx.hideLoading();
+          this.setData({ submittingClarifyId: "" });
           return null;
         }
         return planInbox({
           itemId: item.id,
           option: answer.join("、"),
           dimensionChoices: [answer.join("、")],
-          supplement
         });
       })
       .then((planResult) => {
-        if (!planResult) {
+        if (!planResult) return null;
+        return this.finishResolvedPlan(item.id).then(() => {
           wx.hideLoading();
           this.setData({ submittingClarifyId: "" });
-          wx.showToast({ title: "继续问一个关键问题", icon: "none" });
-          this.loadToday();
-          return null;
-        }
-        return this.finishResolvedPlan(item.id, planResult).then((confirmed) => {
-          wx.hideLoading();
-          this.setData({ submittingClarifyId: "" });
-          wx.showToast({
-            title: confirmed && confirmed.directAnswer ? "已直接回答" : "已放进文件",
-            icon: confirmed && confirmed.directAnswer ? "none" : "success"
-          });
+          wx.showToast({ title: "已放进文件", icon: "success" });
           this.loadToday();
         });
       })

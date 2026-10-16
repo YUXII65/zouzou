@@ -2,11 +2,9 @@ import { LogoutButton } from "@/components/logout-button";
 import { ProfileNameCard } from "@/components/profile-card";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { AiSettings } from "@/components/ai-settings";
-import { prisma } from "@/lib/prisma";
-import { isGuestUser, getCurrentUser, readSessionUserId } from "@/lib/auth";
+import { readSessionUserId } from "@/lib/auth";
 import { redirect } from "next/navigation";
-import { normalizeProjectMode, type ProjectMode } from "@/lib/work-mode";
-import { isOpenTaskStatus } from "@/lib/task-flow";
+import { buildProfileView } from "@/lib/profile-view";
 
 export const metadata = {
   title: "个人",
@@ -18,33 +16,10 @@ export default async function ProfilePage() {
   // 先解 cookie 拿 userId（不查库），把「查用户」和项目统计并到同一轮往返。
   const userId = await readSessionUserId();
   if (!userId) redirect("/login");
-  const [user, projects] = await Promise.all([
-    getCurrentUser(),
-    prisma.project.findMany({
-      where: { userId },
-      select: {
-        mode: true,
-        tasks: { select: { status: true } },
-      },
-    }),
-  ]);
-  if (!user) redirect("/login");
-
-  const serverConnected = Boolean(
-    process.env.DEEPSEEK_API_KEY || process.env.OPENAI_API_KEY,
-  );
-
-  const counts: Record<ProjectMode, number> = {
-    normal: 0,
-    longterm: 0,
-    explore: 0,
-  };
-  for (const project of projects) {
-    const mode = normalizeProjectMode(project.mode);
-    if (project.tasks.some((task) => isOpenTaskStatus(task.status))) {
-      counts[mode] += 1;
-    }
-  }
+  // 个人页数据走两端共用的视图契约，小程序个人页消费同一份。
+  const view = await buildProfileView({ userId });
+  if (!view) redirect("/login");
+  const { user, counts, serverConnected } = view;
 
   return (
     <>
@@ -55,7 +30,7 @@ export default async function ProfilePage() {
             username: user.username,
             displayName: user.displayName,
             avatarUrl: user.avatarUrl,
-            isGuest: isGuestUser(user),
+            isGuest: user.isGuest,
           }}
           counts={counts}
         />

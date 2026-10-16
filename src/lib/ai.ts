@@ -883,10 +883,7 @@ function normalizeClarificationTranslation(
     raw.readiness === "needs_meaning"
       ? raw.readiness
       : fallback.readiness;
-  const responseMode =
-    raw.responseMode === "plan" || raw.responseMode === "answer"
-      ? raw.responseMode
-      : "action";
+  const responseMode = raw.responseMode === "plan" ? "plan" : "action";
   const desiredOutcome = stringValue(
     raw.desiredOutcome,
     fallback.desiredOutcome || fallback.normalizedIntent,
@@ -1359,18 +1356,15 @@ export async function generateSocraticClarification(input: {
   // 生成 Agent 只在澄清收口之后才开工，不参与提问（不拿不完整的输入去跑生成）。
   // answer 类问题（要的就是答案本身）不被"至少两轮"卡住：模型没给问题就直接收口，
   // 不为了凑轮数去问和回答无关的事；只有缺会改变答案的事实才继续问。
-  const answerConverges = translation.responseMode === "answer";
   const finalQuestion =
     question ??
-    (answerConverges
-      ? null
-      : answeredCount < minQuestions
-        ? answeredCount === 0
-          ? translation.readiness === "ready"
-            ? buildFirstTurnQuestionFallback(input.content, translation)
-            : buildClarificationQuestionFallback(input.content)
-          : buildFollowUpQuestionFallback(input.content, translation)
-        : null);
+    (answeredCount < minQuestions
+      ? answeredCount === 0
+        ? translation.readiness === "ready"
+          ? buildFirstTurnQuestionFallback(input.content, translation)
+          : buildClarificationQuestionFallback(input.content)
+        : buildFollowUpQuestionFallback(input.content, translation)
+      : null);
 
   if (finalQuestion && answeredCount < maxQuestions) {
     const historyItem: InboxClarificationHistoryItem = {

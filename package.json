@@ -31,7 +31,8 @@
     "test": "node --experimental-strip-types --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --import ./scripts/ts-alias-loader.mjs --test \"src/**/*.test.ts\" \"scripts/**/*.test.mjs\"",
     "db:verify": "node scripts/restore-db.mjs",
     "db:verify:restore": "node scripts/verify-restore.mjs",
-    "db:verify:restore:fixture": "node scripts/verify-restore.mjs --fixture"
+    "db:verify:restore:fixture": "node scripts/verify-restore.mjs --fixture",
+    "verify:miniprogram": "node scripts/verify-miniprogram.mjs"
   },
   "dependencies": {
     "@prisma/client": "^6.19.3",

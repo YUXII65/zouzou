@@ -6,7 +6,15 @@
     <text class="label">内容</text>
     <textarea class="textarea" value="{{notes}}" placeholder="这件事具体是什么" bindinput="onNotesInput"></textarea>
 
+    <text class="label">做法</text>
+    <input class="input" value="{{methodHint}}" placeholder="写清这件事最适合怎么推进" bindinput="onMethodInput" />
+
     <text class="label">执行</text>
+    <picker mode="selector" range="{{executionModeLabels}}" value="{{executionModeIndex}}" bindchange="onExecutionChange">
+      <view class="picker">{{executionModeLabels[executionModeIndex]}}</view>
+    </picker>
+
+    <text class="label">完成标准</text>
     <textarea class="textarea" value="{{doneWhen}}" placeholder="完成到什么程度算这一步结束" bindinput="onDoneWhenInput"></textarea>
 
     <text class="label">优先级</text>

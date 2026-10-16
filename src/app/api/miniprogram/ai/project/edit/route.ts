@@ -1,14 +1,14 @@
 import { NextResponse } from "next/server";
-import { buildAiContext } from "@/lib/ai-context";
-import { withAiQuota } from "@/lib/ai-quota";
-import { generateProjectEditSuggestion } from "@/lib/ai";
 import { getMiniProgramUser } from "@/lib/miniprogram-auth";
+import { buildProjectEditSuggestion } from "@/lib/ai-edit-suggestions";
 
 export const dynamic = "force-dynamic";
 
 export async function POST(request: Request) {
   const user = await getMiniProgramUser(request);
-  if (!user) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  if (!user) {
+    return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  }
 
   let body: {
     projectId?: string;
@@ -32,25 +32,18 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "invalid_input" }, { status: 400 });
   }
 
-  const aiContext = await buildAiContext({
-    kind: "project_edit",
-    projectId: body.projectId?.trim(),
-    userId: user.id,
-  });
-  const suggestion = await withAiQuota("project_edit", () =>
-    generateProjectEditSuggestion(
-      {
-        name,
-        objective,
-        currentMilestone: body.currentMilestone,
-        status: body.status,
-        notes: body.notes,
-        idea,
-      },
-      aiContext.summary,
-      aiContext.evidence,
-    ),
-    user.id
+  // 与网页 AI 辅助编辑共用同一份实现（src/lib/ai-edit-suggestions.ts）。
+  const suggestion = await buildProjectEditSuggestion(
+    {
+      projectId: body.projectId,
+      name,
+      objective,
+      currentMilestone: body.currentMilestone,
+      status: body.status,
+      notes: body.notes,
+      idea,
+    },
+    user.id,
   );
 
   return NextResponse.json({ suggestion });

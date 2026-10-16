@@ -230,6 +230,22 @@ function sendReviewFeedback(reviewId, action) {
   });
 }
 
+// 今日推荐：当天还没有推荐时补算一次，与网页首页共用同一份实现。
+function refreshTodayFocus() {
+  return request("/api/miniprogram/today/focus", {
+    method: "POST",
+    data: {}
+  });
+}
+
+// 长期项目进入下一阶段：与网页文件页共用同一份服务端实现。
+function advanceStage(stageId) {
+  return request("/api/miniprogram/projects/stage/advance", {
+    method: "POST",
+    data: { stageId }
+  });
+}
+
 function getWorkspace() {
   return request("/api/miniprogram/workspace");
 }
@@ -381,6 +397,8 @@ function applyPrefetchedToday(callback) {
 }
 
 module.exports = {
+  refreshTodayFocus,
+  advanceStage,
   request,
   getToken,
   setToken,

@@ -6,7 +6,12 @@ Page({
     taskId: "",
     title: "",
     notes: "",
+    methodHint: "",
     doneWhen: "",
+    executionMode: "quick",
+    executionModeIndex: 0,
+    executionModeValues: ["quick", "tool", "produce", "explore", "project"],
+    executionModeLabels: ["直接完成", "查资料", "做产物", "做验证", "长期推进"],
     priority: "medium",
     priorityIndex: 1,
     dueDate: "",
@@ -39,7 +44,10 @@ Page({
         this.setData({
           title: task.title || "",
           notes: task.notes || "",
+          methodHint: task.methodHint || "",
           doneWhen: task.doneWhen || "",
+          executionMode: task.executionMode || "quick",
+          executionModeIndex: Math.max(this.data.executionModeValues.indexOf(task.executionMode || "quick"), 0),
           priority: PRIORITIES[priorityIndex],
           priorityIndex,
           dueDate: task.dueDate || "",
@@ -61,6 +69,14 @@ Page({
 
   onTitleInput(event) { this.setData({ title: event.detail.value }); },
   onNotesInput(event) { this.setData({ notes: event.detail.value }); },
+  onMethodInput(event) { this.setData({ methodHint: event.detail.value }); },
+  onExecutionChange(event) {
+    const index = Number(event.detail.value);
+    this.setData({
+      executionModeIndex: index,
+      executionMode: this.data.executionModeValues[index] || "quick",
+    });
+  },
   onDoneWhenInput(event) { this.setData({ doneWhen: event.detail.value }); },
   onPriorityChange(event) {
     const index = Number(event.detail.value);
@@ -112,7 +128,9 @@ Page({
       taskId: this.data.taskId,
       title: this.data.title,
       notes: this.data.notes,
+      methodHint: this.data.methodHint,
       doneWhen: this.data.doneWhen,
+      executionMode: this.data.executionMode,
       priority: this.data.priority,
       dueDate: this.data.dueDate,
       status: this.data.status,

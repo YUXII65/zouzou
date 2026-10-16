@@ -29,9 +29,7 @@ export function verifyPassword(password: string, stored: string) {
   );
 }
 
-export function isGuestUser(user: { username: string }) {
-  return user.username.startsWith("guest_");
-}
+export { isGuestUser } from "@/lib/guest-user";
 
 export const getCurrentUser = cache(async function getCurrentUser() {
   const cookieStore = await cookies();
