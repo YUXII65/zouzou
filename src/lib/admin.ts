@@ -1,9 +1,20 @@
 import { getCurrentUser } from "@/lib/auth";
 
+const DEFAULT_ADMIN_USERNAMES = ["yuxii"];
+
+function normalizeAdminUsername(value: string) {
+  return value.trim().toLowerCase();
+}
+
 export function isAdminUsername(username: string) {
   const configuredAdmin = process.env.ADMIN_USERNAME?.trim();
-  if (!configuredAdmin) return false;
-  return username.toLowerCase() === configuredAdmin.toLowerCase();
+  const adminUsernames = [
+    ...DEFAULT_ADMIN_USERNAMES,
+    ...(configuredAdmin ? configuredAdmin.split(",") : []),
+  ]
+    .map(normalizeAdminUsername)
+    .filter(Boolean);
+  return adminUsernames.includes(normalizeAdminUsername(username));
 }
 
 export async function getAdminUser() {
