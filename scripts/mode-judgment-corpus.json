@@ -572,5 +572,34 @@
       "input": "想跟爸妈把过年回不回家这事定下来",
       "clarified": "他只想先把回不回家这个决定定下来"
     }
+,
+    {
+      "id": "eb01",
+      "group": "explore-bar",
+      "expected": "normal",
+      "note": "一次性的试试，有终点",
+      "input": "想试试做自媒体，先看看有没有人看"
+    },
+    {
+      "id": "eb02",
+      "group": "explore-bar",
+      "expected": "normal",
+      "note": "一次调研，不是开放目标",
+      "input": "调研一下要不要换工作，先收集点信息再决定"
+    },
+    {
+      "id": "eb03",
+      "group": "explore-bar",
+      "expected": "normal",
+      "note": "了解现状是一次性任务",
+      "input": "了解一下这个行业现在什么情况"
+    },
+    {
+      "id": "eb04",
+      "group": "explore-bar",
+      "expected": "explore",
+      "note": "持续意图 + 没有终点的对象",
+      "input": "想长期保持跑步的习惯，不设目标，也不想有终点"
+    }
   ]
 }

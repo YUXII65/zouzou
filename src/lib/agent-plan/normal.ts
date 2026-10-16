@@ -1,5 +1,6 @@
 import {
   callModel,
+  judgeWorkMode,
   safePlanTask,
   translateIdea,
   type InboxClarificationTranslation,
@@ -23,11 +24,16 @@ import {
   type NormalAgentPlan,
 } from "@/lib/agent-plan/core";
 import {
-  NORMAL_COMPOSE_SYSTEM_PROMPT,
+  NORMAL_COMPOSE_SYSTEM_PROMPT_V1,
   NORMAL_STRATEGY_SYSTEM_PROMPT,
+  PLAN_AGENT_SYSTEM_PROMPT,
   PLAN_CRITIC_SYSTEM_PROMPT,
 } from "@/lib/agent-plan/prompts";
-import { runContentAgent, type ContentAgentResult } from "@/lib/agent-plan/content";
+import {
+  generateDirectAnswer,
+  runContentAgent,
+  type ContentAgentResult,
+} from "@/lib/agent-plan/content";
 import { buildDecisionSession } from "@/lib/decision";
 import { readPlanTracks } from "@/lib/project-track";
 import { toDateInputValue } from "@/lib/date";
@@ -188,7 +194,7 @@ async function callNormalAgent(input: {
       maxAttempts: 1,
       reasoningEffort: "none",
       onDelta: input.onDelta,
-      qualityRules: input.qualityRules ?? "",
+      qualityRules: input.qualityRules,
     },
   );
 }
@@ -335,7 +341,7 @@ export async function planNormalWithAgents(
   };
 
   // 链路第 1 段：翻译。调用方没带 translation 时在这里补齐，
-  // 保证后面的内容生成和收敛永远基于同一份结构化语义。
+  // 保证后面的方案 Agent 永远基于同一份结构化语义。
   const translation =
     input.translation ??
     (
@@ -351,11 +357,141 @@ export async function planNormalWithAgents(
         baseUrl: input.baseUrl,
       })
     ).translation;
+  // 直接回答是主链的一等出口：翻译判定「要的是知道 / 判断」时不走方案 Agent，
+  // 直接把答案交给用户（InboxPlan.action = "answer"）。回答没拿到就继续走方案链，不空手。
+  if (translation.responseMode === "answer") {
+    const directAnswer = await generateDirectAnswer({
+      content: input.content,
+      translation,
+      history: input.history,
+      summary: input.summary,
+      evidence: input.evidence,
+      decisionMemory: input.decisionMemory,
+      apiKey: input.apiKey,
+      model: input.model,
+      baseUrl: input.baseUrl,
+    });
+    if (directAnswer) {
+      return {
+        status: "ok",
+        plan: createDirectAnswerPlan({
+          translation,
+          summary: input.summary,
+          answer: directAnswer,
+        }),
+      };
+    }
+  }
+
   const brief = {
     route: "normal" as const,
     reason: translation.reason || "链路第 1 段完成的语言翻译。",
     brief: buildBriefFromTranslation(input.content, translation),
   };
+
+  // 新版两段链：翻译 Agent -> 方案 Agent。方案 Agent 直接产出行动卡和任务，
+  // 旧的内容生成 + 收敛排版链只在它失败或显式关闭时回退。
+  const useTwoStageAgent = process.env.TWO_STAGE_AGENT_PLAN !== "false";
+  if (useTwoStageAgent) {
+    const workMode =
+      input.workMode ??
+      (await judgeWorkMode({
+        content: input.content,
+        translation,
+        summary: input.summary,
+        history: input.history,
+        apiKey: input.apiKey,
+        model: input.model,
+        baseUrl: input.baseUrl,
+      }));
+    const planInput = input.workMode ? input : { ...input, workMode };
+    const translationForPlan = {
+      ...translation,
+      desiredOutcome:
+        translation.desiredOutcome || translation.normalizedIntent,
+      workingAssumption:
+        translation.workingAssumption ||
+        input.summary?.workingAssumption ||
+        translation.normalizedIntent,
+      ifWrongThen:
+        translation.ifWrongThen || input.summary?.ifWrongThen || "",
+    };
+    const planPayload = {
+      translation: translationForPlan,
+      workMode,
+      currentDate: common.currentDate,
+      maxTasks: Math.min(input.maxTasks ?? MAX_CHAIN_TASKS, MAX_CHAIN_TASKS),
+      originalIdea: input.content,
+      contextSummary: input.memorySummary ?? null,
+      contextEvidence: input.evidence ?? [],
+      projectContext: input.projectContext ?? [],
+      decisionMemory: input.decisionMemory ?? [],
+      clarificationHistory: common.clarificationHistory,
+      clarificationSummary: input.summary ?? null,
+      clarificationFrame: input.frame ?? null,
+      brief: brief.brief,
+    };
+    const runPlanAgent = (payload: unknown, temperature: number) =>
+      callNormalAgent({
+        system: PLAN_AGENT_SYSTEM_PROMPT,
+        payload,
+        apiKey: input.apiKey,
+        model: input.model,
+        baseUrl: input.baseUrl,
+        temperature,
+        maxTokens: 2600,
+        timeoutMs: 20000,
+        onDelta: input.onDelta,
+      });
+
+    let planText = await runPlanAgent(planPayload, 0.2);
+    let twoStagePlan = readComposedPlan(
+      parseObject(planText),
+      planInput,
+      brief.brief,
+      null,
+    );
+    let twoStageIssues = twoStagePlan
+      ? auditNormalAgentPlan(twoStagePlan, brief.brief)
+      : [];
+    let retryWorthy = twoStageIssues.filter(
+      (issue) => !issue.includes("软件点击教程"),
+    );
+    if (!twoStagePlan || retryWorthy.length) {
+      planText = await runPlanAgent(
+        { ...planPayload, previousAuditIssues: retryWorthy },
+        0.15,
+      );
+      const retryPlan = readComposedPlan(
+        parseObject(planText),
+        planInput,
+        brief.brief,
+        null,
+      );
+      if (retryPlan) {
+        twoStagePlan = retryPlan;
+        twoStageIssues = auditNormalAgentPlan(twoStagePlan, brief.brief);
+      }
+    }
+    if (twoStagePlan) {
+      if (twoStageIssues.length) {
+        console.warn(
+          "[agent-plan] two-stage audit accepted with warnings",
+          twoStageIssues,
+        );
+      }
+      twoStagePlan.agent = {
+        usedFacts: twoStagePlan.agent?.usedFacts ?? [],
+        assumptionsUsed: twoStagePlan.agent?.assumptionsUsed ?? [],
+        auditIssues: twoStageIssues,
+      };
+      twoStagePlan.content = null;
+      return { status: "ok", plan: twoStagePlan };
+    }
+    console.warn(
+      "[agent-plan] two-stage plan failed; falling back to legacy chain",
+    );
+  }
 
   let agentPlan: NormalAgentPlan | null = null;
   let contentTrace: InboxPlanContentTrace | null = null;
@@ -441,7 +577,7 @@ export async function planNormalWithAgents(
   };
 
   let planText = await callNormalAgent({
-    system: NORMAL_COMPOSE_SYSTEM_PROMPT,
+    system: NORMAL_COMPOSE_SYSTEM_PROMPT_V1,
     payload: composePayload,
     apiKey: input.apiKey,
     model: input.model,
@@ -501,7 +637,7 @@ export async function planNormalWithAgents(
         ];
     console.warn("[agent-plan] compose retry", retryNotes);
     planText = await callNormalAgent({
-      system: NORMAL_COMPOSE_SYSTEM_PROMPT,
+      system: NORMAL_COMPOSE_SYSTEM_PROMPT_V1,
       payload: { ...composePayload, previousAuditIssues: retryNotes },
       apiKey: input.apiKey,
       model: input.model,

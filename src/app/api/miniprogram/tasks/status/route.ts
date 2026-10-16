@@ -31,10 +31,15 @@ export async function POST(request: Request) {
 
   const task = await prisma.task.findFirst({
     where: { id: taskId, userId: user.id },
-    select: { id: true, projectId: true },
+    select: { id: true, projectId: true, status: true },
   });
   if (!task) {
     return NextResponse.json({ error: "not_found" }, { status: 404 });
+  }
+
+  // 「完成」是终态；客户端按钮之外再加一层服务端保护。
+  if (task.status === "done" && status !== "done") {
+    return NextResponse.json({ ok: true, status: "done", unchanged: true });
   }
 
   const reviewNextStatus =

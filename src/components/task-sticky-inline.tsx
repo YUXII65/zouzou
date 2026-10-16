@@ -5,7 +5,7 @@ import { Loader2, StickyNote } from "lucide-react";
 import { createTaskStickyNote } from "@/app/actions";
 import { useRotatingText } from "@/components/rotating-text";
 import { trackEvent } from "@/lib/track";
-import type { TaskStickyNoteData } from "@/lib/task-sticky";
+import { normalizeStickySteps, type TaskStickyNoteData } from "@/lib/task-sticky";
 
 const DEFAULT_MESSAGE =
   "这个任务我还没有头绪，请给我一个能直接开始的行动方案";
@@ -20,10 +20,6 @@ const WAITING_LABELS = [
  * 任务展开后直接显示的执行卡片。
  * 行动块可以带序号，但每块是一段完整行动；标题、解释、"现在可以做"、删除按钮都不显示。
  */
-function stickySteps(note: TaskStickyNoteData) {
-  return (note.steps.length ? note.steps : [note.nextStep]).filter(Boolean);
-}
-
 export function TaskStickyInline({
   taskId,
   title,
@@ -89,33 +85,16 @@ export function TaskStickyInline({
         </p>
       ) : savedNotes.length ? (
         <div className="space-y-3">
-          {savedNotes[0].encouragement ? (
-            <details
-              open
-              className="mb-2 rounded-lg border border-warning/15 bg-surface/65 px-2.5 py-2"
-            >
-              <summary className="cursor-pointer list-none text-xs font-medium text-ink-secondary">
-                补充信息
-              </summary>
-              <p className="mt-2 whitespace-pre-wrap text-xs leading-5 text-ink-secondary">
-                {savedNotes[0].encouragement}
-              </p>
-            </details>
-          ) : null}
-
-          <ol className="space-y-2">
-            {stickySteps(savedNotes[0]).map((step, stepIndex) => (
-              <li
+          <div className="space-y-2">
+            {normalizeStickySteps(savedNotes[0]).map((step, stepIndex) => (
+              <div
                 key={`${savedNotes[0].id}-${stepIndex}`}
                 className="flex items-start gap-2.5 rounded-lg border border-warning/15 bg-surface/65 px-2.5 py-2 text-sm leading-6 text-ink"
               >
-                <span className="mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-full bg-surface/80 text-xs font-medium text-ink-secondary">
-                  {stepIndex + 1}
-                </span>
                 <span className="min-w-0 flex-1 whitespace-pre-wrap">{step}</span>
-              </li>
+              </div>
             ))}
-          </ol>
+          </div>
 
           {savedNotes.length > 1 ? (
             <details className="rounded-lg border border-warning/15 bg-surface/45 px-2.5 py-2">
@@ -124,19 +103,16 @@ export function TaskStickyInline({
               </summary>
               <div className="mt-2 space-y-3">
                 {savedNotes.slice(1).map((note) => (
-                  <ol key={note.id} className="space-y-1.5 opacity-80">
-                    {stickySteps(note).map((step, stepIndex) => (
-                      <li
+                  <div key={note.id} className="space-y-1.5 opacity-80">
+                    {normalizeStickySteps(note).map((step, stepIndex) => (
+                      <div
                         key={`${note.id}-${stepIndex}`}
                         className="flex items-start gap-2 rounded-lg border border-warning/10 bg-surface/50 px-2 py-1.5 text-sm leading-6 text-ink-secondary"
                       >
-                        <span className="mt-0.5 flex size-4 shrink-0 items-center justify-center rounded-full bg-surface/80 text-[10px] font-medium text-ink-muted">
-                          {stepIndex + 1}
-                        </span>
                         <span className="min-w-0 flex-1 whitespace-pre-wrap">{step}</span>
-                      </li>
+                      </div>
                     ))}
-                  </ol>
+                  </div>
                 ))}
               </div>
             </details>

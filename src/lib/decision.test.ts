@@ -26,7 +26,7 @@ test("计划任务会收敛成一张有默认推荐的决策卡", () => {
   assert.ok(card.confidence > 0.5);
 });
 
-test("便利贴保存内容会把 fallback 放回执行步骤", () => {
+test("便利贴不再默认追加「例外」说明", () => {
   const payload = stickyPayloadFromDecisionCard(
     decisionCardFromTask({
       title: "按午餐默认组合买一餐并记录",
@@ -40,10 +40,7 @@ test("便利贴保存内容会把 fallback 放回执行步骤", () => {
   );
 
   assert.equal(payload.nextStep, "去便利店买组合");
-  assert.deepEqual(payload.steps, [
-    "去便利店买组合",
-    "吃完记录饱腹感\n例外：没有鸡胸就换卤蛋和豆干",
-  ]);
+  assert.deepEqual(payload.steps, ["去便利店买组合", "吃完记录饱腹感"]);
 });
 
 test("旧便利贴建议也会转换成同一种决策卡", () => {

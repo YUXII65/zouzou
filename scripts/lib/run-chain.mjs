@@ -1,26 +1,25 @@
 /**
- * 生产三段 Agent 链的评测版实现：翻译 -> 生成内容 -> 收敛。
+ * 生产两段 Agent 链的评测版实现：翻译 -> 方案。
  *
  * evaluate-ai.mjs 和 evaluate-first-run.mjs 共用这一份，
  * 避免两边各自复制一段近似流程后又和生产悄悄分叉。
  */
 import { extractJsonObject as extractJson } from "../../src/lib/json-extract.ts";
-import { checkPlanQuality } from "../../src/lib/ai-quality.ts";
+import {
+  checkPlanQuality,
+  scrubRecordToolMentions,
+} from "../../src/lib/ai-quality.ts";
 import {
   CLARIFICATION_TRANSLATION_SYSTEM_PROMPT,
   MODE_JUDGMENT_SYSTEM_PROMPT,
   buildClarificationTranslationUserPayload,
   buildModeJudgmentUserPayload,
 } from "../../src/lib/ai-prompts.ts";
-import {
-  CONTENT_GENERATION_SYSTEM_PROMPT,
-  NORMAL_COMPOSE_SYSTEM_PROMPT,
-} from "../../src/lib/agent-plan/prompts.ts";
+import { PLAN_AGENT_SYSTEM_PROMPT } from "../../src/lib/agent-plan/prompts.ts";
 
 export const CHAIN_PROMPTS = [
   CLARIFICATION_TRANSLATION_SYSTEM_PROMPT,
-  CONTENT_GENERATION_SYSTEM_PROMPT,
-  NORMAL_COMPOSE_SYSTEM_PROMPT,
+  PLAN_AGENT_SYSTEM_PROMPT,
 ].join("\n\n----\n\n");
 
 /** 和生产 readComposedPlan 一致：模型漏字段时补上项目名/目标/里程碑。 */
@@ -38,7 +37,9 @@ function withProjectFallbacks(plan, translation) {
   if (!plan || typeof plan !== "object") return plan;
   const tasks = Array.isArray(plan.tasks) ? plan.tasks : [];
   const derivedName = projectNameFromGoal(
-    translation?.normalizedIntent || translation?.literalMeaning,
+    translation?.desiredOutcome ||
+      translation?.normalizedIntent ||
+      translation?.literalMeaning,
   );
   const projectName = plan.projectName || derivedName;
   const projectObjective = plan.projectObjective || projectName;
@@ -49,6 +50,7 @@ function withProjectFallbacks(plan, translation) {
 
 function briefFromTranslation(translation, originalIdea) {
   const goal =
+    translation.desiredOutcome ||
     translation.normalizedIntent ||
     translation.goals?.[0] ||
     translation.literalMeaning ||
@@ -57,13 +59,9 @@ function briefFromTranslation(translation, originalIdea) {
     goal,
     confirmedFacts: (translation.confirmedFacts ?? []).slice(0, 8),
     constraints: (translation.constraints ?? []).slice(0, 6),
-    successSignal:
-      translation.goals?.[0] ||
-      translation.normalizedIntent ||
-      translation.literalMeaning ||
-      goal,
+    successSignal: goal,
     assumptions: (translation.interpretations ?? []).slice(0, 4),
-    ifWrongThen: "",
+    ifWrongThen: translation.ifWrongThen ?? "",
   };
 }
 
@@ -100,7 +98,7 @@ export function createChainRunner({ baseUrl, apiKey, model, debug = false }) {
     return content;
   }
 
-  /** 跑生产同款三段链，返回收敛出的计划与中间产物。 */
+  /** 跑生产同款两段链，返回最终计划与中间产物。 */
   async function runChain(input, options = {}) {
     const {
       maxTasks = 3,
@@ -130,15 +128,18 @@ export function createChainRunner({ baseUrl, apiKey, model, debug = false }) {
     const summary = translationParsed.summary ?? null;
     const brief = briefFromTranslation(translation, input);
 
-    // 生产在"澄清收口 → 生成之前"先定模式；评测也走这一步，别两边分叉。
     const modeRaw = await requestChat(
       MODE_JUDGMENT_SYSTEM_PROMPT,
       buildModeJudgmentUserPayload([
         {
           id: "current",
           input,
-          ...(translation.normalizedIntent
-            ? { clarified: String(translation.normalizedIntent) }
+          ...(translation.desiredOutcome || translation.normalizedIntent
+            ? {
+                clarified: String(
+                  translation.desiredOutcome || translation.normalizedIntent,
+                ),
+              }
             : {}),
         },
       ]),
@@ -147,56 +148,55 @@ export function createChainRunner({ baseUrl, apiKey, model, debug = false }) {
     );
     const modeParsed = JSON.parse(extractJson(modeRaw) ?? "[]");
     const workMode =
-      Array.isArray(modeParsed) && ["normal", "longterm", "explore"].includes(modeParsed[0]?.mode)
+      Array.isArray(modeParsed) &&
+      ["normal", "longterm", "explore"].includes(modeParsed[0]?.mode)
         ? modeParsed[0].mode
         : "normal";
 
-    const contentRaw = await requestChat(
-      CONTENT_GENERATION_SYSTEM_PROMPT,
-      JSON.stringify({
-        originalIdea: input,
-        translation,
-        clarificationHistory: [],
-        clarificationSummary: summary,
-        clarificationFrame: null,
-        projectContext: projects,
-        memorySummary,
-        contextEvidence: evidence,
-        decisionMemory,
-        currentDate,
-      }),
-      2200,
-      0.55,
-    );
-    const contentParsed = JSON.parse(extractJson(contentRaw) ?? "{}");
-    const agentPlan = contentParsed.plan ?? null;
-
-    const composePayload = {
-      brief,
-      plan: agentPlan,
+    const planPayload = {
+      translation: {
+        ...translation,
+        desiredOutcome:
+          translation.desiredOutcome || translation.normalizedIntent || "",
+        workingAssumption:
+          translation.workingAssumption ||
+          translation.normalizedIntent ||
+          translation.desiredOutcome ||
+          "",
+        ifWrongThen: translation.ifWrongThen || summary?.ifWrongThen || "",
+      },
       workMode,
-      originalIdea: input,
-      projectContext: projects,
-      decisionMemory,
       currentDate,
       maxTasks,
+      originalIdea: input,
+      contextSummary: memorySummary,
+      contextEvidence: evidence,
+      projectContext: projects,
+      decisionMemory,
+      clarificationHistory: [],
+      clarificationSummary: summary,
+      brief,
     };
-    let composeRaw = await requestChat(
-      NORMAL_COMPOSE_SYSTEM_PROMPT,
-      JSON.stringify(composePayload),
+    let planRaw = await requestChat(
+      PLAN_AGENT_SYSTEM_PROMPT,
+      JSON.stringify(planPayload),
       2600,
       0.2,
     );
-    let plan = JSON.parse(extractJson(composeRaw) ?? "{}");
+    let plan = scrubRecordToolMentions(
+      JSON.parse(extractJson(planRaw) ?? "{}"),
+    );
     const auditIssues = checkPlanQuality(plan, { maxTasks });
     if (auditIssues.length) {
-      composeRaw = await requestChat(
-        NORMAL_COMPOSE_SYSTEM_PROMPT,
-        JSON.stringify({ ...composePayload, previousAuditIssues: auditIssues }),
+      planRaw = await requestChat(
+        PLAN_AGENT_SYSTEM_PROMPT,
+        JSON.stringify({ ...planPayload, previousAuditIssues: auditIssues }),
         2600,
         0.15,
       );
-      const retryPlan = JSON.parse(extractJson(composeRaw) ?? "{}");
+      const retryPlan = scrubRecordToolMentions(
+        JSON.parse(extractJson(planRaw) ?? "{}"),
+      );
       if (retryPlan && typeof retryPlan === "object") plan = retryPlan;
     }
     return {
@@ -204,9 +204,9 @@ export function createChainRunner({ baseUrl, apiKey, model, debug = false }) {
       rawPlan: plan,
       translation,
       summary,
-      agentPlan,
+      agentPlan: null,
       workMode,
-      composeRaw,
+      composeRaw: planRaw,
     };
   }
 

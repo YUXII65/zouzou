@@ -36,3 +36,11 @@ test("本地兜底不会把持续目标压成一次性任务", () => {
   assert.equal(heuristicProjectMode("三周内交一份小组作业", false), "longterm");
   assert.equal(heuristicProjectMode("整理一下书桌", false), "normal");
 });
+
+test("探索门槛提高：一次性的探路动作不算探索", () => {
+  assert.equal(heuristicProjectMode("想试试做自媒体，先看看有没有人看", false), "normal");
+  assert.equal(heuristicProjectMode("调研一下要不要换工作", false), "normal");
+  assert.equal(heuristicProjectMode("了解下这个行业现在什么情况", false), "normal");
+  assert.equal(heuristicProjectMode("想长期保持跑步习惯", false), "explore");
+  assert.equal(heuristicProjectMode("每天跑步，坚持三个月", false), "longterm");
+});

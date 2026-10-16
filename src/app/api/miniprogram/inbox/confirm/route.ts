@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { revalidatePath } from "next/cache";
 import { getMiniProgramUser } from "@/lib/miniprogram-auth";
 import { prisma, withTransactionRetry } from "@/lib/prisma";
 import { recordAiFeedback } from "@/lib/feedback";
@@ -145,7 +146,29 @@ export async function POST(request: Request) {
   }
 
   const plan = parsePlan(item.aiPlanJson);
-  if (!plan || plan.action === "ignore" || !plan.tasks.length) {
+  if (!plan) {
+    return NextResponse.json({ error: "plan_not_ready" }, { status: 409 });
+  }
+
+  if (plan.action === "answer" || plan.responseMode === "answer") {
+    await prisma.inboxItem.update({
+      where: { id: item.id, userId: user.id },
+      data: {
+        status: "processed",
+        confirmedAt: new Date(),
+        processedAt: new Date(),
+      },
+    });
+    return NextResponse.json({
+      ok: true,
+      projectId: null,
+      attachedTaskId: null,
+      taskCount: 0,
+      directAnswer: plan.directAnswer ?? "",
+    });
+  }
+
+  if (plan.action === "ignore" || !plan.tasks.length) {
     return NextResponse.json({ error: "plan_not_ready" }, { status: 409 });
   }
 
@@ -380,6 +403,10 @@ export async function POST(request: Request) {
     page: "miniprogram",
     detail: "inbox_plan",
   });
+
+  revalidatePath("/");
+  revalidatePath("/files");
+  revalidatePath("/workspace");
 
   return NextResponse.json({
     projectId: confirmedProjectId,

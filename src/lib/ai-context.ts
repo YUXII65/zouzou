@@ -436,9 +436,10 @@ async function buildAiContextUncached(
           return [];
       }
     }),
+        // 只把便利贴标题作为“最近执行动作”的摘要，绝不再把 nextStep
+    // 原样喂回模型，避免模型模仿上一条的载体（例如总是写“备忘录”）。
     ...recentStickyNotes.map(
-      (note) =>
-        `最近执行动作：${truncate(note.title, 30)} → ${truncate(note.nextStep, 60)}`,
+      (note) => `最近执行动作：${truncate(note.title, 30)}`,
     ),
     ...reviews.map((review) => {
       if (review.decisionJson) {

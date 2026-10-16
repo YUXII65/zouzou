@@ -73,7 +73,7 @@ const resultsPath = path.join(root, "docs", `${fileBase}.json`);
 
 const chain = createChainRunner({ baseUrl, apiKey, model, debug });
 
-/** 跑生产同款三段链：翻译 -> 生成内容 -> 收敛。 */
+/** 跑生产同款两段链：翻译 -> 方案。 */
 async function callPlan(aiCase) {
   const context = aiCase.context ?? {};
   return chain.runChain(aiCase.input, {

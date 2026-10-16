@@ -11,7 +11,6 @@ import {
 import { consumeAiStream } from "@/lib/ai-stream-client";
 import { trackEvent } from "@/lib/track";
 import { cx } from "@/lib/utils";
-import { InboxClarification } from "@/components/inbox-clarification";
 import {
   pickRandomSampleIdeas,
   sampleIdeasForDate,
@@ -54,8 +53,6 @@ export function QuickCapture({
   const [settledItemId, setSettledItemId] = useState<string | null>(null);
   const [pendingContent, setPendingContent] = useState("");
   const [streamPreview, setStreamPreview] = useState("");
-  // 澄清结果一到就先本地渲染，不等整页刷新（刷新在后台跑，用来把它换成服务端版本）
-  const [localClarification, setLocalClarification] = useState<CaptureResult | null>(null);
   const router = useRouter();
   const waitingLabel = useRotatingText(submitting, CAPTURE_WAITING_LABELS);
 
@@ -64,7 +61,6 @@ export function QuickCapture({
       setSettledItemId(null);
       setPendingContent("");
       setStreamPreview("");
-      setLocalClarification(null);
     }
   }, [pendingIds, settledItemId]);
 
@@ -128,7 +124,6 @@ export function QuickCapture({
         (preview) => setStreamPreview(preview),
       );
       setSettledItemId(result.itemId);
-      setLocalClarification(result);
       router.refresh();
     } catch {
       setSubmitError("没送出去，再试一次");
@@ -224,44 +219,28 @@ export function QuickCapture({
     ) : null}
     {pendingContent && !(settledItemId && pendingIds.includes(settledItemId)) ? (
       <div className="relative">
-        {localClarification ? (
-          <InboxClarification
-            itemId={localClarification.itemId}
-            content={localClarification.content}
-            dimensions={localClarification.clarification.dimensions}
-            supplementPlaceholder={
-              localClarification.clarification.supplementPlaceholder
-            }
-            mode={localClarification.clarification.mode}
-            status={localClarification.clarification.status}
-            history={localClarification.clarification.history}
-
-            frame={localClarification.clarification.frame}
-          />
-        ) : (
-          <div className="space-y-3">
-            <div className="ml-auto max-w-[82%] rounded-xl rounded-tr-sm border border-border bg-surface-muted px-3 py-2 text-sm font-medium leading-6 text-ink">
-              {pendingContent}
-            </div>
-            <div className="flex items-start gap-2">
-              <span className="mt-1 flex size-6 shrink-0 items-center justify-center rounded-md bg-accent-soft text-accent-strong">
-                <Sparkles className="size-3.5" />
-              </span>
-              <div className="rounded-xl rounded-tl-sm border border-border/70 bg-surface px-3 py-2.5 text-sm leading-6 text-ink">
-                {streamPreview ? (
-                  <p className="whitespace-pre-wrap text-ink-secondary">
-                    {streamPreview}
-                  </p>
-                ) : (
-                  <span className="flex items-center gap-2 text-ink-muted">
-                    <Loader2 className="size-3.5 shrink-0 animate-spin text-accent/70" />
-                    <span>{waitingLabel}</span>
-                  </span>
-                )}
-              </div>
+        <div className="space-y-3">
+          <div className="ml-auto max-w-[82%] rounded-xl rounded-tr-sm border border-border bg-surface-muted px-3 py-2 text-sm font-medium leading-6 text-ink">
+            {pendingContent}
+          </div>
+          <div className="flex items-start gap-2">
+            <span className="mt-1 flex size-6 shrink-0 items-center justify-center rounded-md bg-accent-soft text-accent-strong">
+              <Sparkles className="size-3.5" />
+            </span>
+            <div className="rounded-xl rounded-tl-sm border border-border/70 bg-surface px-3 py-2.5 text-sm leading-6 text-ink">
+              {streamPreview ? (
+                <p className="whitespace-pre-wrap text-ink-secondary">
+                  {streamPreview}
+                </p>
+              ) : (
+                <span className="flex items-center gap-2 text-ink-muted">
+                  <Loader2 className="size-3.5 shrink-0 animate-spin text-accent/70" />
+                  <span>{waitingLabel}</span>
+                </span>
+              )}
             </div>
           </div>
-        )}
+        </div>
       </div>
     ) : null}
 

@@ -130,3 +130,32 @@ test("首启计划落库时同时生成第一张便利贴，并走统一决策�
     "completeFirstRun 没有走 src/lib/decision.ts 的统一决策结构",
   );
 });
+
+/* ------------------------------------------------------------------ *
+ * 坑四：澄清确认成功后曾经在 finish() 里 router.refresh()。
+ * 这一步之后 inbox item 已经不是 pending，父组件会整块卸载，
+ * 于是「已放进文件 / 查看 / 直接答案 / 先收着」这些完成态永远没机会渲染——
+ * 用户看到的是"自己刷新了，没有按钮"。完成态留在卡片里，用户点「查看」跳转时自然重新取数据。
+ * ------------------------------------------------------------------ */
+test("澄清确认成功后不再用 router.refresh() 卸载完成态", () => {
+  const file = path.join(root, "src", "components", "inbox-clarification.tsx");
+  const text = fs.readFileSync(file, "utf8");
+  const start = text.indexOf("const finish = useCallback(");
+  assert.ok(start >= 0, "找不到 finish 回调");
+  const end = text.indexOf("}, [onFinished", start);
+  assert.ok(end > start, "finish 回调结构变了，请同步这条断言");
+  const body = text.slice(start, end);
+  assert.ok(
+    !body.includes("router.refresh()"),
+    "finish 里不能再 router.refresh()：确认后这条 item 已不是 pending，refresh 会把整个卡片卸载掉，完成态和「查看」按钮都渲染不出来",
+  );
+});
+
+test("首次澄清只能有一个 InboxClarification 实例", () => {
+  const file = path.join(root, "src", "components", "quick-capture.tsx");
+  const text = fs.readFileSync(file, "utf8");
+  assert.ok(
+    !text.includes("<InboxClarification"),
+    "QuickCapture 不能再渲染本地 InboxClarification；首次点击会被 router.refresh 卸载吞掉",
+  );
+});

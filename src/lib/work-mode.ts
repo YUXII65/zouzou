@@ -97,14 +97,20 @@ export function heuristicProjectMode(
   content: string,
   isProject: boolean,
 ): ProjectMode {
-  if (/[\d一二三四五六七八九十两]\s*(?:天|周|月|年)|截止|交付|上线|发布|里程碑|阶段|期限内/.test(content)) {
+  if (/[\d一二三四五六七八九十两]\s*个?\s*(?:天|周|月|年)|截止|交付|上线|发布|里程碑|阶段|期限内/.test(content)) {
     return "longterm";
   }
-  if (/学|练|习惯|每天|每周|坚持|能力|审美|长期|持续|一直|慢慢|保持|状态/.test(content)) {
-    return "explore";
-  }
-  if (/探索|试试|验证|不确定|方向|看看|调研|了解/.test(content)) {
-    return "explore";
-  }
+  // 探索门槛刻意抬高：一次性的探路动作（试试 / 调研 / 了解一下 / 看看 / 对比 / 报个班）
+  // 本身有终点，是当下的单件事，不再自动判成探索。
+  const oneOff =
+    /试试|试试看|验证|调研|了解|看看|对比|比较|盘一下|查一下|做一次|一次性的/.test(
+      content,
+    );
+  const openEnded = /学|练|习惯|能力|审美|状态|关系|爱好|性格|心态/.test(content);
+  const sustained =
+    /长期|持续|一直|慢慢|每天|每周|常常|保持|坚持|没有期限|不想有终点/.test(content);
+  if (oneOff) return isProject ? "longterm" : "normal";
+  if (openEnded || sustained) return "explore";
+
   return isProject ? "longterm" : "normal";
 }

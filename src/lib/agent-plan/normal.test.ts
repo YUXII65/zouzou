@@ -32,7 +32,7 @@ function validPlan(overrides: Partial<InboxPlan> = {}): InboxPlan {
       understanding: "你缺的不是想法，而是没有把已有草稿直接推到成片。",
       firstAction: "从最近 10 条草稿里选一条能一句话说清主题的，补成三句话。",
       how: "按冲突、转折、结论各写一句，写完念一遍。",
-      doneWhen: "备忘录里出现一段 40 秒内能念完的口播稿。",
+      doneWhen: "有一段 40 秒内能念完的口播稿。",
     },
     agent: {
       usedFacts: ["用户没有大块时间"],
@@ -44,7 +44,7 @@ function validPlan(overrides: Partial<InboxPlan> = {}): InboxPlan {
         title: "从最近 10 条草稿里选一条，补成一段 40 秒口播稿",
         shortTitle: "草稿补成口播稿",
         executionMode: "produce",
-        doneWhen: "备忘录里出现一段 40 秒内能念完的口播稿",
+        doneWhen: "有一段 40 秒内能念完的口播稿",
         methodHint: "按冲突、转折、结论各写一句，写完念一遍并改到顺口",
         recommendation: "选最近一条你能用一句话说清主题的草稿，不再重新选题",
         executionSteps: [

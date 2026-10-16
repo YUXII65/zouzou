@@ -1,7 +1,5 @@
-import Link from "next/link";
 import { redirect } from "next/navigation";
 import {
-  ArrowRight,
   CheckCircle2,
   Clock3,
   Focus,
@@ -80,8 +78,8 @@ export default async function TodayPage() {
   const now = new Date();
   const dayStart = startOfDay(now);
   const dayEnd = endOfDay(now);
-  // 首页读路径保持并发：任务列表 + 新手状态 / 今日推荐 / 待整理 + 待确认的阶段门。
-  const [user, support, tasks, readyStage] = await Promise.all([
+  // 首页读路径保持并发：任务列表 + 新手状态 / 今日推荐 / 待整理。
+  const [user, support, tasks] = await Promise.all([
     getCurrentUser(),
     loadHomeSupport({ userId, now }),
     prisma.task.findMany({
@@ -97,15 +95,6 @@ export default async function TodayPage() {
         stickyNotes: { orderBy: { createdAt: "desc" } },
       },
       orderBy: { createdAt: "desc" },
-    }),
-    prisma.projectStage.findFirst({
-      where: { userId, status: "ready" },
-      orderBy: [{ updatedAt: "desc" }, { id: "asc" }],
-      select: {
-        id: true,
-        deliverable: true,
-        project: { select: { name: true } },
-      },
     }),
   ]);
   if (!user) redirect("/landing");
@@ -255,27 +244,6 @@ export default async function TodayPage() {
         )}
       </Panel>
 
-      {readyStage ? (
-        <Panel className="mt-6">
-          <div className="flex items-center justify-between gap-3 px-4 py-3">
-            <div className="min-w-0">
-              <p className="truncate text-sm font-medium text-ink">
-                「{readyStage.project.name}」这一阶段完成了
-              </p>
-              <p className="mt-0.5 truncate text-xs text-ink-muted">
-                {readyStage.deliverable}
-              </p>
-            </div>
-            <Link
-              href="/files"
-              className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-lg bg-accent px-3 text-xs font-medium text-white transition-colors hover:bg-accent-strong"
-            >
-              下一阶段
-              <ArrowRight className="size-3.5" />
-            </Link>
-          </div>
-        </Panel>
-      ) : null}
     </>
   );
 }

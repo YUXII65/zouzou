@@ -61,27 +61,34 @@ function fallbackTitle(title) {
 }
 
 function decorateTasks(tasks) {
-  return (tasks || []).map((task) => ({
-    ...task,
-    displayTitle: task.shortTitle && task.shortTitle.trim() ? task.shortTitle.trim() : fallbackTitle(task.title),
-    executionModeLabel: MODE_LABELS[task.executionMode] || "直接完成",
-    scheduledDateText: formatDate(task.scheduledDate),
-    dueDateText: formatDate(task.dueDate),
-    stickyCount: task.stickyCount || 0,
-    canChangeStatus: true,
-    statusLabel: STATUS_LABELS[task.status] || task.status,
-    priorityLabel: PRIORITY_LABELS[task.priority] || task.priority,
-    actionLabel: task.status === "todo"
-      ? "下一步"
-      : task.status === "in_progress"
-        ? "完成"
-        : "重新开始",
-    nextStatus: task.status === "todo"
-      ? "in_progress"
-      : task.status === "in_progress"
-        ? "done"
-        : "todo"
-  }));
+  return (tasks || []).map((task) => {
+    const isDone = task.status === "done";
+    return {
+      ...task,
+      displayTitle: task.shortTitle && task.shortTitle.trim() ? task.shortTitle.trim() : fallbackTitle(task.title),
+      executionModeLabel: MODE_LABELS[task.executionMode] || "直接完成",
+      scheduledDateText: formatDate(task.scheduledDate),
+      dueDateText: formatDate(task.dueDate),
+      stickyCount: task.stickyCount || 0,
+      canChangeStatus: !isDone,
+      statusLabel: STATUS_LABELS[task.status] || task.status,
+      priorityLabel: PRIORITY_LABELS[task.priority] || task.priority,
+      actionLabel: isDone
+        ? "已完成"
+        : task.status === "todo"
+          ? "下一步"
+          : task.status === "in_progress"
+            ? "完成"
+            : "已完成",
+      nextStatus: isDone
+        ? ""
+        : task.status === "todo"
+          ? "in_progress"
+          : task.status === "in_progress"
+            ? "done"
+            : ""
+    };
+  });
 }
 
 Page({

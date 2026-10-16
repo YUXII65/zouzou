@@ -63,6 +63,7 @@ export type FileProjectData = {
   /** 长期项目的当前阶段；只暴露 active / ready，避免把未来阶段提前铺开 */
   stage?: {
     id: string;
+    order: number;
     status: string;
     deliverable: string;
     doneWhen: string | null;
@@ -294,6 +295,7 @@ function FolderBlock({
   tracks?: FileTrackData[];
   stage?: {
     id: string;
+    order: number;
     status: string;
     deliverable: string;
     doneWhen: string | null;
@@ -356,6 +358,8 @@ function FolderBlock({
     tasks.filter((task) => task.status === "done"),
   );
   const shown = taskView === "open" ? openTasks : completedTasks;
+  // 没有推进中的任务、但确实完成过任务 = 这组事情收尾了，别说成「没有任务」。
+  const allDone = openTasks.length === 0 && completedTasks.length > 0;
 
   return (
     <div
@@ -476,9 +480,6 @@ function FolderBlock({
                         >
                           {track.name}
                         </span>
-                        <span className="mt-0.5 block text-[11px] leading-relaxed text-ink-muted">
-                          {track.currentFocus || track.intent}
-                        </span>
                       </div>
                     </div>
                   ))}
@@ -556,12 +557,18 @@ function FolderBlock({
             <EmptyState
               icon={ListTodo}
               title={
-                taskView === "open" ? "没有推进中的任务" : "还没有已完成的任务"
+                taskView === "done"
+                  ? "还没有已完成的任务"
+                  : allDone
+                    ? "已全部完成"
+                    : "没有推进中的任务"
               }
               hint={
-                taskView === "open"
-                  ? "写下想法时 AI 会把它拆成这里的任务。"
-                  : "任务完成后会自动收进这里。"
+                taskView === "done"
+                  ? "任务完成后会自动收进这里。"
+                  : allDone
+                    ? undefined
+                    : "写下想法时 AI 会把它拆成这里的任务。"
               }
             />
           )}

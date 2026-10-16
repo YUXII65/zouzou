@@ -9,12 +9,14 @@ function getToken() {
 
 function setToken(token) {
   wx.setStorageSync(TOKEN_KEY, token);
+  rememberBackgroundFetchToken(token);
 }
 
 
 function clearToken() {
   wx.removeStorageSync(TOKEN_KEY);
   wx.removeStorageSync(USER_KEY);
+  rememberBackgroundFetchToken("");
 }
 
 function setCachedUser(user) {
@@ -321,6 +323,59 @@ function getExportData() {
   return request("/api/miniprogram/export");
 }
 
+// ===== 微信「数据预拉取 / 周期性更新」 =====
+// 把会话 token 交给微信，它会在小程序冷启动前带 token 去请求后端预拉取接口。
+function rememberBackgroundFetchToken(token) {
+  if (typeof wx.setBackgroundFetchToken !== "function") return;
+  try {
+    wx.setBackgroundFetchToken({ token: token || "" });
+  } catch (error) {
+    // 低版本基础库不支持，忽略即可。
+  }
+}
+
+// 注意：key 和数据结构必须和 pages/today/today.js 的本地缓存保持一致。
+const TODAY_CACHE_KEY = "next_step_mp_today_cache";
+
+// 读取微信预拉取下来的 today 数据，落到本地缓存，供首屏秒开。
+function applyPrefetchedToday(callback) {
+  const done = typeof callback === "function" ? callback : null;
+  if (typeof wx.getBackgroundFetchData !== "function") {
+    if (done) done(null);
+    return;
+  }
+  const token = getToken();
+  if (!token) {
+    if (done) done(null);
+    return;
+  }
+  wx.getBackgroundFetchData({
+    fetchType: "pre",
+    success(response) {
+      let payload = null;
+      try {
+        payload = JSON.parse(response && response.fetchedData);
+      } catch (error) {
+        payload = null;
+      }
+      const data = payload && payload.ok && payload.data ? payload.data : null;
+      if (!data) {
+        if (done) done(null);
+        return;
+      }
+      try {
+        wx.setStorageSync(TODAY_CACHE_KEY, { token, at: Date.now(), data });
+      } catch (error) {
+        // 写缓存失败不影响正常流程。
+      }
+      if (done) done(data);
+    },
+    fail() {
+      if (done) done(null);
+    }
+  });
+}
+
 module.exports = {
   request,
   getToken,
@@ -360,4 +415,5 @@ module.exports = {
   deleteStickyNote,
   updateProfile,
   getExportData,
+  applyPrefetchedToday,
 };

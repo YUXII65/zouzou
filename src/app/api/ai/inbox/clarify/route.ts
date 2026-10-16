@@ -14,6 +14,7 @@ type ClarifyRequest = {
   mode?: "socratic";
   itemId?: string;
   answer?: string[];
+  questionKey?: string;
   apiKey?: string;
   model?: string;
   baseUrl?: string;
@@ -56,6 +57,7 @@ export async function POST(request: Request) {
         userId: userId,
         itemId,
         answer,
+        questionKey: body.questionKey?.trim().slice(0, 40),
         overrides,
         onDelta: (delta) => {
           raw += delta;

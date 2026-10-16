@@ -7,6 +7,7 @@ import {
 } from "@/lib/agent-plan/normal";
 import { withAiQuota } from "@/lib/ai-quota";
 import { prisma } from "@/lib/prisma";
+import { scrubRecordToolMentions } from "@/lib/ai-quality";
 import {
   generateSocraticClarification,
   planInbox,
@@ -66,7 +67,8 @@ export async function createSocraticInboxClarification(input: {
         memorySummary: aiContext.summary,
         evidence: aiContext.evidence,
         decisionMemory: aiContext.decisionMemory,
-        maxQuestions: 3,
+        maxQuestions: 4,
+        minQuestions: 2,
         onDelta: input.onDelta,
       }),
       input.userId,
@@ -98,6 +100,7 @@ export async function advanceSocraticInboxClarification(input: {
   userId: string;
   itemId: string;
   answer: string[];
+  questionKey?: string;
   overrides?: AiOverrides;
   onDelta?: (delta: string) => void;
 }): Promise<ClarifyInboxResult | null> {
@@ -107,9 +110,32 @@ export async function advanceSocraticInboxClarification(input: {
   });
   if (!item || item.status !== "inbox") return null;
   const current = parseSocraticState(item.aiSuggestionJson);
-  if (!current || current.status !== "asking" || !current.history?.length) return null;
-  const unansweredIndex = current.history.findIndex((entry) => entry.answer.length === 0);
-  if (unansweredIndex < 0) return null;
+  if (!current) return null;
+  const idempotentResult = {
+    itemId: item.id,
+    content: item.content,
+    clarification: current,
+  };
+  // 幂等：同一轮已经处理过或已经收口时，直接返回当前状态。
+  // 前端可能已经提交成功但响应丢失，重试必须能恢复，不能报错卡死。
+  if (current.status !== "asking" || !current.history?.length) {
+    return idempotentResult;
+  }
+  const unansweredIndex = current.history.findIndex(
+    (entry) => entry.answer.length === 0,
+  );
+  if (unansweredIndex < 0) {
+    return idempotentResult;
+  }
+  const expectedQuestionKey = input.questionKey?.trim();
+  if (
+    expectedQuestionKey &&
+    current.history[unansweredIndex].key !== expectedQuestionKey
+  ) {
+    // 客户端重试的是上一轮已经回答的问题；当前已经推进到新问题，
+    // 直接把当前状态还给它，不能把旧答案填进新问题。
+    return idempotentResult;
+  }
   const answer = input.answer
     .map((entry) => String(entry).trim().slice(0, 120))
     .filter(Boolean)
@@ -134,7 +160,8 @@ export async function advanceSocraticInboxClarification(input: {
       memorySummary: aiContext.summary,
       evidence: aiContext.evidence,
       decisionMemory: aiContext.decisionMemory,
-      maxQuestions: current.maxQuestions ?? 3,
+      maxQuestions: current.maxQuestions ?? 4,
+      minQuestions: 2,
       frame: current.frame ?? null,
       translation: current.translation ?? null,
       onDelta: input.onDelta,
@@ -222,7 +249,7 @@ export async function createInboxPlan(input: {
 
       if (normalResult.status === "ok") return normalResult.plan;
       if (normalResult.status === "failed") {
-        // 三段链失败时不要给用户一张空计划：退回旧的一次性计划链，
+        // 新版方案链失败时不要给用户一张空计划：退回旧的一次性计划链，
         // 至少保证他拿到一条能走的路。（代价：质量降级，但不空手。）
         console.warn(
           "[inbox] chain failed, falling back to planInbox:",
@@ -256,10 +283,11 @@ export async function createInboxPlan(input: {
     );
   }, input.userId);
 
+  const scrubbedPlan = scrubRecordToolMentions(plan);
   await prisma.inboxItem.update({
     where: { id: input.itemId, userId: input.userId },
     data: {
-      aiPlanJson: JSON.stringify(plan),
+      aiPlanJson: JSON.stringify(scrubbedPlan),
       aiAnalyzedAt: new Date(),
     },
   });
@@ -268,5 +296,5 @@ export async function createInboxPlan(input: {
     revalidatePath("/");
     revalidatePath("/workspace");
   }
-  return plan;
+  return scrubbedPlan;
 }

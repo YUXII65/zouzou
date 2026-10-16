@@ -166,6 +166,8 @@ try {
     ["显示支线标记", bodyText.includes("支线")],
     ["显示第二条线路", bodyText.includes("基础乐理")],
     ["删掉「当前练到哪」胶囊", !bodyText.includes("当前练到哪")],
+    ["线路图不显示主线小字", !bodyText.includes("把常用和弦按实、换得动")],
+    ["线路图不显示支线小字", !bodyText.includes("看懂谱面和节奏型")],
   ];
   for (const [label, ok] of checks) {
     console.log((ok ? "✔ " : "✘ ") + label);
@@ -202,7 +204,13 @@ try {
         nextSummary: "补齐错误提示和使用说明",
         nextMilestone: "陌生人首次打开无需解释就能完成一次完整操作",
         reason: "当前阶段已经能稳定打开，接下来补可用性。",
-        tasks: [],
+        tasks: [
+          {
+            title: "补一版错误提示文案",
+            shortTitle: "补错误提示",
+            doneWhen: "陌生人遇到错误时能看到明确提示",
+          },
+        ],
         source: "model",
       }),
     },
@@ -227,7 +235,7 @@ try {
   const accentOnCurrent = await evaluate(
     `(() => {
       const label = Array.from(document.querySelectorAll("span")).find(
-        (node) => node.textContent.trim() === "当前阶段",
+        (node) => new RegExp("^第 [0-9]+/[0-9]+ 阶段$").test(node.textContent.trim()),
       );
       return label && label.parentElement
         ? label.parentElement.className.includes("accent")
@@ -235,15 +243,141 @@ try {
     })()`,
   );
   const longtermChecks = [
-    ["强调色标在「当前阶段」", accentOnCurrent === true],
+    ["强调色标在「第 X/5 阶段」", accentOnCurrent === true],
+    ["显示阶段序号和总数", longtermText.includes("第 1/5 阶段")],
     ["当前阶段显示总结版", longtermText.includes("把工具做到陌生人也能用")],
-    ["下一阶段在当前阶段就显示", longtermText.includes("补齐错误提示和使用说明")],
+    ["下一阶段在当前阶段就显示短总结", longtermText.includes("补齐错误提示和使用说明")],
+    ["下一阶段在当前阶段只显示短总结", !longtermText.includes("补错误提示")],
+    ["不再显示长交付物原文", !longtermText.includes("陌生人首次打开无需解释就能完成一次完整操作")],
+    ["不再显示 AI 小字 reason", !longtermText.includes("当前阶段已经能稳定打开")],
     ["不再显示「当前阶段完成后生成」", !longtermText.includes("当前阶段完成后生成")],
   ];
   for (const [label, ok] of longtermChecks) {
     console.log((ok ? "✔ " : "✘ ") + label);
     if (!ok) failed = true;
   }
+
+  // 第三条：同一 ready 阶段连续确认两次，只能生成一个下一阶段。
+  const raceProject = await prisma.project.create({
+    data: {
+      userId: user.id,
+      name: "阶段确认竞态",
+      objective: "验证阶段确认不会重复",
+      status: "active",
+      mode: "longterm",
+      currentMilestone: "当前阶段已完成",
+    },
+    select: { id: true },
+  });
+  await prisma.projectStage.create({
+    data: {
+      userId: user.id,
+      projectId: raceProject.id,
+      order: 1,
+      title: "当前阶段",
+      deliverable: "当前阶段已完成，准备进入下一阶段",
+      status: "ready",
+      nextStageJson: JSON.stringify({
+        currentSummary: "当前阶段已完成",
+        nextSummary: "完成下一次真实陪诊",
+        nextMilestone: "陪诊完成并回报结果",
+        reason: "测试阶段确认幂等",
+        tasks: [
+          {
+            title: "按排班完成一次真实陪诊",
+            shortTitle: "完成真实陪诊",
+            notes: null,
+            executionMode: "produce",
+            doneWhen: "群里收到当次陪诊结果",
+            methodHint: "按约定时间到场，结束后把医生意见和下次时间发到群里",
+            recommendation: "按排班陪诊，不重新讨论安排",
+            executionSteps: ["按约定时间到场", "把医生意见发到群里"],
+            fallback: "临时冲突就改约并通知当月替补",
+            maxTurns: 2,
+            toolPolicy: "none",
+            priority: "medium",
+            scheduledDate: "2026-10-16",
+            dueDate: null,
+          },
+          {
+            title: "核对当月照护费四人是否全部到账",
+            shortTitle: "核对当月到账",
+            notes: null,
+            executionMode: "produce",
+            doneWhen: "群里明确当月四人费用全部到账",
+            methodHint: "照约定到账日核对，未到的单独确认补交时间",
+            recommendation: "按约定收款日和金额核对，不改收款方式",
+            executionSteps: ["按约定日期核对到账", "把结果发到群里"],
+            fallback: "未到账的先确认补交日期",
+            maxTurns: 2,
+            toolPolicy: "none",
+            priority: "medium",
+            scheduledDate: "2026-10-16",
+            dueDate: null,
+          },
+        ],
+        source: "model",
+      }),
+    },
+  });
+
+  await cdp.send("Page.navigate", { url: `${baseUrl}/files?project=${raceProject.id}` });
+  const raceReady = await waitFor(
+    "document.body && document.body.innerText.includes('进入下一阶段')",
+  );
+  // ready 分支：只留一句话总结 +「进入下一阶段」，不再铺任务清单，也没有「重新生成」。
+  // （这两条来自浏览器批注：任务清单要删、不要出现「重新生成」。）
+  const raceText = raceReady ? await evaluate("document.body.innerText") : "";
+  // CDP 必须在 hydration 之后点击：否则按钮上没有 React 事件处理器（__reactProps），
+  // 原生 click() 什么都不会发生，Server Action 根本不会被调用。
+  const raceHydrated = await waitFor(
+    "(() => { const b = Array.from(document.querySelectorAll('button')).find((n) => n.textContent.includes('进入下一阶段')); return Boolean(b) && Object.keys(b).some((k) => k.startsWith('__reactProps')); })()",
+  );
+
+  const clickAt = Date.now();
+  if (raceReady && raceHydrated) {
+    await evaluate(
+      "(() => { const button = Array.from(document.querySelectorAll('button')).find((node) => node.textContent.includes('进入下一阶段')); if (!button) return false; button.click(); button.click(); return true; })()",
+    );
+  }
+  // 「进入下一阶段」必须立刻落地：阶段创建在事务里完成，下一阶段预览丢到 after() 后台，
+  // 不能把用户卡在一次模型调用上（那会到 5-7 秒）。
+  let raceStageCount = 0;
+  let advanceMs = -1;
+  for (let i = 0; i < 40; i += 1) {
+    raceStageCount = await prisma.projectStage.count({
+      where: { projectId: raceProject.id },
+    });
+    if (raceStageCount === 2) {
+      advanceMs = Date.now() - clickAt;
+      break;
+    }
+    await delay(250);
+  }
+  await delay(1500);
+  const raceTaskCount = await prisma.task.count({
+    where: { projectId: raceProject.id },
+  });
+  const raceChecks = [
+    ["阶段确认页可渲染", raceReady],
+    ["确认按钮在 hydration 后可交互", raceHydrated],
+    [
+      `进入下一阶段不被模型调用阻塞（实测 ${advanceMs}ms < 5000ms）`,
+      advanceMs >= 0 && advanceMs < 5000,
+    ],
+    [
+      "待确认阶段不再铺下一阶段任务清单",
+      !raceText.includes("完成真实陪诊") && !raceText.includes("核对当月到账"),
+    ],
+    ["待确认阶段不出现「重新生成」", !raceText.includes("重新生成")],
+    [`双击确认只生成一个下一阶段（实际 ${raceStageCount}）`, raceStageCount === 2],
+    [`只生成两份下一阶段任务（实际 ${raceTaskCount}）`, raceTaskCount === 2],
+  ];
+  for (const [label, ok] of raceChecks) {
+    console.log((ok ? "✔ " : "✘ ") + label);
+    if (!ok) failed = true;
+  }
+
 
   // 第三条：文件页和个人页都不要顶部 slogan + 标题
   await cdp.send("Page.navigate", { url: `${baseUrl}/files` });
@@ -257,6 +391,50 @@ try {
     ["个人页顶部标题区已删除", !profileText.includes("让想法，走成下一步")],
   ];
   for (const [label, ok] of headerChecks) {
+    console.log((ok ? "✔ " : "✘ ") + label);
+    if (!ok) failed = true;
+  }
+
+  // 第四条：任务都做完了就别再说「没有推进中的任务」；首页也不再弹「这一阶段完成了」提醒卡。
+  const doneProject = await prisma.project.create({
+    data: {
+      userId: user.id,
+      name: "都已经收尾的项目",
+      objective: "验证空状态文案",
+      status: "active",
+      mode: "normal",
+    },
+    select: { id: true },
+  });
+  await prisma.task.create({
+    data: {
+      userId: user.id,
+      projectId: doneProject.id,
+      title: "已经做完的那件事",
+      shortTitle: "已经做完",
+      status: "done",
+      priority: "medium",
+      executionMode: "quick",
+      doneWhen: "做完",
+      maxTurns: 1,
+      toolPolicy: "none",
+      completedAt: new Date(),
+    },
+  });
+  await cdp.send("Page.navigate", { url: `${baseUrl}/files?project=${doneProject.id}` });
+  const doneRendered = await waitFor(
+    "document.body && document.body.innerText.includes('已全部完成')",
+  );
+  const doneText = doneRendered ? await evaluate("document.body.innerText") : "";
+  await cdp.send("Page.navigate", { url: `${baseUrl}/` });
+  await waitFor("document.body && document.body.innerText.length > 200");
+  const homeText = await evaluate("document.body.innerText");
+  const emptyStateChecks = [
+    ["任务全部完成时显示「已全部完成」", doneRendered],
+    ["不再显示「没有推进中的任务」", !doneText.includes("没有推进中的任务")],
+    ["首页不再出现「这一阶段完成了」提醒卡", !homeText.includes("这一阶段完成了")],
+  ];
+  for (const [label, ok] of emptyStateChecks) {
     console.log((ok ? "✔ " : "✘ ") + label);
     if (!ok) failed = true;
   }

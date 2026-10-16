@@ -28,6 +28,7 @@ type Props = {
   onNext?: (payload: {
     answer: string[];
     history: InboxClarificationHistoryItem[];
+    questionKey?: string;
   }) => Promise<{
     status: "asking" | "done";
     question?: InboxClarificationDimension | null;
@@ -161,6 +162,8 @@ export function ChatClarify({
   async function commit(answer: string[]) {
     if (busy || thinking || !answer.length) return;
     const currentTurn = lastTurn;
+    const previousAnswers = answers;
+    const previousHistory = history;
     const all = [...answers, answer];
     const nextHistory = history.map((item) =>
       item.answer.length === 0 ? { ...item, answer } : item,
@@ -179,7 +182,11 @@ export function ChatClarify({
 
     if (onNext) {
       try {
-        const result = await onNext({ answer, history: nextHistory });
+        const result = await onNext({
+          answer,
+          history: nextHistory,
+          questionKey: currentTurn?.key,
+        });
         if (result.status === "done") {
           setDone(true);
           setTurns((current) => [
@@ -207,18 +214,29 @@ export function ChatClarify({
               key: result.question?.key,
             },
           ]);
+        } else {
+          throw new Error("missing_question");
         }
       } catch {
-        setTurns((current) => [
-          ...current,
-          {
-            role: "ai",
-            text: "这次没接上，再回答一次刚才的问题。",
-            options: currentTurn?.options,
-            multi: currentTurn?.multi,
-            key: currentTurn?.key,
-          },
-        ]);
+        // 回滚这次乐观提交；服务端已处理时会通过幂等接口返回当前状态。
+        setTurns((current) => {
+          const base =
+            current.at(-1)?.role === "user"
+              ? current.slice(0, -1)
+              : current;
+          return [
+            ...base,
+            {
+              role: "ai",
+              text: "网络没接上，点下面的选项重试一次。",
+              options: currentTurn?.options,
+              multi: currentTurn?.multi,
+              key: currentTurn?.key,
+            },
+          ];
+        });
+        setAnswers(previousAnswers);
+        setHistory(previousHistory);
       } finally {
         setThinking(false);
       }

@@ -79,6 +79,7 @@ export default async function FilesPage({
           take: 1,
           select: {
             id: true,
+            order: true,
             status: true,
             deliverable: true,
             doneWhen: true,

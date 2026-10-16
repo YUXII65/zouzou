@@ -187,25 +187,21 @@ function collapseStickySteps(steps: string[], limit = 3) {
 
 function stripLeadingStepNumber(value: string) {
   return value
-    .replace(/^\s*(?:\d{1,2}\s*[.、)）]|第[一二三四五六七八九十]+步[:：]?)\s*/, "")
+    .replace(
+      /^\s*(?:(?:第\s*[一二三四五六七八九十\d]+\s*[步部分]?[:：、.)）]?)|(?:\d{1,2}\s*[.、)）])|(?:\d{1,2}\s+(?!(?:个|件|条|天|周|月|年|小时|分钟|家|次|种|张|页|步|人|份|元|块|公里|岁|本|门|套|款|项|位|名|所|场|局|轮|遍|%)))|(?:[①②③④⑤⑥⑦⑧⑨⑩])|(?:[一二三四五六七八九十]\s*[、.)）]))\s*/u,
+      "",
+    )
     .trim();
 }
 
 export function stickyPayloadFromDecisionCard(
   card: DecisionCard,
 ): DecisionStickyPayload {
-  // 便利贴只保留最多 3 个真实阶段；fallback 是例外说明，并入最后一块，
-  // 不单独占一个步骤，避免把两个动作摊成五六个步骤。
+  // 便利贴只保留最多 3 个真实阶段。
+  // fallback 仍然生成、仍然入库，但**不写进便利贴**——不要在便利贴里追加「例外：…」。
   const steps = collapseStickySteps(
     cleanList(card.executionSteps).map(stripLeadingStepNumber),
   );
-  if (card.fallback) {
-    if (steps.length) {
-      steps[steps.length - 1] = `${steps[steps.length - 1]}\n例外：${card.fallback}`;
-    } else {
-      steps.push(`例外：${card.fallback}`);
-    }
-  }
   const nextStep = compact(card.nextStep) || steps[0] || card.recommendation;
 
   return {

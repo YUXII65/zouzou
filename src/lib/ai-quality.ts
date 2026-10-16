@@ -29,6 +29,38 @@ export const TEMPLATE_PHRASES = [
   "今天真正推进的是",
 ];
 
+/** 输出不该把动作绑死在某个记录工具上；载体应该是事情真正发生的地方 */
+export const RECORD_TOOL_PHRASES = ["备忘录", "记事本", "便签"];
+
+const RECORD_TOOL_REPLACEMENTS: Array<[RegExp, string]> = [
+  [/手机备忘录|iPhone\s*备忘录|苹果备忘录/g, "手机系统自带文稿工具"],
+  [/备忘录|记事本/g, "系统自带文稿工具"],
+  [/便签/g, "临时草稿"],
+];
+
+/** 用通用载体替换模型偶然写出的具体记录工具，避免红线内容进入计划和便利贴。 */
+export function scrubRecordToolMentions<T>(value: T): T {
+  if (typeof value === "string") {
+    let text: string = value;
+    for (const [pattern, replacement] of RECORD_TOOL_REPLACEMENTS) {
+      text = text.replace(pattern, replacement);
+    }
+    return text as unknown as T;
+  }
+  if (Array.isArray(value)) {
+    return value.map((item) => scrubRecordToolMentions(item)) as unknown as T;
+  }
+  if (value && typeof value === "object") {
+    return Object.fromEntries(
+      Object.entries(value).map(([key, item]) => [
+        key,
+        scrubRecordToolMentions(item),
+      ]),
+    ) as unknown as T;
+  }
+  return value;
+}
+
 /** 没有给出真实做法的模板式方法建议 */
 export const VAGUE_METHOD_PHRASES = [
   "按计划推进",
@@ -270,6 +302,9 @@ export function checkPlanQuality(
   }
   for (const hit of findPhrases(texts, TEMPLATE_PHRASES)) {
     issues.push(`出现模板句：${hit}`);
+  }
+  if (findPhrases(texts, RECORD_TOOL_PHRASES).length) {
+    issues.push("把动作落到记录工具上：载体应该是事情真正发生的地方");
   }
 
   return issues;

@@ -98,8 +98,14 @@ try {
   if (!clarification?.frame?.coreNeedHypothesis) {
     throw new Error("首轮澄清没有形成 coreNeedHypothesis");
   }
+  if (
+    clarification?.status !== "asking" ||
+    !clarification?.history?.some((item) => !item.answer.length)
+  ) {
+    throw new Error("首轮必须保留一次提问");
+  }
 
-  for (let turn = 0; turn < 3 && clarification.status === "asking"; turn += 1) {
+  for (let turn = 0; turn < 4 && clarification.status === "asking"; turn += 1) {
     const current = clarification.history?.find((item) => !item.answer.length);
     if (!current) throw new Error("澄清状态是 asking，但没有未回答的问题");
     const answer = current.options?.[0] ? [current.options[0]] : ["先做作品集"];
@@ -112,7 +118,7 @@ try {
   }
 
   if (clarification.status !== "done") {
-    throw new Error(`澄清没有在 3 轮内收口，当前状态：${clarification.status}`);
+    throw new Error(`澄清没有在 4 轮内收口，当前状态：${clarification.status}`);
   }
   if (!clarification.summary?.workingAssumption) {
     throw new Error("澄清结束时没有 workingAssumption");
@@ -128,8 +134,8 @@ try {
   if (plan?.source === "agent_failed") {
     throw new Error("普通模式 Agent 链路失败，不能自动通过");
   }
-  if (!plan?.content?.usedTranslation || typeof plan.content.stepCount !== "number") {
-    throw new Error("计划没有带规划执行 Agent 轨迹（usedTranslation / stepCount）");
+  if (!plan?.tasks?.length) {
+    throw new Error("计划没有生成任务");
   }
   if (plan?.agent) {
     const card = plan.userCard;
@@ -143,7 +149,7 @@ try {
       throw new Error("普通模式 Agent 没有说明方案使用了哪条已确认事实");
     }
     if (plan.tasks.length > 6) {
-      throw new Error("三段链生成任务太多（安全上限 6）：" + plan.tasks.length);
+      throw new Error("计划链生成任务太多（安全上限 6）：" + plan.tasks.length);
     }
   }
 
@@ -210,6 +216,13 @@ try {
   if (!savedSticky?.nextStep || !savedSticky.stepsJson) {
     throw new Error("任务保存成功，但没有自动生成执行便利贴");
   }
+  const homeHtmlAfterConfirm = await getHtml("/");
+  if (
+    homeHtmlAfterConfirm.includes('data-tour="clarify-options"') ||
+    homeHtmlAfterConfirm.includes("有卡顿？说说想法")
+  ) {
+    throw new Error("确认后主页仍残留澄清卡片");
+  }
 
   // 用户必须真的能在页面上看到这条执行链，而不只是躺在数据库里。
   // v3.3 起书桌并进文件页（/workspace 只是重定向），而且没指定文件夹时全部收起，
@@ -249,9 +262,19 @@ try {
     if (!current?.question || !current.options?.length) {
       throw new Error("澄清提问没有给出问题或选项");
     }
-    // 质量形状：必须是真正的取舍题（A 还是 B），不是分类题或偏好题
-    if (!/还是|或者/.test(current.question)) {
-      throw new Error(`澄清问题不像取舍题：${current.question}`);
+    // 质量形状：首轮问题要具体、引用用户或当前处境；不再强制 A/B 取舍题。
+    if (!/(?:你|这|那|哪|什么|最近|目前|现在)/.test(current.question)) {
+      throw new Error(`澄清问题没有引用用户或当前处境：${current.question}`);
+    }
+    if (
+      current.options.some(
+        (option) =>
+          typeof option !== "string" ||
+          option.trim().length < 2 ||
+          /看情况|其他|都行/.test(option),
+      )
+    ) {
+      throw new Error(`澄清选项不合格：${current.options.join(" / ")}`);
     }
     asked.push(current.question);
     vagueState = await post("/api/ai/inbox/clarify", {
@@ -262,6 +285,9 @@ try {
   }
   if (vagueState.clarification?.status !== "done") {
     throw new Error("澄清没有收口，问得太久");
+  }
+  if (asked.length < 2) {
+    throw new Error("澄清至少应进行两轮提问");
   }
   if (new Set(asked).size !== asked.length) {
     throw new Error("澄清重复问了同一个问题");

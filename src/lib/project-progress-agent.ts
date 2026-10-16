@@ -6,12 +6,33 @@ import { buildTaskContract } from "@/lib/task-contract";
 import { MAX_AI_TASKS_PER_PLAN } from "@/lib/task-flow";
 import { invalidateAiContext } from "@/lib/ai-context";
 import { prisma, withTransactionRetry } from "@/lib/prisma";
-import type { ExploreContinuation, StagePreview } from "@/lib/project-progress-types";
+import {
+  MAX_LONGTERM_STAGES,
+  type ExploreContinuation,
+  type StagePreview,
+} from "@/lib/project-progress-types";
 import {
   MAX_EXPLORE_OPEN_TASKS,
   MAX_EXPLORE_TRACKS,
   normalizeTrackRole,
 } from "@/lib/project-track";
+
+const REPETITIVE_LONGTERM_TASK =
+  /(确认|汇总|核对|填表|存档|收齐|逐人|回复|整理.{0,10}表|修订.{0,10}表)/;
+
+function normalizeTaskKey(value: string) {
+  return value.replace(/\s+/g, "").replace(/[，,。；;：:、()（）]/g, "");
+}
+
+function isRepetitiveLongtermTask(title: string, existingTitles: string[]) {
+  const key = normalizeTaskKey(title);
+  if (existingTitles.some((existing) => normalizeTaskKey(existing) === key)) {
+    return true;
+  }
+  const category = title.match(REPETITIVE_LONGTERM_TASK)?.[0];
+  if (!category) return false;
+  return existingTitles.some((existing) => existing.includes(category));
+}
 
 const LONGTERM_STAGE_SYSTEM_PROMPT = `
 你是走走里的“长期项目阶段衔接 Agent”。
@@ -50,9 +71,15 @@ const LONGTERM_STAGE_SYSTEM_PROMPT = `
 - 输入里 stageState 为 "active" 表示当前阶段还没做完：下一阶段只能按已有信息推断，写清要做什么就行，不要编造还没发生的结果。
 - 只规划下一阶段，不规划未来两个阶段。
 - 下一阶段必须由当前阶段已完成或正在推进的结果自然接上。
-- tasks 只保留当前阶段真正需要的 1-3 条，不设固定数量，不要把连续动作拆碎。
+- tasks 默认 2-4 条；只有明确的外部等待（等审批、等签字、等对方回复、等到账）才允许 1 条，超过 4 条必须合并。
+- 当前项目最多 ${MAX_LONGTERM_STAGES} 个阶段。如果 nextStageOrder 超过 maxStages，tasks 必须返回空数组。
+- 下一阶段必须和 existingStages 里的里程碑区分；如果只是重复确认、汇总、修订、存档上一阶段，tasks 返回空数组。
 - 第一条任务必须今天或明天就能开始。
-- tasks 里不写复盘、总结、检查、打卡、日报、周报、备忘录。
+- tasks 里不写复盘、总结、检查、打卡、日报、周报这类旁观动作。
+- 禁止把“确认、汇总、核对、填表、存档、收齐回复、逐人确认、整理表格、修订表格”这类内部整理动作当任务；这些只能作为完成信号，不是行动。
+- 下一阶段必须引入新的现实动作或新的对象/场景，不能只是把上一阶段的文件再确认、再汇总、再存档。
+- 如果下一阶段只是重复确认或整理已有内容，tasks 返回空数组，表示当前阶段到此收口。
+- 照护、家庭、工作等现实项目，优先写会改变现实状态的动作：陪诊、买药、转账、排班、打电话、设置日历、安排住宿、签纸质件等。
 - 不写“按计划推进”“先想清楚”“做好准备”“根据情况调整”这类空话。
 - 如果已经延期，优先缩小范围、合并步骤，不要把原计划原样加回来。
 `.trim();
@@ -171,11 +198,21 @@ export async function generateLongtermStagePreview(input: {
     },
     select: {
       id: true,
+      order: true,
       status: true,
       deliverable: true,
       doneWhen: true,
       project: {
-        select: { id: true, name: true, objective: true, currentMilestone: true },
+        select: {
+          id: true,
+          name: true,
+          objective: true,
+          currentMilestone: true,
+          stages: {
+            orderBy: [{ order: "asc" }, { id: "asc" }],
+            select: { order: true, deliverable: true, status: true },
+          },
+        },
       },
       tasks: {
         orderBy: [{ planOrder: "asc" }, { createdAt: "asc" }, { id: "asc" }],
@@ -202,6 +239,11 @@ export async function generateLongtermStagePreview(input: {
     today: toDateInputValue(startOfDay()),
     // active：当前阶段还没做完，下一阶段只能按已有信息推断
     stageState: stage.status,
+    stagePlan: {
+      currentOrder: stage.order,
+      nextOrder: stage.order + 1,
+      maxStages: MAX_LONGTERM_STAGES,
+    },
     project: stage.project,
     currentStage: {
       deliverable: stage.deliverable,
@@ -246,11 +288,21 @@ export async function generateLongtermStagePreview(input: {
   );
 
   const parsed = parseJsonObject(text);
-  const tasks = normalizeTasks(
-    parsed?.tasks,
-    `推进「${stage.project.name}」的下一阶段`,
-    MAX_AI_TASKS_PER_PLAN,
-  );
+  const existingProjectTasks = await prisma.task.findMany({
+    where: { projectId: stage.project.id, userId: input.userId },
+    select: { title: true },
+  });
+  const existingTitles = existingProjectTasks.map((task) => task.title);
+  const tasks =
+    stage.order >= MAX_LONGTERM_STAGES
+      ? []
+      : normalizeTasks(
+          parsed?.tasks,
+          `推进「${stage.project.name}」的下一阶段`,
+          MAX_AI_TASKS_PER_PLAN,
+        )
+          .slice(0, 4)
+          .filter((task) => !isRepetitiveLongtermTask(task.title, existingTitles));
   const nextMilestone =
     asString(parsed?.nextMilestone, 300) ||
     `完成「${stage.project.name}」的下一阶段可交付结果`;
@@ -262,25 +314,7 @@ export async function generateLongtermStagePreview(input: {
     reason:
       asString(parsed?.reason, 500) ||
       `当前阶段「${stage.deliverable}」已经完成，下一步进入新的可交付阶段。`,
-    tasks: tasks.length
-      ? tasks
-      : [
-          safePlanTask({
-            title: `推进「${stage.project.name}」的下一阶段`,
-            shortTitle: "推进下一阶段",
-            executionMode: "produce",
-            doneWhen: "下一阶段出现一个可检查、可继续推进的具体结果",
-            methodHint: "从当前阶段已经完成的结果出发，先完成下一阶段的第一项可交付内容",
-            recommendation: "不再重复当前阶段，直接进入下一阶段的第一项交付",
-            executionSteps: ["查看当前阶段完成结果", "完成下一阶段第一项可交付内容"],
-            fallback: "如果当前结果不足以进入下一阶段，先补齐一个最小依赖再继续",
-            maxTurns: 2,
-            toolPolicy: "none",
-            priority: "medium",
-            scheduledDate: toDateInputValue(startOfDay()),
-            dueDate: null,
-          }),
-        ],
+    tasks,
     source: text ? "model" : "fallback",
   };
 

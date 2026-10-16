@@ -61,7 +61,7 @@ import {
   advanceExploreAfterTask,
   generateLongtermStagePreview,
 } from "@/lib/project-progress-agent";
-import { parseStagePreview } from "@/lib/project-progress-types";
+import { MAX_LONGTERM_STAGES, parseStagePreview } from "@/lib/project-progress-types";
 import {
   appendTaskContinuation,
   formatReviewNextActions,
@@ -599,7 +599,8 @@ export async function clarifyOnboarding(
       memorySummary: aiContext.summary,
       evidence: aiContext.evidence,
       decisionMemory: aiContext.decisionMemory,
-      maxQuestions: 2,
+      maxQuestions: 4,
+      minQuestions: 2,
     }),
     user.id
   );
@@ -1256,6 +1257,10 @@ export async function confirmInboxPlan(formData: FormData) {
     detail: "inbox_plan",
   });
 
+  revalidatePath("/");
+  revalidatePath("/files");
+  revalidatePath("/workspace");
+
   return {
     ok: true as const,
     projectId: confirmedProjectId,
@@ -1588,38 +1593,88 @@ export async function confirmStagePreviewAction(formData: FormData) {
   const stageId = text(formData, "stageId");
   if (!stageId) return;
 
+  // 事务里创建的新阶段，事务外要立刻补一份「下一阶段」预览（见下方）。
+  let createdNextStageId: string | null = null;
+
   await withTransactionRetry(async (tx) => {
     const stage = await tx.projectStage.findFirst({
-      where: { id: stageId, userId: user.id, status: "ready" },
+      where: { id: stageId, userId: user.id },
       include: {
         project: { select: { id: true, userId: true } },
       },
     });
-    if (!stage) return;
+    if (!stage || stage.status !== "ready") return;
 
     const preview = parseStagePreview(stage.nextStageJson);
     if (!preview?.tasks.length) return;
 
     await tx.$queryRaw`SELECT id FROM projects WHERE id = ${stage.projectId} FOR UPDATE`;
 
-    await tx.projectStage.update({
-      where: { id: stage.id, userId: user.id },
+    // 原子抢占：同一个 ready 阶段只能有一个请求把它推进到下一阶段。
+    const claimed = await tx.projectStage.updateMany({
+      where: { id: stage.id, userId: user.id, status: "ready" },
       data: { status: "completed", completedAt: new Date() },
     });
+    if (claimed.count === 0) return;
 
-    const nextStage = await tx.projectStage.create({
-      data: {
-        userId: user.id,
+    // 防止历史重复请求或脏数据已经创建过下一阶段。
+    const existingNextStage = await tx.projectStage.findFirst({
+      where: {
         projectId: stage.projectId,
-        order: stage.order + 1,
-        title: "当前阶段",
-        deliverable: preview.nextMilestone,
-        status: "active",
+        userId: user.id,
+        order: { gt: stage.order },
       },
       select: { id: true },
     });
+    if (existingNextStage) return;
 
-    for (const [index, plannedTask] of preview.tasks.entries()) {
+    const plannedTasks = preview.tasks.slice(0, 4);
+    if (!plannedTasks.length || stage.order >= MAX_LONGTERM_STAGES) {
+      await tx.project.update({
+        where: { id: stage.projectId, userId: user.id },
+        data: { status: "paused" },
+      });
+      return;
+    }
+
+    const shouldCreateNextStage =
+      plannedTasks.length >= 2 ||
+      plannedTasks.some((task) =>
+        /等|等待|审批|签字|回复|反馈|到账|排期|对方|外部/.test(task.title),
+      );
+
+    let targetStageId = stage.id;
+    if (shouldCreateNextStage) {
+      const nextStage = await tx.projectStage.create({
+        data: {
+          userId: user.id,
+          projectId: stage.projectId,
+          order: stage.order + 1,
+          title: "当前阶段",
+          deliverable: preview.nextMilestone,
+          status: "active",
+        },
+        select: { id: true },
+      });
+      targetStageId = nextStage.id;
+      // 只有后面还有阶段才需要为它预生成「下一阶段」；到上限就别再打一次 AI。
+      if (stage.order + 1 < MAX_LONGTERM_STAGES) {
+        createdNextStageId = nextStage.id;
+      }
+    } else {
+      // 只有一条真实动作时，不单独造一个阶段，并回当前阶段继续推进。
+      await tx.projectStage.update({
+        where: { id: stage.id, userId: user.id },
+        data: {
+          status: "active",
+          completedAt: null,
+          nextStageJson: null,
+          nextStageUpdatedAt: null,
+        },
+      });
+    }
+
+    for (const [index, plannedTask] of plannedTasks.entries()) {
       const created = await tx.task.create({
         data: {
           userId: user.id,
@@ -1627,7 +1682,7 @@ export async function confirmStagePreviewAction(formData: FormData) {
           shortTitle: plannedTask.shortTitle,
           notes: plannedTask.notes,
           projectId: stage.projectId,
-          stageId: nextStage.id,
+          stageId: targetStageId,
           status: "todo",
           priority: priority(plannedTask.priority),
           scheduledDate: dateString(plannedTask.scheduledDate),
@@ -1664,9 +1719,21 @@ export async function confirmStagePreviewAction(formData: FormData) {
 
     await tx.project.update({
       where: { id: stage.projectId, userId: user.id },
-      data: { currentMilestone: preview.nextMilestone },
+      data: { currentMilestone: preview.nextMilestone, status: "active" },
     });
   });
+
+  // 新阶段的「下一阶段」预览放到响应之后生成：点「进入下一阶段」应该立刻进去，
+  // 不该等一次模型调用；等用户看页面的时间，这份预览已经在后台备好了。
+  const nextStageIdForPreview = createdNextStageId;
+  if (nextStageIdForPreview) {
+    after(() =>
+      generateLongtermStagePreview({
+        userId: user.id,
+        stageId: nextStageIdForPreview,
+      }).catch(() => {}),
+    );
+  }
 
   invalidateAiContext(user.id);
   revalidatePath("/");
@@ -1943,12 +2010,8 @@ export async function setTaskStatus(formData: FormData) {
 
   if (!id) return;
 
-  const transitionFilter =
-    status === "done"
-      ? { status: { not: "done" as const } }
-      : status === "cancelled"
-        ? { status: { not: "cancelled" as const } }
-        : {};
+  // 「完成」是终态；服务端也拦住，不能只依赖按钮 disabled。
+  const transitionFilter = { status: { not: "done" as const } };
   const updated = await prisma.task.updateManyAndReturn({
     where: { id, userId: user.id, ...transitionFilter },
     data: {

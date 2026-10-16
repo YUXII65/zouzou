@@ -32,6 +32,7 @@ export function InboxClarification({
   status,
   history = [],
   frame = null,
+  onFinished,
 }: {
   itemId: string;
   content: string;
@@ -41,11 +42,11 @@ export function InboxClarification({
   status?: "asking" | "done";
   history?: InboxClarificationHistoryItem[];
   frame?: InboxClarificationFrame | null;
+  onFinished?: () => void;
 }) {
   const [apiKey, setApiKey] = useState("");
   const [model, setModel] = useState("deepseek-v4-flash");
   const [baseUrl, setBaseUrl] = useState("https://api.deepseek.com");
-  const [storageReady, setStorageReady] = useState(false);
   const [finalizing, setFinalizing] = useState(false);
   const [confirmed, setConfirmed] = useState<ConfirmResult | null>(null);
   const [directAnswer, setDirectAnswer] = useState<string | null>(null);
@@ -53,6 +54,13 @@ export function InboxClarification({
   const [error, setError] = useState("");
   const completionStartedRef = useRef(false);
   const router = useRouter();
+  // 这里不能 router.refresh()：确认成功后这条 inbox item 已经不是 pending，
+  // refresh 会把整个 InboxClarification 卸载掉，完成态（已放进文件 / 查看 /
+  // 直接答案 / 先收着）就永远没机会渲染出来。完成态留在卡片里，
+  // 用户点「查看」去文件页时自然会重新取一遍服务端数据。
+  const finish = useCallback(() => {
+    onFinished?.();
+  }, [onFinished]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -61,13 +69,12 @@ export function InboxClarification({
       setBaseUrl(
         localStorage.getItem("ai-base-url") ?? "https://api.deepseek.com",
       );
-      setStorageReady(true);
     }, 0);
     return () => window.clearTimeout(timer);
   }, []);
 
   const finalize = useCallback(async () => {
-    // 澄清一旦结束就自动整理，不给用户再点一次「生成任务」。
+    // 澄清收口后自动整理；手动重试只用于失败恢复。
     if (completionStartedRef.current) return;
     completionStartedRef.current = true;
     setFinalizing(true);
@@ -107,11 +114,13 @@ export function InboxClarification({
           "";
         if (!answer) throw new Error("missing_answer");
         setDirectAnswer(answer);
+        finish();
       } else if (plan.action === "ignore" || !plan.tasks.length) {
         const formData = new FormData();
         formData.set("id", itemId);
         await ignoreInboxItem(formData);
         setIgnored(true);
+        finish();
         return;
       }
 
@@ -127,17 +136,19 @@ export function InboxClarification({
         throw new Error("confirm_failed");
       }
       setConfirmed(confirmedPayload.result);
+      finish();
     } catch {
       completionStartedRef.current = false;
       setError("整理没完成。点“重试”；如果连续失败，去个人页检查 DeepSeek 连接。");
     } finally {
       setFinalizing(false);
     }
-  }, [apiKey, baseUrl, itemId, model]);
+  }, [apiKey, baseUrl, finish, itemId, model]);
 
   async function next(payload: {
     answer: string[];
     history: InboxClarificationHistoryItem[];
+    questionKey?: string;
   }) {
     setError("");
     const response = await fetch("/api/ai/inbox/clarify", {
@@ -147,6 +158,7 @@ export function InboxClarification({
         itemId,
         mode: "socratic",
         answer: payload.answer,
+        questionKey: payload.questionKey,
         apiKey,
         model,
         baseUrl,
@@ -157,7 +169,11 @@ export function InboxClarification({
       clarification: InboxClarificationData;
     }>(response, () => {});
     const clarification = result.clarification;
+    if (!clarification) throw new Error("missing_clarification");
     const current = clarification.history?.at(-1);
+    if (clarification.status !== "done" && !current) {
+      throw new Error("missing_question");
+    }
     return {
       status:
         clarification.status === "done"
@@ -191,10 +207,12 @@ export function InboxClarification({
         initialHistory={history}
         clarificationStatus={status}
         frame={frame}
-        autoSubmit={storageReady}
-        hideSubmitAction
+        autoSubmit
+        submitLabel="去看看"
         onNext={mode === "socratic" ? next : undefined}
         busy={finalizing}
+        // 确认完成后收起「去看看」，否则会和「查看」两个按钮同时留在卡片里
+        hideSubmitAction={Boolean(confirmed) || Boolean(directAnswer)}
         onSubmit={finalize}
       />
 

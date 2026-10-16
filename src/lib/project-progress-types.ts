@@ -1,5 +1,7 @@
 import type { InboxPlanTask } from "@/lib/ai";
 
+export const MAX_LONGTERM_STAGES = 5;
+
 export type StagePreview = {
   /** 当前阶段一句话总结（总结版展示用，不是交付物原文） */
   currentSummary: string;

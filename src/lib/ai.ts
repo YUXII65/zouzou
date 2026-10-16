@@ -164,6 +164,11 @@ export type InboxClarificationTranslation = {
   missingSlots: string[];
   reason: string;
   responseMode?: InboxPlanResponseMode;
+  /** 新版翻译 Agent 的顶层字段；旧结构继续保留以兼容数据库和 UI。 */
+  desiredOutcome?: string;
+  workingAssumption?: string;
+  ifWrongThen?: string;
+  inputAssessmentNote?: string | null;
 };
 
 export type InboxClarificationFrame = {
@@ -199,7 +204,7 @@ export type InboxClarification = {
   dimensions: InboxClarificationDimension[];
   supplementPlaceholder: string;
   mode?: "socratic";
-  /** 澄清收口后定下的推进模式；第 2、3 段只承接，不再自己判。 */
+  /** 澄清收口后定下的推进模式；第 2 段方案 Agent 只承接，不再自己判。 */
   workMode?: ProjectMode | null;
   status?: "asking" | "done";
   askedCount?: number;
@@ -870,6 +875,8 @@ function normalizeClarificationTranslation(
           .slice(0, 6)
           .map((entry) => entry.trim().slice(0, 300))
       : fallbackValue;
+  const optionalString = (item: unknown) =>
+    typeof item === "string" && item.trim() ? item.trim().slice(0, 500) : "";
   const readiness =
     raw.readiness === "ready" ||
     raw.readiness === "needs_context" ||
@@ -877,26 +884,43 @@ function normalizeClarificationTranslation(
       ? raw.readiness
       : fallback.readiness;
   const responseMode =
-    raw.responseMode === "answer" || raw.responseMode === "action"
+    raw.responseMode === "plan" || raw.responseMode === "answer"
       ? raw.responseMode
-      : fallback.responseMode ?? "plan";
+      : "action";
+  const desiredOutcome = stringValue(
+    raw.desiredOutcome,
+    fallback.desiredOutcome || fallback.normalizedIntent,
+  );
+  const normalizedIntent = stringValue(
+    raw.normalizedIntent ?? raw.desiredOutcome,
+    fallback.normalizedIntent || desiredOutcome,
+  );
+  const workingAssumption = stringValue(
+    raw.workingAssumption,
+    fallback.workingAssumption || normalizedIntent,
+  );
+  const ifWrongThen = stringValue(raw.ifWrongThen, fallback.ifWrongThen || "");
   return {
     originalInput: stringValue(raw.originalInput, fallback.originalInput),
     literalMeaning: stringValue(raw.literalMeaning, fallback.literalMeaning),
-    normalizedIntent: stringValue(
-      raw.normalizedIntent,
-      fallback.normalizedIntent,
-    ),
+    normalizedIntent,
     confirmedFacts: stringList(raw.confirmedFacts, fallback.confirmedFacts),
     interpretations: stringList(raw.interpretations, fallback.interpretations),
     valueJudgments: stringList(raw.valueJudgments, fallback.valueJudgments),
-    goals: stringList(raw.goals, fallback.goals),
+    goals:
+      Array.isArray(raw.goals) || !desiredOutcome
+        ? stringList(raw.goals, fallback.goals)
+        : [desiredOutcome],
     constraints: stringList(raw.constraints, fallback.constraints),
     unknowns: stringList(raw.unknowns, fallback.unknowns),
     readiness,
     missingSlots: stringList(raw.missingSlots, fallback.missingSlots),
-    reason: stringValue(raw.reason, fallback.reason),
+    reason: stringValue(raw.reason ?? raw.workingAssumption, fallback.reason),
     responseMode,
+    desiredOutcome,
+    workingAssumption,
+    ifWrongThen,
+    inputAssessmentNote: optionalString(raw.inputAssessmentNote) || null,
   };
 }
 
@@ -909,12 +933,13 @@ function buildFallbackClarificationTranslation(
     .flatMap((item) => item.answer)
     .map((answer) => answer.trim())
     .filter(Boolean);
+  const intent = answers.length
+    ? answers.join("；").slice(0, 500)
+    : assessment.completionPrompt || content;
   return {
     originalInput: content,
     literalMeaning: content,
-    normalizedIntent: answers.length
-      ? answers.join("；").slice(0, 500)
-      : assessment.completionPrompt || content,
+    normalizedIntent: intent,
     confirmedFacts: answers.slice(0, 6),
     interpretations: [],
     valueJudgments: [],
@@ -924,7 +949,11 @@ function buildFallbackClarificationTranslation(
     readiness: assessment.readiness,
     missingSlots: assessment.missingSlots,
     reason: assessment.reason,
-    responseMode: "plan",
+    responseMode: "action",
+    desiredOutcome: intent,
+    workingAssumption: intent,
+    ifWrongThen: "如果执行后发现方向不对，先重做第一条任务，不要继续堆后续任务。",
+    inputAssessmentNote: null,
   };
 }
 
@@ -940,18 +969,22 @@ function buildFallbackSummaryFromTranslation(
   translation: InboxClarificationTranslation,
 ): InboxClarificationSummary {
   const intent =
-    translation.normalizedIntent || translation.literalMeaning || content;
+    translation.desiredOutcome ||
+    translation.normalizedIntent ||
+    translation.literalMeaning ||
+    content;
   return {
     originalIdea: content,
     realProblem: intent,
     confirmedFacts: translation.confirmedFacts,
     interpretations: translation.interpretations,
     valueJudgments: translation.valueJudgments,
-    goals: translation.goals,
+    goals: translation.goals.length ? translation.goals : [intent],
     unverifiedAssumptions: translation.unknowns,
     keyVariable: translation.unknowns[0] ?? "",
-    workingAssumption: intent,
+    workingAssumption: translation.workingAssumption || intent,
     ifWrongThen:
+      translation.ifWrongThen ||
       "如果执行后发现方向不对，先重做第一条任务，不要继续堆后续任务。",
   };
 }
@@ -970,6 +1003,48 @@ function buildClarificationQuestionFallback(
   };
 }
 
+function buildFirstTurnQuestionFallback(
+  content: string,
+  translation: InboxClarificationTranslation,
+): InboxClarificationDimension {
+  const subject =
+    (
+      translation.desiredOutcome ||
+      translation.normalizedIntent ||
+      translation.literalMeaning ||
+      content
+    )
+      .replace(/[。！？!?]+$/g, "")
+      .trim()
+      .slice(0, 80) || "这件事";
+  return {
+    key: "first_turn_check",
+    question: `先确认一下：${subject}，这次要推进的是这个吗？`,
+    options: ["就是这个对象和目标", "对象或目标不对"],
+  };
+}
+
+function buildFollowUpQuestionFallback(
+  content: string,
+  translation: InboxClarificationTranslation,
+): InboxClarificationDimension {
+  const assumption =
+    translation.workingAssumption ||
+    translation.desiredOutcome ||
+    translation.normalizedIntent ||
+    content;
+  const subject =
+    assumption
+      .replace(/[。！？!?]+$/g, "")
+      .trim()
+      .slice(0, 80) || "这个方向";
+  return {
+    key: "follow_up_check",
+    question: `先按“${subject}”走的话，哪一点最不符合你的实际情况？`,
+    options: ["方向不对", "范围太大", "时间精力不够"],
+  };
+}
+
 function normalizeClarificationQuestion(
   value: unknown,
   fallback: InboxClarificationDimension,
@@ -979,7 +1054,9 @@ function normalizeClarificationQuestion(
   const question =
     typeof raw.question === "string" && raw.question.trim()
       ? raw.question.trim().slice(0, 120)
-      : fallback.question;
+      : typeof raw.text === "string" && raw.text.trim()
+        ? raw.text.trim().slice(0, 120)
+        : fallback.question;
   const options = Array.isArray(raw.options)
     ? raw.options
         .filter((o): o is string => typeof o === "string" && Boolean(o.trim()))
@@ -1006,7 +1083,9 @@ function buildFrameFromTranslation(
   const assessment = assessIdeaReadiness(content);
   const unknowns = translation.unknowns;
   const workingAssumption =
-    summary.workingAssumption || translation.normalizedIntent;
+    translation.workingAssumption ||
+    summary.workingAssumption ||
+    translation.normalizedIntent;
   return {
     surfaceRequest: translation.literalMeaning || content,
     coreNeedHypothesis: translation.normalizedIntent || summary.realProblem,
@@ -1031,6 +1110,7 @@ function buildFrameFromTranslation(
 async function generateClarificationTranslation(input: {
   content: string;
   history: InboxClarificationHistoryItem[];
+  forceQuestion?: boolean;
   translation?: InboxClarificationTranslation | null;
   apiKey?: string;
   model?: string;
@@ -1060,6 +1140,7 @@ async function generateClarificationTranslation(input: {
       decisionMemory: input.decisionMemory ?? [],
       previousTranslation: input.translation ?? null,
       inputAssessmentHint: assessment,
+      forceQuestion: input.forceQuestion ?? false,
       history: input.history.map((item) => ({
         key: item.key,
         question: item.question,
@@ -1080,10 +1161,22 @@ async function generateClarificationTranslation(input: {
       qualityRules: "",
     },
   );
-  const fallbackQuestion =
-    fallbackTranslation.readiness === "ready"
-      ? null
-      : buildClarificationQuestionFallback(input.content);
+  const answeredCount = input.history.filter(
+    (item) => item.answer.length > 0,
+  ).length;
+  const mustAskQuestion = input.forceQuestion === true || answeredCount === 0;
+  const fallbackQuestionFor = (
+    value: InboxClarificationTranslation,
+  ): InboxClarificationDimension | null => {
+    if (value.readiness === "ready" && !mustAskQuestion) return null;
+    if (value.readiness === "ready") {
+      return answeredCount > 0
+        ? buildFollowUpQuestionFallback(input.content, value)
+        : buildFirstTurnQuestionFallback(input.content, value);
+    }
+    return buildClarificationQuestionFallback(input.content);
+  };
+  const fallbackQuestion = fallbackQuestionFor(fallbackTranslation);
   if (!text) {
     return {
       translation: fallbackTranslation,
@@ -1105,17 +1198,19 @@ async function generateClarificationTranslation(input: {
       raw.summary,
       buildFallbackSummaryFromTranslation(input.content, translation),
     );
-    // 问不问由模型决定：它会考虑 readiness，也会考虑用户明说但没定的取舍。
-    // 模型没给问题、且本地判断信息不够时，才用本地兜底问题。
+    // 首轮必须有提问；用户答过之后，ready 才允许直接收口。
+    // 模型没给问题时用本地兜底，不能把首轮提问裁掉。
+    const fallbackQuestionForCurrent = fallbackQuestionFor(translation);
     const question =
-      raw.question && typeof raw.question === "object"
-        ? normalizeClarificationQuestion(
-            raw.question,
-            buildClarificationQuestionFallback(input.content),
-          )
-        : translation.readiness === "ready"
-          ? null
-          : buildClarificationQuestionFallback(input.content);
+      !mustAskQuestion && translation.readiness === "ready"
+        ? null
+        : raw.question && typeof raw.question === "object"
+          ? normalizeClarificationQuestion(
+              raw.question,
+              fallbackQuestionForCurrent ??
+                buildClarificationQuestionFallback(input.content),
+            )
+          : fallbackQuestionForCurrent;
     return { translation, summary, question };
   } catch {
     return {
@@ -1229,9 +1324,18 @@ export async function generateSocraticClarification(input: {
   evidence?: string[];
   decisionMemory?: string[];
   maxQuestions?: number;
+  minQuestions?: number;
   onDelta?: (delta: string) => void;
 }): Promise<InboxClarification> {
-  const maxQuestions = Math.min(Math.max(input.maxQuestions ?? 3, 1), 5);
+  const maxQuestions = Math.min(Math.max(input.maxQuestions ?? 4, 1), 4);
+  const minQuestions = Math.min(
+    Math.max(input.minQuestions ?? 2, 1),
+    maxQuestions,
+  );
+  const answeredCount = input.history.filter(
+    (item) => item.answer.length > 0,
+  ).length;
+  const forceQuestion = answeredCount < minQuestions;
   // 链路第 1 段：翻译 Agent 一次产出结构化语义 + 默认判断。
   // 中间那段“提问/收敛”模型已经空转（autoConverge），主干不再调用它。
   const { translation, summary, question } =
@@ -1246,16 +1350,27 @@ export async function generateSocraticClarification(input: {
     memorySummary: input.memorySummary,
     evidence: input.evidence,
     decisionMemory: input.decisionMemory,
+    forceQuestion,
   });
   const frame = buildFrameFromTranslation(translation, summary, input.content);
   // readiness 不是 ready 就继续补信息，直到 ready 或问到上限；每轮只问一条，
   // 问过的不复问、接得住上一轮回答。到上限无论 readiness 如何都往下走。
-  const answeredCount = input.history.filter(
-    (item) => item.answer.length > 0,
-  ).length;
-  // 问不问、问什么，全在第 1 段翻译 Agent 里决定——它才是那个知道"缺什么"的 agent。
+  // 问不问、问什么，由第 1 段翻译 Agent 决定；但系统至少要求问满 minQuestions 轮。
   // 生成 Agent 只在澄清收口之后才开工，不参与提问（不拿不完整的输入去跑生成）。
-  const finalQuestion = question;
+  // answer 类问题（要的就是答案本身）不被"至少两轮"卡住：模型没给问题就直接收口，
+  // 不为了凑轮数去问和回答无关的事；只有缺会改变答案的事实才继续问。
+  const answerConverges = translation.responseMode === "answer";
+  const finalQuestion =
+    question ??
+    (answerConverges
+      ? null
+      : answeredCount < minQuestions
+        ? answeredCount === 0
+          ? translation.readiness === "ready"
+            ? buildFirstTurnQuestionFallback(input.content, translation)
+            : buildClarificationQuestionFallback(input.content)
+          : buildFollowUpQuestionFallback(input.content, translation)
+        : null);
 
   if (finalQuestion && answeredCount < maxQuestions) {
     const historyItem: InboxClarificationHistoryItem = {
@@ -1277,7 +1392,7 @@ export async function generateSocraticClarification(input: {
       session: buildClarificationSession(frame, finalQuestion, null, false),
     };
   }
-  // 澄清收口 → 先定模式，再交给第 2 段。第 2、3 段只承接这个结论。
+  // 澄清收口 → 先定模式，再交给第 2 段方案 Agent，它只承接这个结论。
   const workMode = await judgeWorkMode({
     content: input.content,
     translation,
@@ -1307,7 +1422,7 @@ export async function generateSocraticClarification(input: {
 /**
  * 澄清收口之后、生成之前的模式判断。
  *
- * 位置是用户明确要求的：模式必须在这里定下来，第 2 段规划执行和第 3 段收敛排版
+ * 位置是用户明确要求的：模式必须在这里定下来，第 2 段方案 Agent
  * 只承接结论，不再自己判。判断器沿用 MODE_JUDGMENT_SYSTEM_PROMPT（与 eval:mode 共用）。
  */
 export async function judgeWorkMode(input: {
@@ -1507,8 +1622,8 @@ export async function generateFirstRunPlan(
     usedFallback: true,
   };
   try {
-    // 首次引导的“想法 → 执行路径”与主链共用同一套三段 Agent：
-    // 翻译 → 生成内容 → 收敛，不再单独维护一份一次性提示词。
+    // 首次引导的“想法 → 执行路径”与主链共用同一套两段 Agent：
+    // 翻译 → 方案，不再单独维护一份一次性提示词。
     const { planNormalWithAgents } = await import("@/lib/agent-plan/normal");
     const outcome = await planNormalWithAgents({ content, maxTasks: 3 });
     if (outcome.status !== "ok") return fallback;
@@ -1823,7 +1938,7 @@ export async function generateTaskCoachAdvice(input: {
           .map((step) =>
             step
               .replace(
-                /^\s*(?:\d{1,2}\s*[.、)）]|第[一二三四五六七八九十]+步[:：]?)\s*/,
+                /^\s*(?:(?:第\s*[一二三四五六七八九十\d]+\s*[步部分]?[:：、.)）]?)|(?:\d{1,2}\s*[.、)）])|(?:\d{1,2}\s+(?!(?:个|件|条|天|周|月|年|小时|分钟|家|次|种|张|页|步|人|份|元|块|公里|岁|本|门|套|款|项|位|名|所|场|局|轮|遍|%)))|(?:[①②③④⑤⑥⑦⑧⑨⑩])|(?:[一二三四五六七八九十]\s*[、.)）]))\s*/u,
                 "",
               )
               .trim(),
@@ -1858,6 +1973,8 @@ function buildLocalTaskCoachAdvice(input: {
   projectName?: string | null;
   status?: string;
   message: string;
+  methodHint?: string | null;
+  doneWhen?: string | null;
 }): TaskCoachAdvice {
   const message = input.message.trim();
   const title = input.title;
@@ -1868,6 +1985,21 @@ function buildLocalTaskCoachAdvice(input: {
     (hash, char) => (hash * 31 + (char.codePointAt(0) ?? 0)) >>> 0,
     0,
   );
+  const methodHint = input.methodHint?.trim();
+  const doneWhen = input.doneWhen?.trim();
+  if (methodHint) {
+    return {
+      title: `${title} 的执行版`,
+      encouragement: "先把已经定好的做法直接做出来，不再重新想一遍。",
+      steps: [
+        methodHint,
+        doneWhen
+          ? `做完后对照完成标准检查：${doneWhen}`
+          : "做完后拿到一个能直接检查的结果。",
+      ],
+      nextStep: methodHint,
+    };
+  }
 
   if (/没头绪|不知道|怎么开始|不会开始|完全不懂|没想法/.test(lower)) {
     return [
@@ -1875,11 +2007,11 @@ function buildLocalTaskCoachAdvice(input: {
         title: `${title} 的启动版`,
         encouragement: `你说“${short}”，那就先从这句话里找一个能做的动词。`,
         steps: [
-          `把“${title}”的第一步写成“打开、写下、列出或试做”这类动作。`,
+          `打开“${title}”实际发生的地方，完成第一个能看见结果的动作。`,
           `从“${short}”里挑一个你最关心的词，作为这次目标。`,
           `先做起来，做到有结果再停。`,
         ],
-        nextStep: `写出“${title}”今天要交付的具体结果。`,
+        nextStep: `做出“${title}”今天要交付的第一个结果。`,
       },
       {
         title: `${title} 的第一次动手`,
@@ -1911,20 +2043,20 @@ function buildLocalTaskCoachAdvice(input: {
         encouragement: `你说“${short}”，那我们就只处理这一句里最卡的部分。`,
         steps: [
           `把“${title}”里最卡的部分单独摘出来。`,
-          `写下你试过什么、卡在什么现象上。`,
+          `在任务实际发生的页面或工具里复现一次卡点，确认它出现在哪一步。`,
           `先只解决这个卡点。`,
         ],
-        nextStep: `写下“${title}”里最卡的一句话。`,
+        nextStep: `实际操作到“${title}”卡住的地方，确认是哪一个环节过不去。`,
       },
       {
         title: `${title} 的诊断`,
         encouragement: `卡住通常不是不会，而是没有把问题说清楚。`,
         steps: [
-          `把“${short}”改写成一句“我卡在……，因为……”。`,
+          `把“${short}”落到具体操作上，确认到底卡在哪一步。`,
           `看看这句话里，哪个词是真正难点。`,
           `只针对那个难点找一个小动作。`,
         ],
-        nextStep: `把“${short}”改写成“我卡在…，因为…”。`,
+        nextStep: `实际操作到卡住的地方，明确是哪一步过不去。`,
       },
       {
         title: `${title} 的下一步`,
@@ -2000,11 +2132,11 @@ function buildLocalTaskCoachAdvice(input: {
         title: `${title} 的唯一重点`,
         encouragement: `“${short}”让你乱，是因为没有唯一重点。`,
         steps: [
-          `写下“${title}”如果只做一件事，会是什么。`,
+          `从“${title}”里挑出唯一要先推进的一件事。`,
           `把其他事标记为稍后。`,
           `先做那一件事。`,
         ],
-        nextStep: `写下“${title}”唯一要做的一件事。`,
+        nextStep: `从“${title}”里挑出唯一要先推进的一件事并开始做。`,
       },
     ][seed % 3];
   }
@@ -2014,11 +2146,11 @@ function buildLocalTaskCoachAdvice(input: {
       title: `${title} 的具体化`,
       encouragement: `你说“${short}”，下一步不是马上做，而是把它说具体。`,
       steps: [
-        `把“${title}”写成具体结果。`,
+        `把“${title}”落到一个今天能做出的具体结果。`,
         `从“${short}”里挑一个能验证的词。`,
         `先把能验证结果的那一步做出来。`,
       ],
-      nextStep: `写出“${title}”的具体结果。`,
+      nextStep: `做出“${title}”今天该交付的具体结果。`,
     },
     {
       title: `${title} 的下一步`,
@@ -2036,7 +2168,7 @@ function buildLocalTaskCoachAdvice(input: {
       steps: [
         `围绕“${short}”直接动手做。`,
         `先动手做起来。`,
-        `把结果或卡点写下来。`,
+        `把结果或卡点落到任务实际发生的页面或工具里。`,
       ],
       nextStep: `围绕“${short}”做出一个结果。`,
     },

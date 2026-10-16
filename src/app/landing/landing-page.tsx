@@ -16,18 +16,18 @@ import { LandingDemo } from "./landing-demo";
 const outcomes = [
   {
     icon: Sparkles,
-    title: "不用内耗复杂的思绪",
-    body: "倒出想法，AI 自动归类到项目，生成可执行任务。",
+    title: "我该干什么？",
+    body: "把手上乱糟糟的想法说出来，AI 只问最卡住的那一步，再告诉你现在该做哪件事。",
   },
   {
     icon: Focus,
-    title: "不用纠结今天做什么",
-    body: "每天打开，先看到今天最该推进的 1-3 件事。",
+    title: "要做些什么？",
+    body: "每条任务都写到能直接开工——做什么、怎么做、怎么算做完，不用自己再拆一遍。",
   },
   {
     icon: NotebookPen,
-    title: "不用害怕半途而废",
-    body: "每晚轻量复盘，AI 自动生成明天计划，形成持续闭环。",
+    title: "能收获什么？",
+    body: "一次能做完的事、跨月的长期目标、没终点的新能力，各有节奏，每次推进都有拿得出手的产出。",
   },
 ];
 
@@ -180,8 +180,7 @@ export function LandingPage({ authed = false }: { authed?: boolean }) {
               ))}
             </div>
             <div className="mt-5 rounded-lg bg-accent-soft p-3 text-xs leading-5 text-accent-strong">
-              如果你已经有一套稳定的 GTD 流程，或者只想要 AI
-              替你干活，走走暂时不适合你。
+              已经有稳定的 GTD 流程、只想让 AI 替你执行、或者需要多人协作管项目，走走暂时不适合你。
             </div>
           </div>
         </section>

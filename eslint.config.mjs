@@ -28,6 +28,8 @@ export default defineConfig([
     ".atypica/**",
     ".public-demo/**",
     ".public-service/**",
+    ".chrome-headless-profile/**",
+    ".edge-headless-profile/**",
     "tools/**",
     "backups/**",
     "miniprogram/**",

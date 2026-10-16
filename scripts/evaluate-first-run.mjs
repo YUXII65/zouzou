@@ -73,7 +73,7 @@ const BANNED =
 const DEFERRED =
   /挑出\s*\d*\s*种组合|拍[^\n]{0,20}(挑|选)|再(去)?决定|回头再(挑|选|决定)|到时候再(挑|选|决定)/;
 
-/** 首次引导和主链共用同一套三段 Agent，这里把 plans[0] 映射成首启字段。 */
+/** 首次引导和主链共用同一套两段 Agent，这里把 plans[0] 映射成首启字段。 */
 async function callPlan(idea) {
   const { plan } = await chain.runChain(idea, { maxTasks: 3 });
   const task = Array.isArray(plan.tasks) ? plan.tasks[0] ?? {} : {};

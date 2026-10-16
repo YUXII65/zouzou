@@ -73,3 +73,10 @@ prisma/dev.db
 
 # WeChat DevTools local settings
 miniprogram/project.private.config.json
+
+# 本机专属运行手册（含本机路径 / 数据库主机名，不提交）
+/docs/private/
+
+# local headless browser profiles
+/.chrome-headless-profile/
+/.edge-headless-profile/

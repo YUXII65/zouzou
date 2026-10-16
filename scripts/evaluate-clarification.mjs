@@ -1,7 +1,7 @@
 /**
  * 翻译质量评测。
  *
- * 走走的链路固定为：翻译 -> 生成内容 -> 收敛，且默认零提问自动收敛。
+ * 走走的链路固定为：翻译 -> 方案。
  * 这个评测只看第 1 段：翻译 Agent 有没有把用户原话翻译成结构化语义，
  * 并给出一个可以带着往下走的默认判断（workingAssumption / ifWrongThen）。
  *
@@ -100,7 +100,8 @@ async function callTranslation(aiCase) {
   const parsed = JSON.parse(extractJson(raw) ?? "{}");
   return {
     translation: parsed.translation ?? parsed ?? {},
-    summary: parsed.summary ?? {},
+    summary: parsed.summary ?? null,
+    rawQuestion: parsed.question ?? null,
     raw,
   };
 }
@@ -109,20 +110,42 @@ function runChecks(aiCase, result) {
   const issues = [];
   const translation = result.translation ?? {};
   const summary = result.summary ?? {};
-  if (!String(translation.normalizedIntent ?? "").trim()) {
-    issues.push("translation 缺少 normalizedIntent");
-  }
-  if (!String(translation.literalMeaning ?? "").trim()) {
-    issues.push("translation 缺少 literalMeaning");
+  const intent = String(
+    translation.desiredOutcome ??
+      translation.normalizedIntent ??
+      translation.goals?.[0] ??
+      summary.realProblem ??
+      "",
+  ).trim();
+  const workingAssumption = String(
+    translation.workingAssumption ?? summary.workingAssumption ?? "",
+  ).trim();
+  const ifWrongThen = String(
+    translation.ifWrongThen ?? summary.ifWrongThen ?? "",
+  ).trim();
+  if (!intent && translation.readiness === "ready") {
+    issues.push("translation 缺少 desiredOutcome");
   }
   if (!["ready", "needs_context", "needs_meaning"].includes(String(translation.readiness))) {
     issues.push("translation.readiness 非法或缺失");
   }
-  if (!String(summary.workingAssumption ?? "").trim()) {
-    issues.push("summary 缺少 workingAssumption，没给出默认推进判断");
+  if (!workingAssumption) {
+    issues.push("缺少 workingAssumption，没给出默认推进判断");
   }
-  if (!String(summary.ifWrongThen ?? "").trim()) {
-    issues.push("summary 缺少 ifWrongThen，没说清假设错了怎么改");
+  if (!ifWrongThen) {
+    issues.push("缺少 ifWrongThen，没说清假设错了怎么改");
+  }
+  const shouldAsk = aiCase.expect?.shouldAsk !== false;
+  const question = result.rawQuestion;
+  if (shouldAsk && question == null) {
+    issues.push("首轮必须保留一次提问");
+  } else if (
+    shouldAsk &&
+    (!String(question.text ?? "").trim() ||
+      !Array.isArray(question.options) ||
+      question.options.length < 2)
+  ) {
+    issues.push("首轮提问缺少 question.text 或至少两个 options");
   }
   const text = JSON.stringify(result);
   for (const phrase of aiCase.expect?.mustNotMention ?? []) {
@@ -132,8 +155,10 @@ function runChecks(aiCase, result) {
 }
 
 const rows = [];
+const idFilter = argOf("id");
 for (const [index, aiCase] of corpus.cases.entries()) {
   if (index >= limit) break;
+  if (idFilter && aiCase.id !== idFilter) continue;
   let result = null;
   let error = null;
   try {
@@ -146,9 +171,17 @@ for (const [index, aiCase] of corpus.cases.entries()) {
     id: aiCase.id,
     title: aiCase.title,
     input: aiCase.input,
-    intent: result?.translation?.normalizedIntent ?? "",
+    intent:
+      result?.translation?.desiredOutcome ??
+      result?.translation?.normalizedIntent ??
+      result?.translation?.goals?.[0] ??
+      result?.summary?.realProblem ??
+      "",
     readiness: result?.translation?.readiness ?? "",
-    assumption: result?.summary?.workingAssumption ?? "",
+    assumption:
+      result?.translation?.workingAssumption ??
+      result?.summary?.workingAssumption ??
+      "",
     issues,
     pass: issues.length === 0,
   });

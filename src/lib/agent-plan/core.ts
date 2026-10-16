@@ -56,7 +56,7 @@ export type NormalAgentInput = {
   evidence?: string[];
   decisionMemory?: string[];
   maxTasks?: number | null;
-  /** 澄清收口后定下的模式；有它时第 2、3 段只承接，不再自己判。 */
+  /** 澄清收口后定下的模式；有它时第 2 段方案 Agent 只承接，不再自己判。 */
   workMode?: ProjectMode | null;
   apiKey?: string;
   model?: string;
@@ -64,7 +64,7 @@ export type NormalAgentInput = {
   onDelta?: (delta: string) => void;
 };
 
-/** 三段链的任务数安全上限；实际条数由调用方传入的 maxTasks 决定。 */
+/** 计划链的任务数安全上限；实际条数由调用方传入的 maxTasks 决定。 */
 export const MAX_CHAIN_TASKS = MAX_AI_TASKS_PER_PLAN;
 const STRING_LIMIT = 500;
 const CHOICE_LANGUAGE =

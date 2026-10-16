@@ -10,7 +10,7 @@ import { useRotatingText } from "@/components/rotating-text";
 import { TypewriterText } from "@/components/typewriter-text";
 import { trackEvent } from "@/lib/track";
 import { useClickOutside } from "@/lib/use-click-outside";
-import type { TaskStickyNoteData } from "@/lib/task-sticky";
+import { normalizeStickySteps, type TaskStickyNoteData } from "@/lib/task-sticky";
 
 const DEFAULT_MESSAGE =
   "这个任务我还没有头绪，请给我一个能直接开始的行动方案";
@@ -200,9 +200,7 @@ export function AiTaskSticky({
           className="absolute right-0 top-8 z-40 w-64 max-w-[calc(100vw-2rem)] cursor-pointer rounded-xl border border-warning/25 bg-warning/10 p-3 shadow-pop animate-[zouzou-fade-in_180ms_ease-out]"
         >
           <p className="text-xs font-semibold text-ink">{latestNote?.title}</p>
-          <p className="mt-1 line-clamp-2 text-xs leading-5 text-ink-secondary">
-            {latestNote?.encouragement}
-          </p>
+
           <p className="mt-2 text-[11px] font-medium text-ai">
             共 {savedNotes.length} 张 · 点击查看
           </p>
@@ -314,22 +312,17 @@ export function AiTaskSticky({
 
                     {active ? (
                       <div className="mt-2 border-t border-warning/20 pt-2">
-                        <p className="text-xs leading-5 text-ink-secondary">
-                          <TypewriterText text={note.encouragement} />
-                        </p>
-                        <ol className="mt-2 space-y-1.5">
-                          {note.steps.map((step, stepIndex) => (
-                            <li
+
+                        <div className="mt-2 space-y-1.5">
+                          {normalizeStickySteps(note).map((step, stepIndex) => (
+                            <div
                               key={`${step}-${stepIndex}`}
                               className="flex items-start gap-2 text-sm leading-6 text-ink"
                             >
-                              <span className="mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-full bg-surface/80 text-xs font-medium text-ink-secondary">
-                                {stepIndex + 1}
-                              </span>
                               <TypewriterText text={step} />
-                            </li>
+                            </div>
                           ))}
-                        </ol>
+                        </div>
                         <p className="mt-2 rounded-md bg-surface/75 px-3 py-2 text-sm leading-6 text-ink">
                           现在可以做：<TypewriterText text={note.nextStep} />
                         </p>

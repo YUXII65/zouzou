@@ -56,7 +56,7 @@ export function buildTaskContract(input: string, title?: string | null): TaskCon
     return {
       executionMode: "project",
       doneWhen: "这一阶段留下一个能被人直接检查的结果，并写清下一次从哪里继续",
-      methodHint: `用一次只推进一个阶段的节奏处理「${topic}」，阶段结束就记录下一步，不把所有子任务同时铺开`,
+      methodHint: `用一次只推进一个阶段的节奏处理「${topic}」，阶段结束留下下一次的入口或产出，不把所有子任务同时铺开`,
       maxTurns: 3,
       toolPolicy: tool.policy,
       toolHint: tool.kind,

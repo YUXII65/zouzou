@@ -10,7 +10,7 @@ import {
 } from "@/lib/ai-prompts";
 import {
   CONTENT_GENERATION_SYSTEM_PROMPT,
-  NORMAL_COMPOSE_SYSTEM_PROMPT,
+  PLAN_AGENT_SYSTEM_PROMPT,
   PLAN_CRITIC_SYSTEM_PROMPT,
 } from "@/lib/agent-plan/prompts";
 
@@ -110,14 +110,15 @@ test("user 消息保留显式传入的可选字段", () => {
 
 test("链路第 1 段：翻译 Agent 产出结构化语义和默认判断", () => {
   for (const token of [
-    "你把用户信息翻译成",
+    "翻译 Agent",
     "confirmedFacts",
     "interpretations",
     "unknowns",
+    "desiredOutcome",
     "workingAssumption",
     "ifWrongThen",
     "readiness",
-    "summary",
+    "inputAssessmentNote",
     "question",
   ]) {
     assert.ok(
@@ -138,16 +139,32 @@ test("链路第 1 段：翻译 Agent 产出结构化语义和默认判断", () =
   assert.deepEqual(translationPayload.inputAssessmentHint, { readiness: "ready" });
 });
 
+test("翻译 Agent 首轮必须保留一次提问", () => {
+  for (const token of [
+    "history 为空",
+    "forceQuestion 为 true",
+    "默认必须给一个只有用户知道的事实/条件题",
+    "唯一例外：responseMode 判定为 answer",
+    "低风险小任务也至少完成两轮提问",
+    "history 已有回答且 forceQuestion 不为 true",
+  ]) {
+    assert.ok(
+      CLARIFICATION_TRANSLATION_SYSTEM_PROMPT.includes(token),
+      `翻译 Agent 首轮提问规则缺少：${token}`,
+    );
+  }
+});
+
 test("翻译 Agent 默认自己决定，不把选择推回用户", () => {
   for (const token of [
-    "不要用问题把选择推回给用户",
-    "两个子问题",
-    "只有缺少一个只有用户知道的事实/条件",
-    "你上级更常看日报",
-    "先做作品集还是先写博客",
+    "默认自己判断，不把选择推回用户",
+    "做法、顺序、工具、先做哪块是你的活",
+    "只能问“只有用户知道的事实”",
+    "设备、预算、时间窗口",
     "不描述你的理解",
-    "回答过你的问题之后",
-    "只在最开始",
+    "forceQuestion 为 true 时",
+    "不能重复问过的问题",
+    "没有新的关键未知点会改变第一条任务或完成标准",
   ]) {
     assert.ok(
       CLARIFICATION_TRANSLATION_SYSTEM_PROMPT.includes(token),
@@ -173,12 +190,11 @@ test("链路第 2 段：规划执行 Agent 只排一条路，不拆任务", () =
 
 test("翻译 Agent 只问缺失事实，不问做法或子步骤", () => {
   for (const token of [
-    "只有缺少一个只有用户知道的事实/条件",
-    "先做 A 还是先做 B",
-    "一律不要问",
-    "同一个问题下的两个子问题",
-    "指代必须准确",
-    "options 是事实/条件的可能取值",
+    "做法、顺序、工具、先做哪块是你的活",
+    "一次只问一个",
+    "history 里问过的不再问",
+    "指代要准确",
+    "options 是该事实的 2-3 个可能取值",
   ]) {
     assert.ok(
       CLARIFICATION_TRANSLATION_SYSTEM_PROMPT.includes(token),
@@ -187,9 +203,9 @@ test("翻译 Agent 只问缺失事实，不问做法或子步骤", () => {
   }
 });
 
-test("链路第 3 段：收敛与排版 Agent 拆任务并决定模式", () => {
+test("链路第 2 段：方案 Agent 直接输出行动卡和任务", () => {
   for (const token of [
-    "收敛与排版 Agent",
+    "方案 Agent",
     "longterm",
     "explore",
     "executionMode",
@@ -198,12 +214,12 @@ test("链路第 3 段：收敛与排版 Agent 拆任务并决定模式", () => {
     "fallback",
   ]) {
     assert.ok(
-      NORMAL_COMPOSE_SYSTEM_PROMPT.includes(token),
-      `收敛与排版 Agent 提示词缺少：${token}`,
+      PLAN_AGENT_SYSTEM_PROMPT.includes(token),
+      `方案 Agent 提示词缺少：${token}`,
     );
   }
-  assert.ok(NORMAL_COMPOSE_SYSTEM_PROMPT.includes("不设固定 1 条或 2 条"));
-  assert.ok(NORMAL_COMPOSE_SYSTEM_PROMPT.includes("首条任务必须直接执行 recommendation"));
+  assert.ok(PLAN_AGENT_SYSTEM_PROMPT.includes("不超过 maxTasks"));
+  assert.ok(PLAN_AGENT_SYSTEM_PROMPT.includes("只给一条路"));
 });
 
 test("计划 user 消息保留结构化澄清历史", () => {
@@ -238,10 +254,10 @@ test("计划 user 消息保留结构化澄清历史", () => {
 
 test("翻译 Agent 遇到配置依赖任务也要补关键事实", () => {
   for (const token of [
-    "设备/系统/预算/平台/时间窗口",
-    "Windows 还是 Mac",
-    "只有缺少一个只有用户知道的事实/条件",
-    "一轮只问一个最关键的事实",
+    "设备、预算、时间窗口、对方的真实偏好",
+    "只能问“只有用户知道的事实”",
+    "一次只问一个",
+    "做法、顺序、工具、先做哪块是你的活",
   ]) {
     assert.ok(
       CLARIFICATION_TRANSLATION_SYSTEM_PROMPT.includes(token),
@@ -250,10 +266,17 @@ test("翻译 Agent 遇到配置依赖任务也要补关键事实", () => {
   }
 });
 
-test("任务提示词不要默认依赖备忘录", () => {
-  assert.ok(OUTPUT_QUALITY_RULES.includes("不要默认把“记到备忘录"));
-  assert.ok(CONTENT_GENERATION_SYSTEM_PROMPT.includes("不要默认把“记到备忘录"));
-  assert.ok(NORMAL_COMPOSE_SYSTEM_PROMPT.includes("不要默认使用备忘录"));
+test("提示词不再点名记录工具，改为约束载体和信息差", () => {
+  for (const prompt of [
+    OUTPUT_QUALITY_RULES,
+    CONTENT_GENERATION_SYSTEM_PROMPT,
+    PLAN_AGENT_SYSTEM_PROMPT,
+  ]) {
+    assert.ok(!prompt.includes("备忘录"), "提示词不该再点名备忘录");
+  }
+  assert.ok(OUTPUT_QUALITY_RULES.includes("载体必须是这件事真正发生的地方"));
+  assert.ok(OUTPUT_QUALITY_RULES.includes("抹平信息差"));
+  assert.ok(PLAN_AGENT_SYSTEM_PROMPT.includes("记录、复盘、打卡、日报不是默认动作"));
 });
 
 test("软件选择默认免费或系统自带方案", () => {
@@ -267,7 +290,7 @@ test("计划质检 Agent 拦住准备动作和推回决定", () => {
     "第一任务必须改变现实",
     "不能是记录、清点、整理、写清单、做准备",
     "独立结果",
-    "不能默认备忘录",
+    "不能默认落到",
     "不能出现“根据结果决定、先比较、再选择”",
     "反馈闭环",
     "score >= 8 才通过",
@@ -279,15 +302,23 @@ test("计划质检 Agent 拦住准备动作和推回决定", () => {
   }
 });
 
-test("走走默认做事情，answer 模式暂时不启用", () => {
-  assert.ok(CLARIFICATION_TRANSLATION_SYSTEM_PROMPT.includes("默认 action"));
-  assert.ok(CLARIFICATION_TRANSLATION_SYSTEM_PROMPT.includes("暂时保留字段，但不要选"));
-  assert.ok(CLARIFICATION_TRANSLATION_SYSTEM_PROMPT.includes("走走是用来做事的"));
+test("问答与做事分流：answer 是一等出口，不限制模型输出什么", () => {
+  assert.ok(
+    CLARIFICATION_TRANSLATION_SYSTEM_PROMPT.includes("answer|action|plan"),
+  );
+  assert.ok(
+    CLARIFICATION_TRANSLATION_SYSTEM_PROMPT.includes("该回答就回答，该动手就动手"),
+  );
+  assert.ok(
+    !CLARIFICATION_TRANSLATION_SYSTEM_PROMPT.includes("不要选 answer"),
+  );
+  assert.ok(CLARIFICATION_TRANSLATION_SYSTEM_PROMPT.includes("推进成现实里的一件事"));
 });
 
 test("开放能力的第一件作品仍然是 explore", () => {
   assert.ok(MODE_JUDGMENT_SYSTEM_PROMPT.includes("第一轮练习"));
   assert.ok(MODE_JUDGMENT_SYSTEM_PROMPT.includes("想学手工"));
   assert.ok(CONTENT_GENERATION_SYSTEM_PROMPT.includes("第一件小作品只是这一轮"));
-  assert.ok(NORMAL_COMPOSE_SYSTEM_PROMPT.includes("不能做完一件就结束"));
+  assert.ok(PLAN_AGENT_SYSTEM_PROMPT.includes("第一件作品只是这一轮的练习"));
+  assert.ok(PLAN_AGENT_SYSTEM_PROMPT.includes("下一轮怎么接着练"));
 });
