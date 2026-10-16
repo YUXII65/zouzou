@@ -15,17 +15,12 @@ import {
   hashPassword,
   isGuestUser,
   requireUser,
-  verifyPassword,
 } from "@/lib/auth";
 import { startOfDay, toDateInputValue } from "@/lib/date";
 import { buildAiContext, invalidateAiContext } from "@/lib/ai-context";
-import { createReviewDraft } from "@/lib/review-ai";
 import { recordAiFeedback } from "@/lib/feedback";
 import { recordUsageEvent } from "@/lib/usage";
-import {
-  guestEntryPath,
-  newUserEntryPath,
-} from "@/lib/entry-policy";
+import { guestEntryPath } from "@/lib/entry-policy";
 import { withAiQuota } from "@/lib/ai-quota";
 import {
   isOnboardingCompleted,
@@ -39,12 +34,7 @@ import {
 import { generateTodayFocus } from "@/lib/today-focus-generate";
 import { priority, taskContractData } from "@/lib/task-contract-fields";
 import { applyTaskStatus } from "@/lib/task-status";
-import { saveReviewData } from "@/lib/review-save";
-import { projectStatus, updateProjectData } from "@/lib/project-update";
-import {
-  buildProjectEditSuggestion,
-  buildTaskEditSuggestion,
-} from "@/lib/ai-edit-suggestions";
+import { buildTaskEditSuggestion } from "@/lib/ai-edit-suggestions";
 import { advanceProjectStage } from "@/lib/project-stage-advance";
 import {
   decisionCardFromAdvice,
@@ -53,7 +43,6 @@ import {
   stickyPayloadFromDecisionCard,
 } from "@/lib/decision";
 import { ensureInboxProject, ensureProjectTracks } from "@/lib/inbox-project";
-import { normalizeProjectMode } from "@/lib/work-mode";
 import {
   currentProjectStageId,
   ensureCurrentProjectStage,
@@ -76,9 +65,7 @@ import {
   type InboxClarification,
   type InboxPlan,
   type TaskEditSuggestion,
-  type TaskCoachAdvice,
   type TaskShortTitleSuggestion,
-  type ProjectEditSuggestion,
   type TodaySuggestion,
 } from "@/lib/ai";
 
@@ -179,15 +166,6 @@ function parseInboxPlan(item: { aiPlanJson: string | null }): InboxPlan | null {
   }
 }
 
-function isUniqueConstraintError(error: unknown) {
-  return Boolean(
-    error &&
-      typeof error === "object" &&
-      "code" in error &&
-      (error as { code?: unknown }).code === "P2002",
-  );
-}
-
 async function ownedProjectId(projectId: string | null, userId: string) {
   if (!projectId) return null;
   const project = await prisma.project.findFirst({
@@ -197,46 +175,6 @@ async function ownedProjectId(projectId: string | null, userId: string) {
   return project?.id ?? null;
 }
 
-export async function registerUser(formData: FormData) {
-  const username = String(formData.get("username") ?? "").trim();
-  const password = String(formData.get("password") ?? "");
-  const next = safeNext(String(formData.get("next") ?? "/"));
-
-  if (
-    username.length < 2 ||
-    username.length > 20 ||
-    password.length < 6
-  ) {
-    redirect(`/login?error=register&next=${encodeURIComponent(next)}`);
-  }
-
-  let user: { id: string } | null = null;
-  try {
-    user = await prisma.user.create({
-      data: {
-        username,
-        passwordHash: hashPassword(password),
-        },
-      select: { id: true },
-    });
-  } catch (error) {
-    if (!isUniqueConstraintError(error)) throw error;
-
-    const existing = await prisma.user.findUnique({
-      where: { username },
-      select: { id: true, passwordHash: true },
-    });
-    if (existing && verifyPassword(password, existing.passwordHash)) {
-      await createUserSession(existing.id);
-      after(() => recordUsageEvent({ userId: existing.id, event: "login" }));
-      redirect(next);
-    }
-    redirect(`/login?error=register&next=${encodeURIComponent(next)}`);
-  }
-
-  await createUserSession(user.id);
-  redirect(newUserEntryPath(next));
-}
 
 export async function startGuestExperience() {
   const current = await getCurrentUser();
@@ -556,47 +494,6 @@ export async function submitProductFeedback(formData: FormData) {
   }
 }
 
-export async function loginUser(formData: FormData) {
-  const username = String(formData.get("username") ?? "").trim();
-  const password = String(formData.get("password") ?? "");
-  const next = safeNext(String(formData.get("next") ?? "/"));
-
-  if (
-    username.length < 2 ||
-    username.length > 20 ||
-    password.length < 6
-  ) {
-    redirect(`/login?error=login&next=${encodeURIComponent(next)}`);
-  }
-
-  let created: { id: string } | null = null;
-  try {
-    created = await prisma.user.create({
-      data: {
-        username,
-        passwordHash: hashPassword(password),
-      },
-      select: { id: true },
-    });
-  } catch (error) {
-    if (!isUniqueConstraintError(error)) throw error;
-
-    const existing = await prisma.user.findUnique({
-      where: { username },
-      select: { id: true, passwordHash: true },
-    });
-    if (!existing || !verifyPassword(password, existing.passwordHash)) {
-      redirect(`/login?error=login&next=${encodeURIComponent(next)}`);
-    }
-
-    await createUserSession(existing.id);
-    after(() => recordUsageEvent({ userId: existing.id, event: "login" }));
-    redirect(next);
-  }
-
-  await createUserSession(created.id);
-  redirect(newUserEntryPath(next));
-}
 
 export async function recordSignupEvent(kind: string) {
   const user = await requireUser();
@@ -670,59 +567,7 @@ export async function ensureTaskShortTitle(input: {
   return suggestion;
 }
 
-export async function getProjectEditSuggestion(input: {
-  projectId?: string;
-  name: string;
-  objective: string;
-  currentMilestone?: string | null;
-  status?: string;
-  notes?: string | null;
-  idea: string;
-}): Promise<ProjectEditSuggestion> {
-  const user = await requireUser();
-  return buildProjectEditSuggestion(input, user.id);
-}
 
-export async function getTaskCoachAdvice(input: {
-  taskId?: string;
-  title: string;
-  notes?: string | null;
-  projectName?: string | null;
-  status?: string;
-  message: string;
-}): Promise<TaskCoachAdvice> {
-  const user = await requireUser();
-  const task = input.taskId
-    ? await prisma.task.findFirst({
-        where: { id: input.taskId, userId: user.id },
-        select: {
-          executionMode: true,
-          doneWhen: true,
-          methodHint: true,
-          project: { select: { mode: true } },
-        },
-      })
-    : null;
-  const aiContext = await buildAiContext({
-    kind: "task_coach",
-    taskId: input.taskId,
-    userId: user.id,
-  });
-  return withAiQuota("task_coach", () =>
-    generateTaskCoachAdvice(
-      {
-        ...input,
-        projectMode: task?.project?.mode ?? null,
-        executionMode: task?.executionMode ?? null,
-        doneWhen: task?.doneWhen ?? null,
-        methodHint: task?.methodHint ?? null,
-      },
-      aiContext.summary,
-      aiContext.evidence,
-    ),
-    user.id
-  );
-}
 
 export async function createTaskStickyNote(input: {
   taskId: string;
@@ -799,16 +644,6 @@ export async function createTaskStickyNote(input: {
   return serializeTaskStickyNote(note);
 }
 
-export async function deleteTaskStickyNote(noteId: string) {
-  const user = await requireUser();
-  const deleted = await prisma.taskStickyNote.deleteMany({
-    where: { id: noteId, userId: user.id },
-  });
-
-  revalidatePath("/");
-  revalidatePath("/workspace");
-  return { ok: deleted.count > 0 };
-}
 
 export async function ignoreInboxItem(formData: FormData) {
   const id = text(formData, "id");
@@ -1221,27 +1056,6 @@ export async function saveUserPreferences(formData: FormData) {
   revalidatePath("/");
 }
 
-export async function recordSuggestionFeedback(input: {
-  source?: "today_suggestion" | "task_coach" | "review_draft";
-  taskId?: string;
-  action: "useful" | "useless";
-  detail?: string;
-}) {
-  const user = await requireUser();
-  if (!input.taskId && input.source !== "review_draft") return;
-  if (input.action !== "useful" && input.action !== "useless") return;
-
-  await recordAiFeedback({
-    userId: user.id,
-    source: input.source ?? "today_suggestion",
-    action:
-      input.action === "useful"
-        ? "suggestion_useful"
-        : "suggestion_useless",
-    taskId: input.taskId ?? null,
-    detail: input.detail ?? null,
-  });
-}
 
 export async function recordEditSuggestionApplied(input: {
   source: "task_edit" | "project_edit";
@@ -1264,126 +1078,11 @@ export async function recordEditSuggestionApplied(input: {
   });
 }
 
-export async function generateReviewDraftAction(formData: FormData) {
-  const user = await requireUser();
-  const today = startOfDay();
-  const reviewDate = dateInput(formData, "reviewDate") ?? today;
-  await createReviewDraft({
-    userId: user.id,
-    reviewDate,
-  });
-  redirect("/");
-}
 
-export async function saveReview(formData: FormData) {
-  const user = await requireUser();
-  const id = text(formData, "id");
-  const summary = text(formData, "summary");
-  const rawNextActions = text(formData, "nextActions") ?? "";
-  if (!id || !summary) return;
 
-  // 复盘保存的唯一实现在 src/lib/review-save.ts，小程序走同一个函数。
-  const result = await saveReviewData({
-    userId: user.id,
-    reviewId: id,
-    summary,
-    nextActions: rawNextActions,
-  });
-  if (!result) return;
-  return { date: result.date };
-}
 
-export async function createProject(formData: FormData) {
-  const user = await requireUser();
-  const name = text(formData, "name");
-  const objective = text(formData, "objective");
 
-  if (!name || !objective) return;
 
-  const mode = normalizeProjectMode(formData.get("mode"));
-  const currentMilestone = text(formData, "currentMilestone");
-  const project = await prisma.project.create({
-    data: {
-      userId: user.id,
-      name,
-      objective,
-      status: projectStatus(String(formData.get("status") ?? "active")),
-      mode,
-      currentMilestone,
-      notes: text(formData, "notes"),
-    },
-  });
-  await ensureCurrentProjectStage(prisma, {
-    userId: user.id,
-    projectId: project.id,
-    mode,
-    milestone: currentMilestone,
-    objective,
-  });
-
-  revalidatePath("/");
-  revalidatePath("/workspace");
-  revalidatePath("/files");
-  redirect(`/files?project=${project.id}`);
-}
-
-export async function updateProject(formData: FormData) {
-  const user = await requireUser();
-  const id = text(formData, "id");
-  const name = text(formData, "name");
-  const objective = text(formData, "objective");
-  if (!id || !name || !objective) return;
-
-  // 项目编辑的唯一实现在 src/lib/project-update.ts，小程序走同一个函数。
-  await updateProjectData({
-    userId: user.id,
-    projectId: id,
-    name,
-    objective,
-    status: String(formData.get("status") ?? "active"),
-    mode: formData.get("mode") !== null ? String(formData.get("mode")) : null,
-    currentMilestone: text(formData, "currentMilestone"),
-    notes: text(formData, "notes"),
-  });
-
-  revalidatePath("/");
-  revalidatePath("/workspace");
-  revalidatePath("/files");
-}
-
-export async function setProjectMode(formData: FormData) {
-  const user = await requireUser();
-  const id = text(formData, "id");
-  const mode = text(formData, "mode");
-  if (!id || !mode) return;
-
-  const project = await prisma.project.update({
-    where: { id, userId: user.id },
-    data: { mode: normalizeProjectMode(mode) },
-    select: { id: true, mode: true, currentMilestone: true, objective: true },
-  });
-  await ensureCurrentProjectStage(prisma, {
-    userId: user.id,
-    projectId: project.id,
-    mode: project.mode,
-    milestone: project.currentMilestone,
-    objective: project.objective,
-  });
-
-  revalidatePath("/files");
-  revalidatePath("/profile");
-}
-
-export async function generateStagePreviewAction(formData: FormData) {
-  const user = await requireUser();
-  const stageId = text(formData, "stageId");
-  if (!stageId) return;
-
-  await generateLongtermStagePreview({ userId: user.id, stageId });
-  revalidatePath("/");
-  revalidatePath("/files");
-  revalidatePath("/workspace");
-}
 
 export async function confirmStagePreviewAction(formData: FormData) {
   const user = await requireUser();
@@ -1413,69 +1112,7 @@ export async function confirmStagePreviewAction(formData: FormData) {
   }
 }
 
-export async function deleteProject(formData: FormData) {
-  const user = await requireUser();
-  const id = text(formData, "id");
 
-  if (!id) return;
-
-  await prisma.project.delete({ where: { id, userId: user.id } });
-
-  revalidatePath("/");
-  revalidatePath("/workspace");
-  redirect("/files");
-}
-
-export async function createTask(formData: FormData) {
-  const user = await requireUser();
-  const title = text(formData, "title");
-  if (!title) return;
-
-  const status = taskStatus(String(formData.get("status") ?? "todo"));
-  const notes = text(formData, "notes");
-  const shortTitle =
-    text(formData, "shortTitle") ?? shortTitleFromTitle(title);
-  const projectId = await ownedProjectId(text(formData, "projectId"), user.id);
-  const stageId = projectId
-    ? await currentProjectStageId(prisma, { userId: user.id, projectId })
-    : null;
-
-  await prisma.task.create({
-    data: {
-      userId: user.id,
-      title,
-      shortTitle,
-      notes,
-      projectId,
-      stageId,
-      status,
-      priority: priority(String(formData.get("priority") ?? "medium")),
-      scheduledDate: dateInput(formData, "scheduledDate"),
-      dueDate: dateInput(formData, "dueDate"),
-      focusDate: dateInput(formData, "focusDate"),
-      completedAt: status === "done" ? new Date() : null,
-      ...taskContractData({
-        title,
-        notes,
-        executionMode: formData.get("executionMode"),
-        doneWhen: formData.get("doneWhen"),
-        methodHint: formData.get("methodHint"),
-        maxTurns: formData.get("maxTurns"),
-        toolPolicy: formData.get("toolPolicy"),
-      }),
-    },
-  });
-
-  if (projectId) {
-    await syncProjectStageGate(prisma, { userId: user.id, projectId });
-  }
-
-  revalidatePath("/");
-  revalidatePath("/workspace");
-
-  const returnTo = taskReturnTo(text(formData, "returnTo"));
-  if (returnTo) redirect(returnTo);
-}
 
 /**
  * 长期项目当前阶段完成后，自动生成下一阶段预览。
@@ -1688,56 +1325,5 @@ export async function setTaskStatus(formData: FormData) {
   revalidatePath("/workspace");
 }
 
-export async function markTodayFocus(formData: FormData) {
-  const user = await requireUser();
-  const id = text(formData, "id");
-  if (!id) return;
 
-  const task = await prisma.task.findUnique({
-    where: { id, userId: user.id },
-    select: { id: true },
-  });
 
-  if (!task) return;
-
-  await prisma.task.update({
-    where: { id, userId: user.id },
-    data: { focusDate: startOfDay() },
-  });
-
-  revalidatePath("/");
-  revalidatePath("/workspace");
-}
-
-export async function clearTodayFocus(formData: FormData) {
-  const user = await requireUser();
-  const id = text(formData, "id");
-  if (!id) return;
-
-  const task = await prisma.task.findUnique({
-    where: { id, userId: user.id },
-    select: { id: true },
-  });
-
-  if (!task) return;
-
-  await prisma.task.update({
-    where: { id, userId: user.id },
-    data: { focusDate: null },
-  });
-
-  revalidatePath("/");
-  revalidatePath("/workspace");
-}
-
-export async function deleteTask(formData: FormData) {
-  const user = await requireUser();
-  const id = text(formData, "id");
-
-  if (!id) return;
-
-  await prisma.task.delete({ where: { id, userId: user.id } });
-
-  revalidatePath("/");
-  revalidatePath("/workspace");
-}

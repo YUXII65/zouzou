@@ -208,17 +208,3 @@ export async function ensureProjectTracks(
   return map;
 }
 
-/** 记录某条线最近一次推进：更新时间戳，必要时刷新当前焦点。 */
-export async function touchProjectTrack(
-  tx: ProjectTransaction,
-  input: { userId: string; trackId: string; currentFocus?: string | null },
-) {
-  const currentFocus = input.currentFocus?.trim().slice(0, 300);
-  await tx.projectTrack.updateMany({
-    where: { id: input.trackId, userId: input.userId },
-    data: {
-      lastEventAt: new Date(),
-      ...(currentFocus ? { currentFocus } : {}),
-    },
-  });
-}

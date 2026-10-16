@@ -38,7 +38,6 @@
     "@prisma/client": "^6.19.3",
     "dotenv": "^17.4.2",
     "lucide-react": "^1.28.0",
-    "lunar-javascript": "^1.7.7",
     "next": "15.5.27",
     "react": "19.2.8",
     "react-dom": "19.2.8"
@@ -54,7 +53,6 @@
     "@typescript-eslint/eslint-plugin": "^8.66.0",
     "@typescript-eslint/parser": "^8.66.0",
     "eslint": "^9",
-    "eslint-config-next": "15.5.27",
     "eslint-plugin-jsx-a11y": "6.10.0",
     "eslint-plugin-react": "7.37.0",
     "eslint-plugin-react-hooks": "5.2.0",

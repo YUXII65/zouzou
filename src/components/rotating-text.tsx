@@ -26,21 +26,3 @@ export function useRotatingText(
   return messages[index] ?? messages[0] ?? "";
 }
 
-export function RotatingText({
-  active,
-  messages,
-  intervalMs = 1400,
-  className,
-}: {
-  active: boolean;
-  messages: string[];
-  intervalMs?: number;
-  className?: string;
-}) {
-  const text = useRotatingText(active, messages, intervalMs);
-  return (
-    <span className={className} aria-live="polite">
-      {text}
-    </span>
-  );
-}

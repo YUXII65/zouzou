@@ -2,15 +2,6 @@ import { TOUR_EVENT, TOUR_STORAGE_KEY, type TourStep } from "@/lib/tour";
 
 const AI_QUESTION_KEY = "next_step_ai_question_asked";
 
-function tourIsActive() {
-  try {
-    const value = localStorage.getItem(TOUR_STORAGE_KEY);
-    return value === "1" || value === "2" || value === "3";
-  } catch {
-    return false;
-  }
-}
-
 export function markFirstAiQuestionAsked() {
   if (typeof window === "undefined") return;
 
@@ -33,8 +24,3 @@ export function notifyTourStep(step: TourStep) {
   window.dispatchEvent(new CustomEvent(TOUR_EVENT, { detail: { step } }));
 }
 
-/** 当前是否处于新手引导中（用于图标是否展开文字等） */
-export function firstRunTourActive() {
-  if (typeof window === "undefined") return false;
-  return tourIsActive();
-}

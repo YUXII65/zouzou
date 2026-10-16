@@ -1,5 +1,3 @@
-import type { Project } from "@prisma/client";
-
 /**
  * 走走 v3.3 的推进模式。
  *
@@ -75,13 +73,7 @@ export function normalizeProjectMode(value: unknown): ProjectMode {
   return isProjectMode(value) ? value : "normal";
 }
 
-export function projectModeOf(project: Pick<Project, "mode">): ProjectMode {
-  return normalizeProjectMode(project.mode);
-}
 
-export function projectModeMeta(mode: unknown) {
-  return PROJECT_MODE_META[normalizeProjectMode(mode)];
-}
 /**
  * 本地兜底的模式判断。
  *

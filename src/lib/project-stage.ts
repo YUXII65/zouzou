@@ -14,15 +14,6 @@ export type StageGate = {
   cancelled: number;
 };
 
-export const PROJECT_STAGE_STATUS_LABELS: Record<
-  "active" | "ready" | "completed" | "cancelled",
-  string
-> = {
-  active: "推进中",
-  ready: "待确认",
-  completed: "已完成",
-  cancelled: "已取消",
-};
 
 /**
  * 阶段门只看当前阶段的任务集合。

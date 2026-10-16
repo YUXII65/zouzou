@@ -9,24 +9,12 @@ export const MAX_EXPLORE_TRACKS = 4;
 /** 一个探索项目同时最多保留几条开放任务，避免多线变成一张任务清单。 */
 export const MAX_EXPLORE_OPEN_TASKS = 3;
 
-export const PROJECT_TRACK_ROLE_LABEL: Record<ProjectTrackRole, string> = {
-  main: "主线",
-  side: "支线",
-};
 
-export const PROJECT_TRACK_STATUS_LABEL: Record<ProjectTrackStatus, string> = {
-  active: "进行中",
-  paused: "暂缓",
-  archived: "已收起",
-};
 
 export function normalizeTrackRole(value: unknown): ProjectTrackRole {
   return value === "side" ? "side" : "main";
 }
 
-export function normalizeTrackStatus(value: unknown): ProjectTrackStatus {
-  return value === "paused" || value === "archived" ? value : "active";
-}
 
 /**
  * 读模型给出的线路图：去重、限数、保证恰好一条主线。

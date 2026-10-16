@@ -47,12 +47,3 @@ export function parseStagePreview(value: string | null | undefined): StagePrevie
   }
 }
 
-export function parseExploreContinuation(value: string | null | undefined): ExploreContinuation | null {
-  if (!value) return null;
-  try {
-    const parsed = JSON.parse(value) as ExploreContinuation;
-    return parsed && typeof parsed === "object" ? parsed : null;
-  } catch {
-    return null;
-  }
-}

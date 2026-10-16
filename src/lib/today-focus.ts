@@ -18,31 +18,6 @@ type TodayFocusPayload = {
   generatedAt: string;
 };
 
-export async function readTodayFocus(
-  userId: string,
-  now: Date = new Date(),
-): Promise<TodaySuggestion[] | null> {
-  const row = await prisma.userPreference.findUnique({
-    where: {
-      userId_key_source: {
-        userId,
-        key: PREFERENCE_KEY,
-        source: PREFERENCE_SOURCE,
-      },
-    },
-    select: { value: true },
-  });
-  if (!row) return null;
-
-  try {
-    const payload = JSON.parse(row.value) as TodayFocusPayload;
-    if (payload.date !== toDateInputValue(now)) return null;
-    if (!Array.isArray(payload.suggestions)) return null;
-    return payload.suggestions;
-  } catch {
-    return null;
-  }
-}
 
 export async function writeTodayFocus(
   userId: string,

@@ -26,14 +26,6 @@ export function formatDate(date: Date) {
   }).format(date);
 }
 
-export function formatFullDate(date: Date) {
-  return new Intl.DateTimeFormat("zh-CN", {
-    year: "numeric",
-    month: "long",
-    day: "numeric",
-    weekday: "long",
-  }).format(date);
-}
 
 export function toDateInputValue(date: Date | null | undefined) {
   if (!date) return "";
