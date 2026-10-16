@@ -73,7 +73,10 @@
 }
 
 .content {
-  padding: 20rpx 24rpx 40rpx;
+  padding-top: calc(env(safe-area-inset-top) + 48rpx);
+  padding-right: 24rpx;
+  padding-bottom: 40rpx;
+  padding-left: 24rpx;
 }
 
 .panel {
