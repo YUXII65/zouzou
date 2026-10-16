@@ -93,9 +93,10 @@
 <view class="page theme-{{theme}}">
   <view class="content">
     <view class="list-toolbar" wx:if="{{projectsByTime.length}}">
-      <text class="toolbar-item {{listMode === 'type' ? 'toolbar-item-active' : ''}}" data-mode="type" bindtap="onListModeTap">按类型</text>
-      <text class="toolbar-separator">·</text>
-      <text class="toolbar-item {{listMode === 'time' ? 'toolbar-item-active' : ''}}" data-mode="time" bindtap="onListModeTap">按时间</text>
+      <view class="sort-toggle" bindtap="onToggleListMode">
+        <text class="sort-icon">⇅</text>
+        <text>{{listMode === 'type' ? '按类型' : '按时间'}}</text>
+      </view>
     </view>
 
     <view wx:if="{{hasAnything}}">

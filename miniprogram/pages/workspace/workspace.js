@@ -236,10 +236,11 @@ Page({
     this.setData({ taskView: view, expandedTaskId: "" });
   },
 
-  onListModeTap(event) {
-    const mode = event.currentTarget.dataset.mode;
-    if (mode !== "type" && mode !== "time") return;
-    this.setData({ listMode: mode, expandedTaskId: "" });
+  onToggleListMode() {
+    this.setData({
+      listMode: this.data.listMode === "type" ? "time" : "type",
+      expandedTaskId: ""
+    });
   },
 
   onTaskExpandTap(event) {

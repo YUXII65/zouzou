@@ -72,25 +72,35 @@
 
 .list-toolbar {
   display: flex;
-  align-items: center;
   justify-content: flex-end;
+  margin-top: 80rpx;
+  padding: 0 4rpx 16rpx;
+}
+
+.sort-toggle {
+  display: inline-flex;
+  align-items: center;
   gap: 8rpx;
-  padding: 0 4rpx 12rpx;
-}
-
-.toolbar-item {
-  color: #8296b0;
-  font-size: 20rpx;
-}
-
-.toolbar-item-active {
+  min-height: 56rpx;
+  padding: 0 20rpx;
+  box-sizing: border-box;
+  border: 1rpx solid #dce8f7;
+  border-radius: 999rpx;
+  background: rgba(255, 255, 255, 0.88);
   color: #4d6d94;
+  font-size: 22rpx;
   font-weight: 600;
 }
 
-.toolbar-separator {
-  color: #dce8f7;
-  font-size: 20rpx;
+.sort-icon {
+  font-size: 24rpx;
+  line-height: 1;
+}
+
+.page.theme-dark .sort-toggle {
+  border-color: #2d3a49;
+  background: #202b38;
+  color: #b4c1d0;
 }
 
 .mode-group + .mode-group {
