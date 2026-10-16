@@ -199,12 +199,12 @@ Page({
           priorityLabel: (PRIORITY_OPTIONS.find((item) => item.value === task.priority) || PRIORITY_OPTIONS[1]).label,
           canChangeStatus: !isDone,
           actionLabel: isDone
-            ? "已完成"
+            ? "完成"
             : task.status === "todo"
-              ? "下一步"
+              ? "待办"
               : task.status === "in_progress"
-                ? "完成"
-                : "已完成",
+                ? "进行"
+                : "完成",
           nextStatus: isDone
             ? ""
             : task.status === "todo"
@@ -531,6 +531,7 @@ Page({
     const routes = {
       today: "/pages/today/today",
       desk: "/pages/workspace/workspace",
+      profile: "/pages/profile/profile",
       review: "/pages/review/review"
     };
     if (key === "today" || !routes[key]) return;

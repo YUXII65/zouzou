@@ -148,6 +148,17 @@ Page({
       });
   },
 
+  onTabTap(event) {
+    const key = event.currentTarget.dataset.key;
+    if (key === "today") {
+      wx.reLaunch({ url: "/pages/today/today" });
+      return;
+    }
+    if (key === "desk") {
+      wx.reLaunch({ url: "/pages/workspace/workspace" });
+    }
+  },
+
   onLogout() {
     const { clearToken } = require("../../utils/api");
     wx.showModal({

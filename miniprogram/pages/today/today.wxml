@@ -1,14 +1,4 @@
 <view class="page">
-  <view class="topbar">
-    <view class="brand-row">
-      <view class="brand-mark"><view class="brand-arrow"></view></view>
-      <text class="brand-name">走走</text>
-    </view>
-    <view class="top-actions">
-      <view class="avatar" bindtap="onProfileTap"><image wx:if="{{userAvatar}}" src="{{userAvatar}}" mode="aspectFill"></image><text wx:else>{{userInitial}}</text></view>
-    </view>
-  </view>
-
   <view class="content">
     <view class="capture-card">
       <textarea
@@ -141,10 +131,9 @@
               <view class="task-detail-title">{{item.title}}</view>
               <view class="task-detail-copy" wx:if="{{item.notes && item.notes !== item.title}}">{{item.notes}}</view>
               <view class="task-detail-standard" wx:if="{{item.doneWhen}}">完成标准：{{item.doneWhen}}</view>
-              <view class="task-detail-edit" data-id="{{item.id}}" catchtap="onTaskEditTap">编辑任务</view>
             </view>
           </view>
-          <view class="task-action" wx:if="{{item.canChangeStatus}}" data-id="{{item.id}}" data-status="{{item.nextStatus}}" bindtap="onTaskStatusTap">{{item.actionLabel}}</view>
+          <view class="task-action {{item.canChangeStatus ? '' : 'task-action-disabled'}}" data-id="{{item.id}}" data-status="{{item.nextStatus}}" bindtap="onTaskStatusTap">{{item.actionLabel}}</view>
         </view>
       </view>
     </view>
@@ -159,6 +148,10 @@
     <view class="nav-item" data-key="desk" bindtap="onTabTap">
       <text class="nav-icon">▤</text>
       <text>文件</text>
+    </view>
+    <view class="nav-item" data-key="profile" bindtap="onTabTap">
+      <text class="nav-icon">◉</text>
+      <text>个人</text>
     </view>
   </view>
 </view>

@@ -57,7 +57,7 @@ function decorateTask(task) {
     isScheduled: Boolean(scheduledDate && formatDateKey(scheduledDate) === today),
     isFocused: Boolean(focusDate && formatDateKey(focusDate) === today),
     canChangeStatus: status !== "done",
-    actionLabel: status === "todo" ? "下一步" : status === "in_progress" ? "完成" : "",
+    actionLabel: status === "todo" ? "待办" : status === "in_progress" ? "进行" : "完成",
     nextStatus
   };
 }
@@ -282,6 +282,10 @@ Page({
     if (key === "desk") return;
     if (key === "today") {
       wx.reLaunch({ url: "/pages/today/today" });
+      return;
+    }
+    if (key === "profile") {
+      wx.reLaunch({ url: "/pages/profile/profile" });
     }
   }
 });

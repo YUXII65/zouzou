@@ -1,5 +1,6 @@
 <view class="page">
   <canvas type="2d" id="avatar-canvas" class="avatar-canvas"></canvas>
+
   <view class="profile-card">
     <view class="avatar" bindtap="onChooseAvatar">
       <image wx:if="{{avatarUrl}}" src="{{avatarUrl}}" mode="aspectFill"></image>
@@ -11,5 +12,20 @@
     <input class="input" value="{{displayName}}" maxlength="20" placeholder="输入昵称" bindinput="onNameInput" />
     <view class="save-button {{saving ? 'save-button-disabled' : ''}}" bindtap="onSave">{{saving ? '保存中...' : '保存资料'}}</view>
     <view class="logout-button" bindtap="onLogout">退出登录</view>
+  </view>
+
+  <view class="bottom-nav">
+    <view class="nav-item" data-key="today" bindtap="onTabTap">
+      <text class="nav-icon">▦</text>
+      <text>首页</text>
+    </view>
+    <view class="nav-item" data-key="desk" bindtap="onTabTap">
+      <text class="nav-icon">▤</text>
+      <text>文件</text>
+    </view>
+    <view class="nav-item nav-item-active" data-key="profile" bindtap="onTabTap">
+      <text class="nav-icon">◉</text>
+      <text>个人</text>
+    </view>
   </view>
 </view>
