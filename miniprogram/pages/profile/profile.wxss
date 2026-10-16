@@ -1,6 +1,6 @@
 .page {
   min-height: 100vh;
-  padding-top: calc(env(safe-area-inset-top) + 48rpx);
+  padding-top: calc(env(safe-area-inset-top) + 88rpx);
   padding-right: 28rpx;
   padding-bottom: 160rpx;
   padding-left: 28rpx;
