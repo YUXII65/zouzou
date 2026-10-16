@@ -80,7 +80,9 @@
 .sort-toggle {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 8rpx;
+  min-width: 160rpx;
   min-height: 56rpx;
   padding: 0 20rpx;
   box-sizing: border-box;

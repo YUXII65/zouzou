@@ -95,7 +95,7 @@
     <view class="list-toolbar" wx:if="{{projectsByTime.length}}">
       <view class="sort-toggle" bindtap="onToggleListMode">
         <text class="sort-icon">⇅</text>
-        <text>{{listMode === 'type' ? '按类型' : '按时间'}}</text>
+        <text>{{listMode === 'type' ? '类型排序' : '时间排序'}}</text>
       </view>
     </view>
 
