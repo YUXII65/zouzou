@@ -272,13 +272,6 @@ Page({
       });
   },
 
-  onTaskStickyTap(event) {
-    const taskId = event.currentTarget.dataset.id;
-    if (!taskId) return;
-    wx.navigateTo({
-      url: "/pages/task-edit/task-edit?id=" + encodeURIComponent(taskId) + "&focus=sticky"
-    });
-  },
 
   onProfileTap() {
     wx.navigateTo({ url: "/pages/profile/profile" });

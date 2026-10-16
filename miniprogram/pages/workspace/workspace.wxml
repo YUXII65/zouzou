@@ -9,7 +9,6 @@
       <view class="file-task-title" data-id="{{task.id}}" bindtap="onTaskExpandTap">{{task.displayTitle}}</view>
       <view class="file-task-meta">
         <text class="task-priority">{{task.priorityLabel}}</text>
-        <text wx:if="{{task.executionMode}}">{{task.executionMode}}</text>
         <text wx:if="{{task.dueDateText}}">建议 {{task.dueDateText}}前完成</text>
       </view>
       <view class="task-detail" wx:if="{{expandedTaskId === task.id}}">
@@ -26,7 +25,6 @@
         data-status="{{task.nextStatus}}"
         catchtap="onTaskStatusTap"
       >{{submittingTaskId === task.id ? '同步中' : task.actionLabel}}</view>
-      <view class="task-sticky" data-id="{{task.id}}" catchtap="onTaskStickyTap">▣<text class="task-sticky-count" wx:if="{{task.stickyCount}}">{{task.stickyCount}}</text></view>
     </view>
   </view>
 </template>

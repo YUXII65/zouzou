@@ -418,33 +418,6 @@
   opacity: 0.55;
 }
 
-.task-sticky {
-  position: relative;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 48rpx;
-  height: 48rpx;
-  border-radius: 12rpx;
-  background: #f1f5fa;
-  color: #4d6d94;
-  font-size: 24rpx;
-}
-
-.task-sticky-count {
-  position: absolute;
-  top: -8rpx;
-  right: -8rpx;
-  min-width: 24rpx;
-  height: 24rpx;
-  padding: 0 5rpx;
-  border-radius: 999rpx;
-  background: #2f63e6;
-  color: #ffffff;
-  font-size: 17rpx;
-  line-height: 24rpx;
-  text-align: center;
-}
 
 .task-detail {
   margin-top: 14rpx;

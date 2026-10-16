@@ -524,11 +524,6 @@ Page({
     this.setData({ expandedTaskId: this.data.expandedTaskId === taskId ? "" : taskId });
   },
 
-  onTaskEditTap(event) {
-    const taskId = event.currentTarget.dataset.id;
-    if (!taskId) return;
-    wx.navigateTo({ url: `/pages/task-edit/task-edit?id=${encodeURIComponent(taskId)}` });
-  },
 
   onProfileTap() { wx.navigateTo({ url: "/pages/profile/profile" }); },
 
