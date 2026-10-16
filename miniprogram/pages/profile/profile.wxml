@@ -62,8 +62,8 @@
 
     <view class="action-grid">
       <view class="action-button" bindtap="onThemeTap">
-        <text class="action-icon">{{theme === 'dark' ? '☀' : '☾'}}</text>
-        <text>{{theme === 'dark' ? '日间模式' : '夜间模式'}}</text>
+        <text class="action-icon">{{theme === 'dark' ? '☾' : '☀'}}</text>
+        <text>{{theme === 'dark' ? '夜间模式' : '日间模式'}}</text>
       </view>
       <view class="action-button" bindtap="onApiSettings">
         <text class="action-icon">◇</text>
