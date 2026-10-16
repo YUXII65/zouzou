@@ -12,6 +12,7 @@ import {
 import {
   CLARIFICATION_TRANSLATION_SYSTEM_PROMPT,
   MODE_JUDGMENT_SYSTEM_PROMPT,
+  OUTPUT_QUALITY_RULES,
   buildClarificationTranslationUserPayload,
   buildModeJudgmentUserPayload,
 } from "../../src/lib/ai-prompts.ts";
@@ -20,6 +21,7 @@ import { PLAN_AGENT_SYSTEM_PROMPT } from "../../src/lib/agent-plan/prompts.ts";
 export const CHAIN_PROMPTS = [
   CLARIFICATION_TRANSLATION_SYSTEM_PROMPT,
   PLAN_AGENT_SYSTEM_PROMPT,
+  OUTPUT_QUALITY_RULES,
 ].join("\n\n----\n\n");
 
 /** 和生产 readComposedPlan 一致：模型漏字段时补上项目名/目标/里程碑。 */
@@ -66,7 +68,13 @@ function briefFromTranslation(translation, originalIdea) {
 }
 
 export function createChainRunner({ baseUrl, apiKey, model, debug = false }) {
-  async function requestChat(system, userContent, maxTokens, temperature = 0.2) {
+  async function requestChat(
+    system,
+    userContent,
+    maxTokens,
+    temperature = 0.2,
+    qualityRules = "",
+  ) {
     const response = await fetch(`${baseUrl}/chat/completions`, {
       method: "POST",
       headers: {
@@ -76,7 +84,12 @@ export function createChainRunner({ baseUrl, apiKey, model, debug = false }) {
       body: JSON.stringify({
         model,
         messages: [
-          { role: "system", content: system },
+          // 与生产一致：只有方案段追加全局质量约束；
+          // 翻译段和模式判定段在生产里显式传 qualityRules: ""，即不追加。
+          {
+            role: "system",
+            content: qualityRules ? `${system}\n\n${qualityRules}` : system,
+          },
           { role: "user", content: userContent },
         ],
         temperature,
@@ -182,6 +195,7 @@ export function createChainRunner({ baseUrl, apiKey, model, debug = false }) {
       JSON.stringify(planPayload),
       2600,
       0.2,
+      OUTPUT_QUALITY_RULES,
     );
     let plan = scrubRecordToolMentions(
       JSON.parse(extractJson(planRaw) ?? "{}"),
@@ -193,6 +207,7 @@ export function createChainRunner({ baseUrl, apiKey, model, debug = false }) {
         JSON.stringify({ ...planPayload, previousAuditIssues: auditIssues }),
         2600,
         0.15,
+        OUTPUT_QUALITY_RULES,
       );
       const retryPlan = scrubRecordToolMentions(
         JSON.parse(extractJson(planRaw) ?? "{}"),

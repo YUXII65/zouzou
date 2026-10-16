@@ -102,6 +102,31 @@ export const GENERIC_CLARIFY_QUESTIONS = [
   "你的目标是什么",
 ];
 
+/**
+ * 输出里不该出现的具体短语合集——**唯一权威来源**。
+ *
+ * 生产质检、评测脚本、单测都从这里取，避免同一批反例散在多个文件里各自维护
+ * （历史上同一批短语曾在 4 个文件里各写一份，加一条要改 4 处）。
+ *
+ * 注意：提示词里不要再逐条列举这些短语。提示词只写判断标准，
+ * 具体短语的拦截交给机器质检，由本文件统一维护。
+ */
+export const BANNED_OUTPUT_PHRASES: string[] = [
+  ...new Set([
+    ...VAGUE_PHRASES,
+    ...TEMPLATE_PHRASES,
+    ...VAGUE_METHOD_PHRASES,
+    ...THINKING_ACTION_PHRASES,
+    // 首启计划评测额外盯的几类
+    "完成最小",
+    "第一个最小动作",
+    "自己设计",
+    "自己去设计",
+    "自己挑",
+    "挑选几个方案",
+  ]),
+];
+
 const EXECUTION_MODES = ["quick", "tool", "produce", "explore", "project"];
 const TOOL_POLICIES = ["none", "read", "confirm-write"];
 const MAX_TURNS_BY_MODE: Record<string, number> = {

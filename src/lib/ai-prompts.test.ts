@@ -13,6 +13,7 @@ import {
   PLAN_AGENT_SYSTEM_PROMPT,
   PLAN_CRITIC_SYSTEM_PROMPT,
 } from "@/lib/agent-plan/prompts";
+import { BANNED_OUTPUT_PHRASES } from "@/lib/ai-quality";
 
 /**
  * 这些断言存在的意义：提示词是产品的核心资产，但不能被静默删改。
@@ -55,10 +56,18 @@ test("计划提示词要求首条任务当天或明天能开始", () => {
   assert.ok(PLAN_SYSTEM_PROMPT.includes("当天或明天"));
 });
 
-test("全局质量约束保留了反模板句规定", () => {
-  assert.ok(OUTPUT_QUALITY_RULES.includes("不要每轮都先肯定用户"));
-  assert.ok(OUTPUT_QUALITY_RULES.includes("最小一步"));
-  assert.ok(OUTPUT_QUALITY_RULES.includes("像人说话"));
+test("全局质量约束保留关键约束维度", () => {
+  // 只校验约束维度存在，不锁死具体短语：
+  // 短语会随迭代被替换或收敛成规则，锁死它们等于禁止提示词收敛。
+  assert.ok(
+    /先肯定用户|总结、共情或流程声明/.test(OUTPUT_QUALITY_RULES),
+    "缺少反客套开场约束",
+  );
+  assert.ok(
+    /可检查的结果|无法验证|可验证的产出/.test(OUTPUT_QUALITY_RULES),
+    "缺少产出可验证约束",
+  );
+  assert.ok(OUTPUT_QUALITY_RULES.includes("像人说话"), "缺少自然语气约束");
 });
 
 test("user 消息带齐字段并为可选值填默认", () => {
@@ -299,20 +308,16 @@ test("软件选择默认免费或系统自带方案", () => {
 });
 
 test("计划质检 Agent 拦住准备动作和推回决定", () => {
-  for (const token of [
-    "第一任务必须改变现实",
-    "不能是记录、清点、整理、写清单、做准备",
-    "独立结果",
-    "不能默认落到",
-    "不能出现“根据结果决定、先比较、再选择”",
-    "反馈闭环",
-    "score >= 8 才通过",
-  ]) {
-    assert.ok(
-      PLAN_CRITIC_SYSTEM_PROMPT.includes(token),
-      `计划质检规则缺少：${token}`,
-    );
-  }
+  // 只校验约束维度，不锁死具体措辞：
+  // 措辞会随迭代被替换或收敛成规则，锁死它们等于禁止提示词收敛。
+  const p = PLAN_CRITIC_SYSTEM_PROMPT;
+  assert.ok(/改变现实|产生变化/.test(p), "缺少『第一任务必须改变现实』约束");
+  assert.ok(/准备|记录/.test(p), "缺少『准备类动作不算任务』约束");
+  assert.ok(p.includes("独立结果"), "缺少独立结果约束");
+  assert.ok(p.includes("载体"), "缺少载体约束");
+  assert.ok(/推回给用户|把选择推回/.test(p), "缺少『默认决定』约束");
+  assert.ok(p.includes("反馈闭环"), "缺少反馈闭环约束");
+  assert.ok(p.includes("score >= 8"), "缺少质检通过门槛");
 });
 
 test("翻译 Agent 的 responseMode 只剩 action / plan", () => {
@@ -332,4 +337,24 @@ test("开放能力的第一件作品仍然是 explore", () => {
   assert.ok(CONTENT_GENERATION_SYSTEM_PROMPT.includes("第一件小作品只是这一轮"));
   assert.ok(PLAN_AGENT_SYSTEM_PROMPT.includes("第一件作品只是这一轮的练习"));
   assert.ok(PLAN_AGENT_SYSTEM_PROMPT.includes("下一轮怎么接着练"));
+});
+
+test("提示词里不再逐条列举具体反例", () => {
+  // 反例清单只保留在 src/lib/ai-quality.ts 一处（机器质检用）。
+  // 提示词里重新长出枚举，就会再次变成「加一条反例要改多处」。
+  const prompts: Array<[string, string]> = [
+    ["OUTPUT_QUALITY_RULES", OUTPUT_QUALITY_RULES],
+    ["PLAN_SYSTEM_PROMPT", PLAN_SYSTEM_PROMPT],
+    ["CLARIFICATION_TRANSLATION_SYSTEM_PROMPT", CLARIFICATION_TRANSLATION_SYSTEM_PROMPT],
+    ["PLAN_AGENT_SYSTEM_PROMPT", PLAN_AGENT_SYSTEM_PROMPT],
+  ];
+  for (const [name, text] of prompts) {
+    for (const line of text.split("\n")) {
+      const hits = BANNED_OUTPUT_PHRASES.filter((phrase) => line.includes(phrase));
+      assert.ok(
+        hits.length < 2,
+        `${name} 里又在一行内成组列举具体反例：${hits.join("、")}`,
+      );
+    }
+  }
 });

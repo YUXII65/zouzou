@@ -1,6 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { buildTaskContract, taskModeLabel } from "@/lib/task-contract";
+import { BANNED_OUTPUT_PHRASES as VAGUE_PHRASES } from "@/lib/ai-quality";
 
 /**
  * 这一组盯的是「任务尺度」契约：小任务不能被工程化，长期目标不能一轮结束。
@@ -14,8 +15,6 @@ const MAX_TURNS_BY_MODE: Record<string, number> = {
   project: 3,
 };
 
-/** 空泛说法黑名单，禁止出现在完成标准里 */
-const VAGUE_PHRASES = ["初版", "最小一步", "先确认方向", "核心方向", "现实限制"];
 
 const SAMPLES: Array<[string, string]> = [
   ["解释一下什么是复利", "quick"],

@@ -16,6 +16,7 @@ import fs from "node:fs";
 import path from "node:path";
 import "dotenv/config";
 import { createChainRunner } from "./lib/run-chain.mjs";
+import { BANNED_OUTPUT_PHRASES } from "../src/lib/ai-quality.ts";
 
 const root = path.resolve(import.meta.dirname, "..");
 const apiKey = process.env.DEEPSEEK_API_KEY || process.env.OPENAI_API_KEY;
@@ -66,8 +67,12 @@ const cases = [
   },
 ];
 
-const BANNED =
-  /最小下一步|完成最小|第一个最小动作|先确认方向|自己设计|自己去设计|自己挑|挑选几个方案|按计划推进|根据情况调整|先想清楚/;
+// 禁词来自 src/lib/ai-quality.ts 的唯一权威列表，不在这里再抄一份。
+const BANNED = new RegExp(
+  BANNED_OUTPUT_PHRASES.map((phrase) =>
+    phrase.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"),
+  ).join("|"),
+);
 // 只在「推荐 / 步骤 / 替代方案」的文本里查，并且用 \n 分隔每一条，
 // 避免正则跨过 JSON 引号，在相邻步骤之间拼出一个假匹配。
 const DEFERRED =
