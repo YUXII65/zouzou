@@ -73,7 +73,7 @@
 }
 
 .content {
-  padding-top: calc(env(safe-area-inset-top) + 88rpx);
+  padding-top: calc(env(safe-area-inset-top) + 128rpx);
   padding-right: 24rpx;
   padding-bottom: 40rpx;
   padding-left: 24rpx;
