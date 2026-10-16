@@ -73,7 +73,7 @@
 }
 
 .content {
-  padding: 24rpx 24rpx 40rpx;
+  padding: 20rpx 24rpx 40rpx;
 }
 
 .panel {
@@ -83,77 +83,8 @@
   box-shadow: 0 18rpx 50rpx rgba(52, 92, 160, 0.1);
 }
 
-.date-panel {
-  padding: 26rpx;
-}
-
-.date-row {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: 20rpx;
-}
-
-.date-main {
-  display: flex;
-  align-items: baseline;
-  gap: 14rpx;
-}
-
-.date-number {
-  color: #182238;
-  font-size: 64rpx;
-  font-weight: 700;
-  line-height: 1;
-}
-
-.date-text,
-.clock {
-  color: #4d6d94;
-  font-size: 28rpx;
-  font-weight: 600;
-}
-
-.date-progress {
-  width: 100%;
-  margin-top: 18rpx;
-}
-
-.progress-copy {
-  display: flex;
-  justify-content: space-between;
-  color: #4d6d94;
-  font-size: 23rpx;
-}
-
-.progress-track {
-  height: 12rpx;
-  margin-top: 10rpx;
-  overflow: hidden;
-  border-radius: 999rpx;
-  background: #edf4fb;
-}
-
-.progress-fill {
-  width: 0;
-  height: 100%;
-  border-radius: 999rpx;
-  background: #2f63e6;
-}
-
-.streak-pill {
-  display: inline-block;
-  margin-top: 20rpx;
-  padding: 10rpx 18rpx;
-  border-radius: 999rpx;
-  background: rgba(212, 134, 43, 0.12);
-  color: #d4862b;
-  font-size: 23rpx;
-  font-weight: 600;
-}
-
 .capture-card {
-  margin-top: 24rpx;
+  margin-top: 0;
   padding: 28rpx;
   border: 1rpx solid rgba(47, 99, 230, 0.15);
   border-radius: 24rpx;
@@ -179,19 +110,22 @@
 
 .sample-list {
   display: flex;
-  flex-wrap: wrap;
-  gap: 12rpx;
-  margin-top: 20rpx;
+  flex-direction: column;
+  gap: 10rpx;
+  margin-top: 16rpx;
 }
 
 .sample-chip {
-  max-width: 100%;
-  padding: 10rpx 18rpx;
+  width: 100%;
+  padding: 14rpx 18rpx;
+  box-sizing: border-box;
   border: 1rpx solid #dce8f7;
-  border-radius: 999rpx;
+  border-radius: 12rpx;
   background: rgba(255, 255, 255, 0.86);
   color: #4d6d94;
   font-size: 23rpx;
+  line-height: 1.5;
+  text-align: left;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -200,9 +134,15 @@
 .capture-actions {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-end;
   gap: 16rpx;
-  margin-top: 24rpx;
+  margin-top: 8rpx;
+}
+
+.sample-refresh-row {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 8rpx;
 }
 
 .refresh-button {

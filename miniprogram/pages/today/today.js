@@ -73,13 +73,6 @@ Page({
   data: {
     userAvatar: "",
     userInitial: "走",
-    dateText: "",
-    weekdayText: "",
-    timeText: "",
-    completedToday: 0,
-    totalToday: 0,
-    streak: 0,
-    weekDone: 0,
     content: "",
     samples: sampleIdeasForDate(3),
     priorityLabels: PRIORITY_OPTIONS.map((item) => item.label),
@@ -94,7 +87,6 @@ Page({
 
   onLoad() {
     this._todayCacheRestored = false;
-    this.updateClock();
   },
 
   syncUserHeader() {
@@ -107,7 +99,6 @@ Page({
     });
   },
   onShow() {
-    this.updateClock();
     this.syncUserHeader();
     this.restoreTodayCache();
     this.loadToday();
@@ -145,10 +136,6 @@ Page({
 
   applyTodayResult(result) {
     this.setData({
-      completedToday: result.completedToday || 0,
-      totalToday: result.totalToday || 0,
-      streak: result.streak || 0,
-      weekDone: result.weekDone || 0,
       pendingItems: (result.pendingItems || []).map((item) => {
         const plan = parseJson(item.aiPlanJson);
         const clarification = parseJson(item.aiSuggestionJson);
@@ -271,15 +258,6 @@ Page({
       }
       return result;
     });
-  },
-
-  updateClock() {
-    const now = new Date();
-    const weekdays = ["星期日", "星期一", "星期二", "星期三", "星期四", "星期五", "星期六"];
-    const dateText = String(now.getDate()).padStart(2, "0");
-    const weekdayText = `${now.getMonth() + 1}月 ${weekdays[now.getDay()]}`;
-    const timeText = `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
-    this.setData({ dateText, weekdayText, timeText });
   },
 
   onContentInput(event) {
@@ -547,9 +525,6 @@ Page({
 
   onProfileTap() { wx.navigateTo({ url: "/pages/profile/profile" }); },
 
-  onToolsTap() {
-    wx.reLaunch({ url: "/pages/tools/tools" });
-  },
 
   onTabTap(event) {
     const key = event.currentTarget.dataset.key;

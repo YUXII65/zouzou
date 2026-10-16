@@ -1,3 +1,98 @@
+<template name="file-task">
+  <view class="file-task">
+    <view class="file-task-main">
+      <view class="task-tags">
+        <text class="task-tag task-tag-focus" wx:if="{{task.isFocused}}">重点</text>
+        <text class="task-tag task-tag-overdue" wx:if="{{task.isOverdue}}">逾期</text>
+        <text class="task-tag task-tag-plan" wx:if="{{task.isScheduled}}">计划</text>
+      </view>
+      <view class="file-task-title" data-id="{{task.id}}" bindtap="onTaskExpandTap">{{task.displayTitle}}</view>
+      <view class="file-task-meta">
+        <text class="task-priority">{{task.priorityLabel}}</text>
+        <text wx:if="{{task.executionMode}}">{{task.executionMode}}</text>
+        <text wx:if="{{task.dueDateText}}">建议 {{task.dueDateText}}前完成</text>
+      </view>
+      <view class="task-detail" wx:if="{{expandedTaskId === task.id}}">
+        <view class="task-detail-title">{{task.title}}</view>
+        <view class="task-detail-copy" wx:if="{{task.notes && task.notes !== task.title}}">{{task.notes}}</view>
+        <view class="task-detail-standard" wx:if="{{task.doneWhen}}">完成标准：{{task.doneWhen}}</view>
+        <view class="task-detail-standard" wx:if="{{task.methodHint}}">做法：{{task.methodHint}}</view>
+      </view>
+    </view>
+    <view class="file-task-actions">
+      <view
+        class="task-action {{submittingTaskId === task.id ? 'task-action-disabled' : ''}}"
+        wx:if="{{task.canChangeStatus && task.nextStatus}}"
+        data-id="{{task.id}}"
+        data-status="{{task.nextStatus}}"
+        catchtap="onTaskStatusTap"
+      >{{submittingTaskId === task.id ? '同步中' : task.actionLabel}}</view>
+      <view class="task-sticky" data-id="{{task.id}}" catchtap="onTaskStickyTap">▣<text class="task-sticky-count" wx:if="{{task.stickyCount}}">{{task.stickyCount}}</text></view>
+    </view>
+  </view>
+</template>
+
+<template name="folder">
+  <view class="folder-card {{openId === project.id ? 'folder-card-open' : ''}} folder-card-{{project.modeKey}}">
+    <view class="folder-tab folder-tab-{{project.modeKey}}"></view>
+    <view class="folder-head" data-id="{{project.id}}" bindtap="onFolderTap">
+      <view class="folder-icon folder-icon-{{project.modeKey}}">{{openId === project.id ? '▣' : '▤'}}</view>
+      <view class="folder-copy">
+        <text class="folder-name">{{project.name}}</text>
+        <text class="folder-meta">{{project.modeLabel ? project.modeLabel + ' · ' : ''}}{{project.openCount ? project.openCount + ' 件推进中' : '暂无推进中的任务'}}</text>
+      </view>
+      <text class="folder-chevron">{{openId === project.id ? '⌃' : '⌄'}}</text>
+    </view>
+
+    <view class="folder-body" wx:if="{{openId === project.id}}">
+      <view class="stage-card stage-card-{{project.stage.status}}" wx:if="{{project.modeKey === 'longterm' && project.stage}}">
+        <text class="stage-label">第 {{project.stage.order}}/5 阶段</text>
+        <text class="stage-copy">{{project.stage.summary}}</text>
+        <view class="stage-next">
+          <text class="stage-label">下一阶段 · 第 {{project.stage.nextOrder}}/5 阶段 · 预览</text>
+          <text class="stage-copy">{{project.stage.nextSummary}}</text>
+        </view>
+      </view>
+
+      <view class="track-list" wx:if="{{project.modeKey === 'explore' && project.tracks.length}}">
+        <view class="track-row track-row-{{track.role}}" wx:for="{{project.tracks}}" wx:key="id" wx:for-item="track">
+          <text class="track-role">{{track.role === 'main' ? '主线' : '支线'}}</text>
+          <text class="track-name">{{track.name}}</text>
+        </view>
+      </view>
+
+      <view class="task-switch">
+        <view
+          class="task-switch-item {{taskView === 'open' ? 'task-switch-item-active' : ''}}"
+          data-view="open"
+          bindtap="onTaskViewTap"
+        >推进中 {{project.openCount}}</view>
+        <view
+          class="task-switch-item {{taskView === 'done' ? 'task-switch-item-done' : ''}}"
+          data-view="done"
+          bindtap="onTaskViewTap"
+        >已完成 {{project.doneCount}}</view>
+      </view>
+
+      <view class="file-task-list" wx:if="{{taskView === 'open' && project.openTasks.length}}">
+        <template is="file-task" wx:for="{{project.openTasks}}" wx:key="id" data="{{task: item, expandedTaskId: expandedTaskId, submittingTaskId: submittingTaskId}}"></template>
+      </view>
+      <view class="file-task-list" wx:if="{{taskView === 'done' && project.doneTasks.length}}">
+        <template is="file-task" wx:for="{{project.doneTasks}}" wx:key="id" data="{{task: item, expandedTaskId: expandedTaskId, submittingTaskId: submittingTaskId}}"></template>
+      </view>
+
+      <view class="empty-state compact" wx:if="{{taskView === 'open' && !project.openTasks.length}}">
+        <view class="empty-title">{{project.allDone ? '已全部完成' : '没有推进中的任务'}}</view>
+        <view class="empty-hint" wx:if="{{!project.allDone}}">写下想法时 AI 会把它拆成这里的任务。</view>
+      </view>
+      <view class="empty-state compact" wx:if="{{taskView === 'done' && !project.doneTasks.length}}">
+        <view class="empty-title">还没有已完成的任务</view>
+        <view class="empty-hint">任务完成后会自动收进这里。</view>
+      </view>
+    </view>
+  </view>
+</template>
+
 <view class="page">
   <view class="topbar">
     <view class="brand-row">
@@ -5,174 +100,51 @@
       <text class="brand-name">走走</text>
     </view>
     <view class="top-actions">
-      <view class="top-icon" bindtap="onToolsTap">▦</view>
       <view class="avatar" bindtap="onProfileTap"><image wx:if="{{userAvatar}}" src="{{userAvatar}}" mode="aspectFill"></image><text wx:else>{{userInitial}}</text></view>
     </view>
   </view>
 
   <view class="content">
-    <view class="page-heading">
-      <text class="eyebrow">让想法，走成下一步</text>
-      <text class="page-title">书桌</text>
+    <view class="list-toolbar" wx:if="{{projectsByTime.length}}">
+      <text class="toolbar-item {{listMode === 'type' ? 'toolbar-item-active' : ''}}" data-mode="type" bindtap="onListModeTap">按类型</text>
+      <text class="toolbar-separator">·</text>
+      <text class="toolbar-item {{listMode === 'time' ? 'toolbar-item-active' : ''}}" data-mode="time" bindtap="onListModeTap">按时间</text>
     </view>
 
-    <view class="panel projects-panel">
-      <view class="panel-header"><text class="panel-title">项目</text></view>
-      <view class="new-project" bindtap="onToggleCreateProject">＋ 新建项目</view>
-      <view class="create-form" wx:if="{{showCreateProject}}">
-        <input class="form-input" placeholder="项目名称" value="{{projectName}}" bindinput="onProjectNameInput" />
-        <input class="form-input" placeholder="目标：完成后能得到什么" value="{{projectObjective}}" bindinput="onProjectObjectiveInput" />
-        <input class="form-input" placeholder="当前里程碑（可选）" value="{{projectMilestone}}" bindinput="onProjectMilestoneInput" />
-        <picker mode="selector" range="{{projectStatusLabels}}" value="{{projectStatusIndex}}" bindchange="onProjectStatusChange">
-          <view class="form-input picker-display">{{projectStatusLabels[projectStatusIndex]}}</view>
-        </picker>
-        <view class="form-button" bindtap="onCreateProject">创建项目</view>
-      </view>
-
-      <view class="project-list" wx:if="{{projects.length}}">
-        <view class="project-item {{item.id === activeProjectId && !showUnassigned ? 'project-item-active' : ''}}" wx:for="{{projects}}" wx:key="id" data-id="{{item.id}}" bindtap="onProjectTap">
-          <text class="project-name">{{item.name}}</text>
-          <text class="project-count">{{item.tasks.length}} 个任务</text>
+    <view wx:if="{{hasAnything}}">
+      <block wx:if="{{listMode === 'type'}}">
+        <view class="mode-group" wx:for="{{groups}}" wx:key="mode" wx:for-item="group">
+          <view class="mode-head">
+            <view class="mode-dot mode-dot-{{group.mode}}"></view>
+            <text class="mode-label">{{group.label}}</text>
+            <text class="mode-count">{{group.projects.length}}</text>
+          </view>
+          <template is="folder" wx:for="{{group.projects}}" wx:key="id" wx:for-item="project" data="{{project: project, openId: openId, taskView: taskView, expandedTaskId: expandedTaskId, submittingTaskId: submittingTaskId}}"></template>
         </view>
-      </view>
-      <view class="empty-state compact" wx:else><view class="empty-icon">▣</view><view class="empty-text">还没有项目</view></view>
+      </block>
 
-      <view class="project-item project-item-unassigned {{showUnassigned ? 'project-item-active' : ''}}" wx:if="{{unassociatedTasks.length}}" bindtap="onUnassignedTap">
-        <view class="project-unassigned-copy">
-          <text class="project-unassigned-icon">▤</text>
-          <text class="project-name">未关联任务</text>
-        </view>
-        <text class="project-count">{{unassociatedTasks.length}}</text>
-      </view>
+      <block wx:else>
+        <template is="folder" wx:for="{{projectsByTime}}" wx:key="id" wx:for-item="project" data="{{project: project, openId: openId, taskView: taskView, expandedTaskId: expandedTaskId, submittingTaskId: submittingTaskId}}"></template>
+      </block>
+
+      <template wx:if="{{unassociated}}" is="folder" data="{{project: unassociated, openId: openId, taskView: taskView, expandedTaskId: expandedTaskId, submittingTaskId: submittingTaskId}}"></template>
     </view>
 
-    <view class="panel detail-panel" wx:if="{{showUnassigned}}">
-      <view class="panel-header">
-        <text class="panel-title">未关联任务</text>
-        <text class="panel-count">{{unassociatedTasks.length}} 条</text>
-      </view>
-      <view class="new-project" bindtap="onToggleCreateTask">＋ 新增任务</view>
-      <view class="create-form" wx:if="{{showCreateTask}}">
-        <input class="form-input" placeholder="标题" value="{{taskTitle}}" bindinput="onTaskTitleInput" />
-        <input class="form-input" placeholder="内容" value="{{taskNotes}}" bindinput="onTaskNotesInput" />
-        <input class="form-input" placeholder="执行" value="{{taskDoneWhen}}" bindinput="onTaskDoneWhenInput" />
-        <picker mode="selector" range="{{priorityLabels}}" value="{{taskPriorityIndex}}" bindchange="onTaskPriorityChange">
-          <view class="form-input picker-display">{{priorityLabels[taskPriorityIndex]}}</view>
-        </picker>
-        <picker mode="date" value="{{taskDueDate}}" bindchange="onTaskDueChange">
-          <view class="form-input picker-display">{{taskDueDate || '截止日期'}}</view>
-        </picker>
-        <view class="form-button" bindtap="onCreateTask">添加任务</view>
-      </view>
-      <view class="task-list" wx:if="{{unassociatedTasks.length}}">
-        <view class="task-row" wx:for="{{unassociatedTasks}}" wx:key="id">
-          <view class="task-main">
-            <view class="task-title" data-id="{{item.id}}" bindtap="onTaskExpandTap">{{item.displayTitle}}</view>
-            <view class="task-meta-row">
-              <text class="task-mode">{{item.executionModeLabel}}</text>
-              <text class="task-priority">{{item.priorityLabel}}</text>
-              <text class="task-status">{{item.statusLabel}}</text>
-              <text class="task-date" wx:if="{{item.scheduledDateText}}">计划 {{item.scheduledDateText}}</text>
-              <text class="task-due" wx:if="{{item.dueDateText}}">截止 {{item.dueDateText}}</text>
-            </view>
-            <view class="task-detail" wx:if="{{expandedTaskId === item.id}}">
-              <view class="task-detail-title">{{item.title}}</view>
-              <view class="task-detail-copy" wx:if="{{item.notes && item.notes !== item.title}}">{{item.notes}}</view>
-              <view class="task-detail-standard" wx:if="{{item.doneWhen}}">执行：{{item.doneWhen}}</view>
-              <view class="task-detail-edit" data-id="{{item.id}}" catchtap="onTaskEditTap">编辑任务</view>
-            </view>
-          </view>
-          <view class="task-actions">
-            <view class="task-action" wx:if="{{item.canChangeStatus}}" data-id="{{item.id}}" data-status="{{item.nextStatus}}" bindtap="onTaskStatusTap">{{item.actionLabel}}</view>
-            <view class="task-sticky" data-id="{{item.id}}" catchtap="onTaskStickyTap">▣<text class="task-sticky-count" wx:if="{{item.stickyCount}}">{{item.stickyCount}}</text></view>
-            <view class="task-settings" data-id="{{item.id}}" catchtap="onTaskEditTap">⚙</view>
-          </view>
-        </view>
-      </view>
-      <view class="empty-state compact" wx:else><view class="empty-icon">▤</view><view class="empty-text">没有未关联任务</view></view>
-    </view>
-
-    <view class="panel detail-panel" wx:elif="{{activeProject}}">
-      <view class="panel-header">
-        <text class="panel-title">{{activeProject.name}}</text>
-        <text class="panel-count">{{activeProject.statusLabel}} · {{activeProject.tasks.length}} 个任务</text>
-      </view>
-      <view class="project-meta">
-        <view><text class="meta-label">目标</text><text class="meta-value">{{activeProject.objective}}</text></view>
-        <view><text class="meta-label">里程碑</text><text class="meta-value">{{activeProject.currentMilestone || '暂无'}}</text></view>
-      </view>
-      <view class="new-project" bindtap="onToggleEditProject">编辑项目</view>
-      <view class="create-form" wx:if="{{showEditProject}}">
-        <input class="form-input" placeholder="项目名称" value="{{editProjectName}}" bindinput="onEditProjectNameInput" />
-        <input class="form-input" placeholder="目标" value="{{editProjectObjective}}" bindinput="onEditProjectObjectiveInput" />
-        <input class="form-input" placeholder="当前里程碑" value="{{editProjectMilestone}}" bindinput="onEditProjectMilestoneInput" />
-        <picker mode="selector" range="{{projectStatusLabels}}" value="{{editProjectStatusIndex}}" bindchange="onEditProjectStatusChange">
-          <view class="form-input picker-display">{{projectStatusLabels[editProjectStatusIndex]}}</view>
-        </picker>
-        <view class="ai-help">
-          <text class="form-label">AI 修改建议</text>
-          <textarea class="form-input ai-textarea" value="{{editAiIdea}}" placeholder="输入一个想法，例如：这个项目应该先聚焦到内容整理，暂不追求完整上线。" bindinput="onEditAiIdeaInput"></textarea>
-          <view class="form-button ai-button {{editAiLoading ? 'ai-button-disabled' : ''}}" bindtap="onEditProjectSuggest">{{editAiLoading ? '正在整理...' : '让 AI 给修改建议'}}</view>
-          <view class="ai-suggestion" wx:if="{{editAiSuggestion}}">
-            <text class="ai-reason">{{editAiSuggestion.reason}}</text>
-            <view class="ai-apply" bindtap="onApplyProjectAiSuggestion">应用建议</view>
-          </view>
-        </view>
-        <view class="form-button" bindtap="onSaveProject">保存项目</view>
-      </view>
-      <view class="new-project" bindtap="onToggleCreateTask">＋ 新增任务</view>
-      <view class="create-form" wx:if="{{showCreateTask}}">
-        <input class="form-input" placeholder="标题" value="{{taskTitle}}" bindinput="onTaskTitleInput" />
-        <input class="form-input" placeholder="内容" value="{{taskNotes}}" bindinput="onTaskNotesInput" />
-        <input class="form-input" placeholder="执行" value="{{taskDoneWhen}}" bindinput="onTaskDoneWhenInput" />
-        <picker mode="selector" range="{{priorityLabels}}" value="{{taskPriorityIndex}}" bindchange="onTaskPriorityChange">
-          <view class="form-input picker-display">{{priorityLabels[taskPriorityIndex]}}</view>
-        </picker>
-        <picker mode="date" value="{{taskDueDate}}" bindchange="onTaskDueChange">
-          <view class="form-input picker-display">{{taskDueDate || '截止日期'}}</view>
-        </picker>
-        <view class="form-button" bindtap="onCreateTask">添加任务</view>
-      </view>
-      <view class="task-list" wx:if="{{activeProject.tasks.length}}">
-        <view class="task-row" wx:for="{{activeProject.tasks}}" wx:key="id">
-          <view class="task-main">
-            <view class="task-title" data-id="{{item.id}}" bindtap="onTaskExpandTap">{{item.displayTitle}}</view>
-            <view class="task-meta-row">
-              <text class="task-mode">{{item.executionModeLabel}}</text>
-              <text class="task-priority">{{item.priorityLabel}}</text>
-              <text class="task-status">{{item.statusLabel}}</text>
-              <text class="task-date" wx:if="{{item.scheduledDateText}}">计划 {{item.scheduledDateText}}</text>
-              <text class="task-due" wx:if="{{item.dueDateText}}">截止 {{item.dueDateText}}</text>
-            </view>
-            <view class="task-detail" wx:if="{{expandedTaskId === item.id}}">
-              <view class="task-detail-title">{{item.title}}</view>
-              <view class="task-detail-copy" wx:if="{{item.notes && item.notes !== item.title}}">{{item.notes}}</view>
-              <view class="task-detail-standard" wx:if="{{item.doneWhen}}">执行：{{item.doneWhen}}</view>
-              <view class="task-detail-edit" data-id="{{item.id}}" catchtap="onTaskEditTap">编辑任务</view>
-            </view>
-          </view>
-          <view class="task-actions">
-            <view class="task-action" wx:if="{{item.canChangeStatus}}" data-id="{{item.id}}" data-status="{{item.nextStatus}}" bindtap="onTaskStatusTap">{{item.actionLabel}}</view>
-            <view class="task-sticky" data-id="{{item.id}}" catchtap="onTaskStickyTap">▣<text class="task-sticky-count" wx:if="{{item.stickyCount}}">{{item.stickyCount}}</text></view>
-            <view class="task-settings" data-id="{{item.id}}" catchtap="onTaskEditTap">⚙</view>
-          </view>
-        </view>
-      </view>
-      <view class="empty-state compact" wx:else><view class="empty-icon">▤</view><view class="empty-text">项目下还没有任务</view></view>
-      <view class="delete-project" bindtap="onDeleteProject">删除项目</view>
-    </view>
-
-    <view class="panel detail-panel" wx:else>
-      <view class="empty-state">
-        <view class="empty-icon">▤</view>
-        <view class="empty-title">选择或创建一个项目</view>
-        <view class="empty-hint">项目详情会显示在这里，保持页面专注。</view>
-      </view>
+    <view class="empty-state empty-page" wx:else>
+      <view class="empty-icon">▤</view>
+      <view class="empty-title">还没有文件夹</view>
+      <view class="empty-hint">写下第一个想法，AI 会把它收成一个文件夹。</view>
     </view>
   </view>
 
   <view class="bottom-nav">
-    <view class="nav-item" data-key="today" bindtap="onTabTap"><text class="nav-icon">▦</text><text>日历</text></view>
-    <view class="nav-item nav-item-active" data-key="desk" bindtap="onTabTap"><text class="nav-icon">▤</text><text>书桌</text></view>
+    <view class="nav-item" data-key="today" bindtap="onTabTap">
+      <text class="nav-icon">▦</text>
+      <text>首页</text>
+    </view>
+    <view class="nav-item nav-item-active" data-key="desk" bindtap="onTabTap">
+      <text class="nav-icon">▤</text>
+      <text>文件</text>
+    </view>
   </view>
 </view>

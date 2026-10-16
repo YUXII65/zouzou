@@ -1,10 +1,9 @@
-const STATUS_LABELS = {
-  todo: "待办",
-  in_progress: "进行中",
-  done: "已完成",
-  cancelled: "已取消"
+const MODE_META = {
+  normal: { label: "普通" },
+  longterm: { label: "长期" },
+  explore: { label: "探索" }
 };
-
+const MODE_ORDER = ["normal", "longterm", "explore"];
 const PRIORITY_LABELS = {
   low: "低",
   medium: "中",
@@ -12,118 +11,145 @@ const PRIORITY_LABELS = {
   urgent: "紧急"
 };
 
-const MODE_LABELS = {
-  quick: "直接完成",
-  tool: "查资料",
-  produce: "做产物",
-  explore: "做验证",
-  project: "长期推进"
-};
+function parseDate(value) {
+  if (!value) return null;
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date;
+}
 
 function formatDate(value) {
-  if (!value) return "";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "";
-  return `${date.getMonth() + 1}月${date.getDate()}日`;
+  const date = parseDate(value);
+  if (!date) return "";
+  return (date.getMonth() + 1) + "月" + date.getDate() + "日";
 }
 
-const PROJECT_STATUSES = ["active", "paused", "completed", "archived"];
-const PROJECT_STATUS_LABELS = ["进行中", "已暂停", "已完成", "已归档"];
-
-const WORKSPACE_CACHE_KEY = "next_step_mp_workspace_cache";
-const WORKSPACE_CACHE_TTL = 24 * 60 * 60 * 1000;
-
-function readWorkspaceCache() {
-  const { getToken } = require("../../utils/api");
-  const token = getToken();
-  if (!token) return null;
-  const cached = wx.getStorageSync(WORKSPACE_CACHE_KEY);
-  if (!cached || typeof cached !== "object") return null;
-  if (cached.token !== token) return null;
-  if (!cached.at || Date.now() - cached.at > WORKSPACE_CACHE_TTL) return null;
-  return cached.data || null;
-}
-
-function writeWorkspaceCache(data) {
-  const { getToken } = require("../../utils/api");
-  const token = getToken();
-  if (!token || !data) return;
-  try {
-    wx.setStorageSync(WORKSPACE_CACHE_KEY, { token, at: Date.now(), data });
-  } catch (error) {
-    // 缓存写入失败不影响正常流程。
-  }
+function formatDateKey(value) {
+  const date = parseDate(value);
+  if (!date) return "";
+  return date.getFullYear() + "-" + String(date.getMonth() + 1).padStart(2, "0") + "-" + String(date.getDate()).padStart(2, "0");
 }
 
 function fallbackTitle(title) {
   const headline = String(title || "").split(/[，,。；;！？!\n]/)[0].trim() || String(title || "");
-  return headline.length > 18 ? `${headline.slice(0, 17).trim()}…` : headline;
+  return headline.length > 18 ? headline.slice(0, 17).trim() + "…" : headline;
 }
 
-function decorateTasks(tasks) {
-  return (tasks || []).map((task) => {
-    const isDone = task.status === "done";
-    return {
-      ...task,
-      displayTitle: task.shortTitle && task.shortTitle.trim() ? task.shortTitle.trim() : fallbackTitle(task.title),
-      executionModeLabel: MODE_LABELS[task.executionMode] || "直接完成",
-      scheduledDateText: formatDate(task.scheduledDate),
-      dueDateText: formatDate(task.dueDate),
-      stickyCount: task.stickyCount || 0,
-      canChangeStatus: !isDone,
-      statusLabel: STATUS_LABELS[task.status] || task.status,
-      priorityLabel: PRIORITY_LABELS[task.priority] || task.priority,
-      actionLabel: isDone
-        ? "已完成"
-        : task.status === "todo"
-          ? "下一步"
-          : task.status === "in_progress"
-            ? "完成"
-            : "已完成",
-      nextStatus: isDone
-        ? ""
-        : task.status === "todo"
-          ? "in_progress"
-          : task.status === "in_progress"
-            ? "done"
-            : ""
-    };
+function normalizeMode(mode) {
+  return MODE_META[mode] ? mode : "normal";
+}
+
+function decorateTask(task) {
+  const dueDate = parseDate(task.dueDate);
+  const today = formatDateKey(new Date());
+  const scheduledDate = parseDate(task.scheduledDate);
+  const focusDate = parseDate(task.focusDate);
+  const status = task.status || "todo";
+  const nextStatus = status === "todo" ? "in_progress" : status === "in_progress" ? "done" : "";
+
+  return {
+    ...task,
+    displayTitle: task.shortTitle && task.shortTitle.trim() ? task.shortTitle.trim() : fallbackTitle(task.title),
+    priorityLabel: PRIORITY_LABELS[task.priority] || "中",
+    dueDateText: formatDate(dueDate),
+    scheduledDateText: formatDate(scheduledDate),
+    completedAtText: formatDate(task.completedAt),
+    isOverdue: Boolean(dueDate && formatDateKey(dueDate) < today && status !== "done"),
+    isScheduled: Boolean(scheduledDate && formatDateKey(scheduledDate) === today),
+    isFocused: Boolean(focusDate && formatDateKey(focusDate) === today),
+    canChangeStatus: status !== "done",
+    actionLabel: status === "todo" ? "下一步" : status === "in_progress" ? "完成" : "",
+    nextStatus
+  };
+}
+
+function decorateStage(stage) {
+  if (!stage) return null;
+  const nextStage = stage.nextStage || null;
+  const nextTasks = nextStage && Array.isArray(nextStage.tasks) ? nextStage.tasks : [];
+  return {
+    ...stage,
+    summary: nextStage && nextStage.currentSummary
+      ? nextStage.currentSummary
+      : stage.deliverable || "正在整理当前阶段",
+    nextSummary: nextStage && nextStage.nextSummary
+      ? nextStage.nextSummary
+      : nextStage && nextStage.nextMilestone
+        ? nextStage.nextMilestone
+        : "正在整理下一阶段",
+    nextOrder: Math.min((Number(stage.order) || 1) + 1, 5),
+    canAdvance: stage.status === "ready" && nextTasks.length > 0
+  };
+}
+
+function decorateProject(project) {
+  const modeKey = normalizeMode(project.mode);
+  const tasks = (project.tasks || []).map(decorateTask);
+  const openTasks = tasks.filter((task) => task.status === "todo" || task.status === "in_progress");
+  const doneTasks = tasks.filter((task) => task.status === "done").sort((a, b) => {
+    const left = parseDate(a.completedAt);
+    const right = parseDate(b.completedAt);
+    return (right ? right.getTime() : 0) - (left ? left.getTime() : 0);
   });
+
+  return {
+    ...project,
+    id: project.id,
+    modeKey,
+    modeLabel: MODE_META[modeKey].label,
+    openTasks,
+    doneTasks,
+    openCount: openTasks.length,
+    doneCount: doneTasks.length,
+    allDone: openTasks.length === 0 && doneTasks.length > 0,
+    stage: decorateStage(project.stage),
+    tracks: Array.isArray(project.tracks) ? project.tracks : []
+  };
+}
+
+function decorateUnassociated(tasks) {
+  const decorated = (tasks || []).map(decorateTask);
+  const openTasks = decorated.filter((task) => task.status === "todo" || task.status === "in_progress");
+  const doneTasks = decorated.filter((task) => task.status === "done");
+  if (!decorated.length) return null;
+  return {
+    id: "__unassigned__",
+    name: "散落任务",
+    modeKey: "unassociated",
+    modeLabel: "",
+    objective: "",
+    currentMilestone: "",
+    openTasks,
+    doneTasks,
+    openCount: openTasks.length,
+    doneCount: doneTasks.length,
+    allDone: openTasks.length === 0 && doneTasks.length > 0,
+    stage: null,
+    tracks: []
+  };
 }
 
 Page({
   data: {
     userAvatar: "",
     userInitial: "走",
-    projects: [],
-    unassociatedTasks: [],
-    activeProjectId: "",
-    activeProject: null,
-    showUnassigned: false,
-    visibleTasks: [],
-    showCreateProject: false,
-    projectName: "",
-    projectObjective: "",
-    projectMilestone: "",
-    projectStatusIndex: 0,
-    projectStatusLabels: PROJECT_STATUS_LABELS,
-    showEditProject: false,
-    editProjectName: "",
-    editProjectObjective: "",
-    editProjectMilestone: "",
-    editProjectStatusIndex: 0,
-    editAiIdea: "",
-    editAiSuggestion: null,
-    editAiLoading: false,
-    showCreateTask: false,
-    taskTitle: "",
-    taskNotes: "",
-    taskDoneWhen: "",
-    taskPriorityIndex: 1,
-    taskDueDate: "",
+    groups: [],
+    projectsByTime: [],
+    unassociated: null,
+    hasAnything: false,
+    listMode: "type",
+    openId: "",
+    taskView: "open",
     expandedTaskId: "",
-    priorityLabels: ["低", "中", "高", "紧急"],
-    statusLabels: ["待办", "进行中", "已完成", "已取消"]
+    submittingTaskId: ""
+  },
+
+  onLoad() {
+    this._loaded = false;
+  },
+
+  onShow() {
+    this.syncUserHeader();
+    this.loadWorkspace();
   },
 
   syncUserHeader() {
@@ -135,347 +161,127 @@ Page({
       userInitial: displayName.slice(0, 1)
     });
   },
-  onLoad() {
-    this._workspaceCacheRestored = false;
-  },
-
-  onShow() {
-    this.restoreWorkspaceCache();
-    this.loadWorkspace();
-    this.syncUserHeader();
-    this.ensureOnboarding();
-  },
-
-  restoreWorkspaceCache() {
-    if (this._workspaceCacheRestored) return;
-    this._workspaceCacheRestored = true;
-    const cached = readWorkspaceCache();
-    if (cached) this.applyWorkspaceResult(cached);
-  },
-
-  ensureOnboarding() {
-    const { getToken, getOnboarding } = require("../../utils/api");
-    if (!getToken()) return;
-    getOnboarding()
-      .then((state) => {
-        if (state.isFirstRun && state.tourStep !== "done") {
-          wx.reLaunch({ url: "/pages/onboarding/onboarding" });
-        }
-      })
-      .catch(() => {});
-  },
 
   loadWorkspace() {
-    const { getToken, getWorkspace } = require("../../utils/api");
+    const { getWorkspace, getToken } = require("../../utils/api");
     if (!getToken()) {
       wx.reLaunch({ url: "/pages/login/login" });
       return;
     }
-
     getWorkspace()
-      .then((result) => {
-        this.applyWorkspaceResult(result);
-        writeWorkspaceCache(result);
+      .then((response) => {
+        const result = response && response.result ? response.result : response;
+        this.applyWorkspace(result || {});
       })
       .catch((error) => {
-        if (error.statusCode === 401) {
+        if (error && error.statusCode === 401) {
           wx.reLaunch({ url: "/pages/login/login" });
           return;
         }
-        wx.showToast({ title: "书桌没加载出来", icon: "none" });
+        wx.showToast({ title: "文件没加载出来", icon: "none" });
       });
   },
 
-  applyWorkspaceResult(result) {
-    const projects = result.projects || [];
-    const unassociatedTasks = result.unassociatedTasks || [];
-    const keepUnassigned = this.data.showUnassigned && unassociatedTasks.length > 0;
-    const currentIdExists = projects.some((project) => project.id === this.data.activeProjectId);
-    const activeProjectId = keepUnassigned
-      ? ""
-      : currentIdExists
-        ? this.data.activeProjectId
-        : (projects[0] && projects[0].id) || "";
-    const showUnassigned = keepUnassigned || (!projects.length && unassociatedTasks.length > 0);
-    this.applyWorkspace(projects, unassociatedTasks, activeProjectId, showUnassigned);
-  },
-
-  applyWorkspace(projects, unassociatedTasks, activeProjectId, showUnassigned) {
-    const normalizedProjects = projects.map((project) => ({
-      ...project,
-      statusLabel: PROJECT_STATUS_LABELS[PROJECT_STATUSES.indexOf(project.status)] || project.status
-    }));
-    const activeProject = normalizedProjects.find((project) => project.id === activeProjectId) || null;
-    const normalizedProject = activeProject
-      ? { ...activeProject, tasks: decorateTasks(activeProject.tasks) }
-      : null;
-    const normalizedUnassociated = decorateTasks(unassociatedTasks);
+  applyWorkspace(result) {
+    const projects = (result.projects || []).map(decorateProject);
+    const unassociated = decorateUnassociated(result.unassociatedTasks || []);
+    const groups = MODE_ORDER
+      .map((mode) => ({
+        mode,
+        label: MODE_META[mode].label,
+        projects: projects.filter((project) => project.modeKey === mode)
+      }))
+      .filter((group) => group.projects.length > 0);
+    const projectsByTime = [...projects].sort((a, b) => {
+      const left = parseDate(a.updatedAt);
+      const right = parseDate(b.updatedAt);
+      return (right ? right.getTime() : 0) - (left ? left.getTime() : 0);
+    });
+    const openIdExists = projects.some((project) => project.id === this.data.openId) || this.data.openId === "__unassigned__";
+    const nextOpenId = openIdExists && this.data.openId !== "__unassigned__"
+      ? this.data.openId
+      : openIdExists && unassociated
+        ? this.data.openId
+        : "";
 
     this.setData({
-      projects,
-      unassociatedTasks: normalizedUnassociated,
-      activeProjectId: showUnassigned ? "" : activeProject ? activeProject.id : "",
-      activeProject: showUnassigned ? null : normalizedProject,
-      showUnassigned: Boolean(showUnassigned),
-      visibleTasks: showUnassigned
-        ? normalizedUnassociated
-        : normalizedProject
-          ? normalizedProject.tasks
-          : []
+      groups,
+      projectsByTime,
+      unassociated,
+      hasAnything: projects.length > 0 || Boolean(unassociated),
+      openId: nextOpenId
     });
   },
 
-  onProjectTap(event) {
+  onFolderTap(event) {
     const id = event.currentTarget.dataset.id;
-    const activeProject = this.data.projects.find((project) => project.id === id) || null;
+    if (!id) return;
     this.setData({
-      showUnassigned: false,
-      activeProjectId: id,
-      activeProject: activeProject ? { ...activeProject, tasks: decorateTasks(activeProject.tasks) } : null,
-      showCreateTask: false,
-      showEditProject: false
-    }, () => {
-      this.setData({ visibleTasks: this.data.activeProject ? this.data.activeProject.tasks : [] });
+      openId: this.data.openId === id ? "" : id,
+      taskView: "open",
+      expandedTaskId: ""
     });
   },
 
-  onUnassignedTap() {
-    this.setData({
-      showUnassigned: true,
-      activeProjectId: "",
-      activeProject: null,
-      showCreateTask: false,
-      showEditProject: false,
-      visibleTasks: this.data.unassociatedTasks
-    });
+  onTaskViewTap(event) {
+    const view = event.currentTarget.dataset.view;
+    if (view !== "open" && view !== "done") return;
+    this.setData({ taskView: view, expandedTaskId: "" });
   },
 
-  onToggleCreateProject() {
-    this.setData({ showCreateProject: !this.data.showCreateProject });
-  },
-
-  onProjectNameInput(event) { this.setData({ projectName: event.detail.value }); },
-  onProjectObjectiveInput(event) { this.setData({ projectObjective: event.detail.value }); },
-  onProjectMilestoneInput(event) { this.setData({ projectMilestone: event.detail.value }); },
-  onProjectStatusChange(event) { this.setData({ projectStatusIndex: Number(event.detail.value) }); },
-
-  onCreateProject() {
-    const { createProject } = require("../../utils/api");
-    if (!this.data.projectName.trim() || !this.data.projectObjective.trim()) {
-      wx.showToast({ title: "项目名称和目标要写清楚", icon: "none" });
-      return;
-    }
-    wx.showLoading({ title: "正在创建..." });
-    createProject({
-      name: this.data.projectName,
-      objective: this.data.projectObjective,
-      currentMilestone: this.data.projectMilestone,
-      status: PROJECT_STATUSES[this.data.projectStatusIndex] || "active"
-    }).then((result) => {
-      wx.hideLoading();
-      this.setData({
-        showCreateProject: false,
-        projectName: "",
-        projectObjective: "",
-        projectMilestone: "",
-        projectStatusIndex: 0,
-        activeProjectId: result.project.id,
-        showUnassigned: false
-      });
-      this.loadWorkspace();
-    }).catch(() => {
-      wx.hideLoading();
-      wx.showToast({ title: "项目没创建成功", icon: "none" });
-    });
-  },
-
-  onToggleEditProject() {
-    const project = this.data.activeProject;
-    if (!project || this.data.showUnassigned) return;
-    this.setData({
-      showEditProject: !this.data.showEditProject,
-      editProjectName: project.name,
-      editProjectObjective: project.objective,
-      editProjectMilestone: project.currentMilestone || "",
-      editProjectStatusIndex: Math.max(PROJECT_STATUSES.indexOf(project.status), 0)
-    });
-  },
-
-  onEditProjectNameInput(event) { this.setData({ editProjectName: event.detail.value }); },
-  onEditProjectObjectiveInput(event) { this.setData({ editProjectObjective: event.detail.value }); },
-  onEditProjectMilestoneInput(event) { this.setData({ editProjectMilestone: event.detail.value }); },
-  onEditProjectStatusChange(event) { this.setData({ editProjectStatusIndex: Number(event.detail.value) }); },
-
-  onEditAiIdeaInput(event) { this.setData({ editAiIdea: event.detail.value }); },
-
-  onEditProjectSuggest() {
-    const idea = this.data.editAiIdea.trim();
-    if (!idea) { wx.showToast({ title: "先写下你想怎么改", icon: "none" }); return; }
-    if (this.data.editAiLoading || !this.data.activeProject) return;
-    const { getProjectEditSuggestion } = require("../../utils/api");
-    this.setData({ editAiLoading: true });
-    wx.showLoading({ title: "正在判断怎么改..." });
-    getProjectEditSuggestion({
-      projectId: this.data.activeProjectId,
-      name: this.data.editProjectName,
-      objective: this.data.editProjectObjective,
-      currentMilestone: this.data.editProjectMilestone,
-      status: PROJECT_STATUSES[this.data.editProjectStatusIndex] || "active",
-      idea
-    })
-      .then((result) => {
-        wx.hideLoading();
-        this.setData({ editAiLoading: false, editAiSuggestion: result.suggestion });
-      })
-      .catch(() => {
-        wx.hideLoading();
-        this.setData({ editAiLoading: false });
-        wx.showToast({ title: "这次没整理出来", icon: "none" });
-      });
-  },
-
-  onApplyProjectAiSuggestion() {
-    const suggestion = this.data.editAiSuggestion;
-    if (!suggestion) return;
-    const nextStatus = suggestion.status && PROJECT_STATUSES.includes(suggestion.status)
-      ? suggestion.status
-      : PROJECT_STATUSES[this.data.editProjectStatusIndex];
-    this.setData({
-      editProjectName: suggestion.name || this.data.editProjectName,
-      editProjectObjective: suggestion.objective || this.data.editProjectObjective,
-      editProjectMilestone: suggestion.currentMilestone === undefined ? this.data.editProjectMilestone : (suggestion.currentMilestone || ""),
-      editProjectStatusIndex: Math.max(PROJECT_STATUSES.indexOf(nextStatus), 0)
-    });
-    wx.showToast({ title: "已应用建议", icon: "success" });
-  },
-
-  onSaveProject() {
-    const { updateProject } = require("../../utils/api");
-    if (this.data.showUnassigned || !this.data.activeProject) return;
-    if (!this.data.editProjectName.trim() || !this.data.editProjectObjective.trim()) {
-      wx.showToast({ title: "项目名称和目标要写清楚", icon: "none" });
-      return;
-    }
-    wx.showLoading({ title: "正在保存..." });
-    updateProject({
-      projectId: this.data.activeProjectId,
-      name: this.data.editProjectName,
-      objective: this.data.editProjectObjective,
-      currentMilestone: this.data.editProjectMilestone,
-      status: PROJECT_STATUSES[this.data.editProjectStatusIndex] || this.data.activeProject.status
-    }).then(() => {
-      wx.hideLoading();
-      wx.showToast({ title: "已保存", icon: "success" });
-      this.setData({ showEditProject: false });
-      this.loadWorkspace();
-    }).catch(() => {
-      wx.hideLoading();
-      wx.showToast({ title: "保存失败", icon: "none" });
-    });
-  },
-
-  onDeleteProject() {
-    const { deleteProject } = require("../../utils/api");
-    if (this.data.showUnassigned || !this.data.activeProjectId) return;
-    wx.showModal({
-      title: "删除项目",
-      content: "项目下的任务会保留并解除关联。确定删除？",
-      success: (result) => {
-        if (!result.confirm) return;
-        wx.showLoading({ title: "正在删除..." });
-        deleteProject(this.data.activeProjectId).then(() => {
-          wx.hideLoading();
-          wx.showToast({ title: "已删除", icon: "success" });
-          this.setData({ activeProjectId: "", activeProject: null, showEditProject: false });
-          this.loadWorkspace();
-        }).catch(() => {
-          wx.hideLoading();
-          wx.showToast({ title: "删除失败", icon: "none" });
-        });
-      }
-    });
-  },
-
-  onToggleCreateTask() {
-    this.setData({ showCreateTask: !this.data.showCreateTask });
-  },
-
-  onTaskTitleInput(event) { this.setData({ taskTitle: event.detail.value }); },
-  onTaskNotesInput(event) { this.setData({ taskNotes: event.detail.value }); },
-  onTaskDoneWhenInput(event) { this.setData({ taskDoneWhen: event.detail.value }); },
-  onTaskPriorityChange(event) { this.setData({ taskPriorityIndex: Number(event.detail.value) }); },
-  onTaskDueChange(event) { this.setData({ taskDueDate: event.detail.value }); },
-
-  onCreateTask() {
-    const { createTask } = require("../../utils/api");
-    if (!this.data.taskTitle.trim()) {
-      wx.showToast({ title: "先写任务标题", icon: "none" });
-      return;
-    }
-    if (!this.data.showUnassigned && !this.data.activeProjectId) {
-      wx.showToast({ title: "先选择项目或未关联任务", icon: "none" });
-      return;
-    }
-    wx.showLoading({ title: "正在添加..." });
-    createTask({
-      title: this.data.taskTitle,
-      notes: this.data.taskNotes,
-      doneWhen: this.data.taskDoneWhen,
-      projectId: this.data.showUnassigned ? "" : this.data.activeProjectId,
-      priority: ["low", "medium", "high", "urgent"][this.data.taskPriorityIndex] || "medium",
-      dueDate: this.data.taskDueDate
-    }).then(() => {
-      wx.hideLoading();
-      this.setData({ showCreateTask: false, taskTitle: "", taskNotes: "", taskDoneWhen: "", taskPriorityIndex: 1, taskDueDate: "" });
-      this.loadWorkspace();
-    }).catch(() => {
-      wx.hideLoading();
-      wx.showToast({ title: "任务没添加成功", icon: "none" });
-    });
-  },
-  onTaskStatusTap(event) {
-    const taskId = event.currentTarget.dataset.id;
-    const status = event.currentTarget.dataset.status;
-    if (!taskId || !status) return;
-    const { setTaskStatus } = require("../../utils/api");
-    wx.showLoading({ title: "正在同步..." });
-    setTaskStatus(taskId, status).then(() => {
-      wx.hideLoading();
-      this.loadWorkspace();
-    }).catch((error) => {
-      wx.hideLoading();
-      if (error.statusCode === 401) {
-        wx.reLaunch({ url: "/pages/login/login" });
-        return;
-      }
-      wx.showToast({ title: "状态没更新成功", icon: "none" });
-    });
+  onListModeTap(event) {
+    const mode = event.currentTarget.dataset.mode;
+    if (mode !== "type" && mode !== "time") return;
+    this.setData({ listMode: mode, expandedTaskId: "" });
   },
 
   onTaskExpandTap(event) {
     const taskId = event.currentTarget.dataset.id;
     if (!taskId) return;
-    this.setData({ expandedTaskId: this.data.expandedTaskId === taskId ? "" : taskId });
+    this.setData({
+      expandedTaskId: this.data.expandedTaskId === taskId ? "" : taskId
+    });
+  },
+
+  onTaskStatusTap(event) {
+    const taskId = event.currentTarget.dataset.id;
+    const status = event.currentTarget.dataset.status;
+    if (!taskId || !status || this.data.submittingTaskId) return;
+
+    const { setTaskStatus } = require("../../utils/api");
+    this.setData({ submittingTaskId: taskId });
+    setTaskStatus(taskId, status)
+      .then(() => {
+        this.setData({ submittingTaskId: "" });
+        this.loadWorkspace();
+      })
+      .catch((error) => {
+        this.setData({ submittingTaskId: "" });
+        if (error && error.statusCode === 401) {
+          wx.reLaunch({ url: "/pages/login/login" });
+          return;
+        }
+        wx.showToast({ title: "状态没更新成功", icon: "none" });
+      });
   },
 
   onTaskStickyTap(event) {
     const taskId = event.currentTarget.dataset.id;
     if (!taskId) return;
-    wx.navigateTo({ url: `/pages/task-edit/task-edit?id=${encodeURIComponent(taskId)}&focus=sticky` });
+    wx.navigateTo({
+      url: "/pages/task-edit/task-edit?id=" + encodeURIComponent(taskId) + "&focus=sticky"
+    });
   },
 
-  onTaskEditTap(event) {
-    const taskId = event.currentTarget.dataset.id;
-    if (!taskId) return;
-    wx.navigateTo({ url: `/pages/task-edit/task-edit?id=${encodeURIComponent(taskId)}` });
+  onProfileTap() {
+    wx.navigateTo({ url: "/pages/profile/profile" });
   },
 
-  onProfileTap() { wx.navigateTo({ url: "/pages/profile/profile" }); },
-  onToolsTap() { wx.reLaunch({ url: "/pages/tools/tools" }); },
   onTabTap(event) {
     const key = event.currentTarget.dataset.key;
-    const routes = { today: "/pages/today/today", desk: "/pages/workspace/workspace", review: "/pages/review/review" };
-    if (key === "desk" || !routes[key]) return;
-    wx.reLaunch({ url: routes[key] });
+    if (key === "desk") return;
+    if (key === "today") {
+      wx.reLaunch({ url: "/pages/today/today" });
+    }
   }
 });

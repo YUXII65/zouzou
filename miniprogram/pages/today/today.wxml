@@ -5,45 +5,28 @@
       <text class="brand-name">走走</text>
     </view>
     <view class="top-actions">
-      <view class="top-icon" bindtap="onToolsTap">▦</view>
       <view class="avatar" bindtap="onProfileTap"><image wx:if="{{userAvatar}}" src="{{userAvatar}}" mode="aspectFill"></image><text wx:else>{{userInitial}}</text></view>
     </view>
   </view>
 
   <view class="content">
-    <view class="panel date-panel">
-      <view class="date-row">
-        <view class="date-main">
-          <text class="date-number">{{dateText}}</text>
-          <text class="date-text">{{weekdayText}}</text>
-        </view>
-        <text class="clock">{{timeText}}</text>
-        <view class="date-progress">
-          <view class="progress-copy">
-            <text>今日</text>
-            <text>{{completedToday}} / {{totalToday}}，全部完成</text>
-          </view>
-          <view class="progress-track"><view class="progress-fill"></view></view>
-        </view>
-      </view>
-      <view class="streak-pill">连续 {{streak}} 天 · 近 7 天 {{weekDone}} 件</view>
-    </view>
-
     <view class="capture-card">
       <textarea
         class="capture-input"
         value="{{content}}"
         maxlength="500"
-        placeholder="今天脑子里在转什么？直接倒出来"
+        placeholder="思考与困惑，计划与执行，直接倒出你的想法"
         placeholder-class="capture-placeholder"
         bindinput="onContentInput"
       ></textarea>
-      <view class="sample-list">
-        <view class="sample-chip" wx:for="{{samples}}" wx:key="*this" data-sample="{{item}}" bindtap="onSampleTap">{{item}}</view>
-      </view>
       <view class="capture-actions">
-        <view class="refresh-button" bindtap="onRefreshSamples">↻ 换一批</view>
         <view class="next-button" bindtap="onSubmit">✦ 下一步</view>
+      </view>
+      <view class="sample-list">
+        <view class="sample-chip" wx:for="{{samples}}" wx:key="title" data-sample="{{item.content}}" bindtap="onSampleTap">{{item.title}}</view>
+      </view>
+      <view class="sample-refresh-row">
+        <view class="refresh-button" bindtap="onRefreshSamples">↻ 换一批</view>
       </view>
     </view>
 
@@ -131,7 +114,7 @@
 
     <view class="panel tasks-panel">
       <view class="panel-header">
-        <text class="panel-title">今天要做</text>
+        <text class="panel-title">今日建议</text>
         <text class="panel-count">{{tasks.length}} 条</text>
       </view>
       <view class="empty-state" wx:if="{{tasks.length === 0}}">
@@ -171,11 +154,11 @@
   <view class="bottom-nav">
     <view class="nav-item nav-item-active" data-key="today" bindtap="onTabTap">
       <text class="nav-icon">▦</text>
-      <text>日历</text>
+      <text>首页</text>
     </view>
     <view class="nav-item" data-key="desk" bindtap="onTabTap">
       <text class="nav-icon">▤</text>
-      <text>书桌</text>
+      <text>文件</text>
     </view>
   </view>
 </view>
