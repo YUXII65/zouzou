@@ -500,37 +500,3 @@
   font-size: 21rpx;
   line-height: 1.6;
 }
-
-.bottom-nav {
-  position: fixed;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  z-index: 10;
-  display: flex;
-  height: 108rpx;
-  padding-bottom: env(safe-area-inset-bottom);
-  border-top: 1rpx solid rgba(220, 232, 247, 0.9);
-  background: rgba(255, 255, 255, 0.94);
-}
-
-.nav-item {
-  display: flex;
-  flex: 1;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 3rpx;
-  color: #7e93ae;
-  font-size: 20rpx;
-}
-
-.nav-item-active {
-  color: #1e45b4;
-  font-weight: 600;
-}
-
-.nav-icon {
-  font-size: 27rpx;
-  line-height: 1;
-}

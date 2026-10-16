@@ -17,3 +17,123 @@ button::after {
   height: 100%;
   border-radius: 50%;
 }
+/* ===== 小程序全局主题：与网页端同一套深色 token ===== */
+.page.theme-dark {
+  background: linear-gradient(160deg, #10151d 0%, #151d28 100%);
+  color: #f2f5f9;
+}
+
+.page.theme-dark .panel,
+.page.theme-dark .capture-card,
+.page.theme-dark .pending-card,
+.page.theme-dark .folder-card,
+.page.theme-dark .name-card,
+.page.theme-dark .stage-card,
+.page.theme-dark .file-task-list,
+.page.theme-dark .task-switch,
+.page.theme-dark .plan-task,
+.page.theme-dark .plan-project,
+.page.theme-dark .task-detail {
+  border-color: #2d3a49;
+  background: #18212b;
+  box-shadow: 0 24rpx 60rpx rgba(0, 0, 0, 0.28);
+}
+
+.page.theme-dark .folder-card-open {
+  border-color: #3c4d60;
+  background: #1d2835;
+}
+
+.page.theme-dark .capture-card {
+  background: linear-gradient(145deg, #17273b, #18212b 52%, #12313a);
+}
+
+.page.theme-dark .capture-input,
+.page.theme-dark .clarify-supplement,
+.page.theme-dark .plan-input,
+.page.theme-dark .plan-textarea,
+.page.theme-dark .plan-picker-value,
+.page.theme-dark .name-input {
+  border-color: #2d3a49;
+  background: #202b38;
+  color: #f2f5f9;
+}
+
+.page.theme-dark .sample-chip,
+.page.theme-dark .refresh-button,
+.page.theme-dark .action-button,
+.page.theme-dark .icon-button,
+.page.theme-dark .pending-option,
+.page.theme-dark .pending-ignore {
+  border-color: #2d3a49;
+  background: #202b38;
+  color: #b4c1d0;
+}
+
+.page.theme-dark .panel-title,
+.page.theme-dark .empty-title,
+.page.theme-dark .task-title,
+.page.theme-dark .folder-name,
+.page.theme-dark .file-task-title,
+.page.theme-dark .task-detail-title,
+.page.theme-dark .name-text,
+.page.theme-dark .clarify-question,
+.page.theme-dark .pending-content,
+.page.theme-dark .track-name,
+.page.theme-dark .stage-copy {
+  color: #f2f5f9;
+}
+
+.page.theme-dark .panel-count,
+.page.theme-dark .empty-hint,
+.page.theme-dark .task-meta,
+.page.theme-dark .folder-meta,
+.page.theme-dark .task-detail-copy,
+.page.theme-dark .task-detail-standard,
+.page.theme-dark .mode-name,
+.page.theme-dark .mode-caption,
+.page.theme-dark .toolbar-item,
+.page.theme-dark .username {
+  color: #8291a3;
+}
+
+.page.theme-dark .panel-header,
+.page.theme-dark .task-row,
+.page.theme-dark .file-task + .file-task,
+.page.theme-dark .mode-grid,
+.page.theme-dark .mode-cell + .mode-cell,
+.page.theme-dark .stage-next,
+.page.theme-dark .pending-footer {
+  border-color: #2d3a49;
+}
+
+.page.theme-dark .task-detail-copy,
+.page.theme-dark .task-detail-standard {
+  border-top-color: #2d3a49;
+}
+
+.page.theme-dark .icon-button-primary,
+.page.theme-dark .next-button,
+.page.theme-dark .pending-confirm {
+  background: #6d9bff;
+  color: #10151d;
+}
+
+.page.theme-dark .mode-count-normal {
+  color: #9fd0fa;
+}
+
+.page.theme-dark .mode-count-longterm {
+  color: #aebeff;
+}
+
+.page.theme-dark .mode-count-explore {
+  color: #c9b2ff;
+}
+
+.page.theme-dark .task-tag-plan,
+.page.theme-dark .task-priority,
+.page.theme-dark .plan-reason {
+  background: #24344e;
+  color: #b4c1d0;
+}

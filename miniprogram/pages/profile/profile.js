@@ -1,42 +1,124 @@
 const AVATAR_PIXELS = 192;
 const MAX_AVATAR_CHARS = 400000;
 
+const EMPTY_COUNTS = { normal: 0, longterm: 0, explore: 0 };
+
 Page({
   data: {
+    theme: "light",
     username: "",
     displayName: "",
     avatarUrl: "",
     displayInitial: "走",
+    counts: EMPTY_COUNTS,
+    serverConnected: false,
+    editingName: false,
     saving: false
   },
 
-  onLoad() { this.loadProfile(); },
+  onShow() {
+    this.syncTheme();
+    if (this._loading || this.data.editingName || this.data.saving) return;
+    this.loadProfile();
+  },
+
+  syncTheme() {
+    const { getTheme } = require("../../utils/theme");
+    this.setData({ theme: getTheme() });
+  },
 
   loadProfile() {
-    const { getToken, getMe } = require("../../utils/api");
+    const { getToken, getProfile, setCachedUser } = require("../../utils/api");
     if (!getToken()) {
       wx.reLaunch({ url: "/pages/login/login" });
-      return;
+      return Promise.resolve();
     }
-    getMe()
+
+    this._loading = true;
+    return getProfile()
       .then((result) => {
-        const user = result.user;
+        const user = result.user || {};
+        const displayName = user.displayName || user.username || "走";
+        setCachedUser(user);
         this.setData({
           username: user.username || "",
-          displayName: user.displayName || user.username || "",
+          displayName,
           avatarUrl: user.avatarUrl || "",
-          displayInitial: (user.displayName || user.username || "走").slice(0, 1)
+          displayInitial: displayName.slice(0, 1),
+          counts: result.counts || EMPTY_COUNTS,
+          serverConnected: Boolean(result.serverConnected)
         });
       })
-      .catch(() => wx.showToast({ title: "资料没加载出来", icon: "none" }));
+      .catch((error) => {
+        if (error && error.statusCode === 401) {
+          wx.reLaunch({ url: "/pages/login/login" });
+          return;
+        }
+        wx.showToast({ title: "资料没加载出来", icon: "none" });
+      })
+      .then(() => {
+        this._loading = false;
+      });
+  },
+
+  onEditName() {
+    this.setData({ editingName: true });
+  },
+
+  onCancelEditName() {
+    const { getCachedUser } = require("../../utils/api");
+    const user = getCachedUser() || {};
+    const displayName = user.displayName || user.username || "走";
+    this.setData({
+      displayName,
+      displayInitial: displayName.slice(0, 1),
+      editingName: false
+    });
   },
 
   onNameInput(event) {
     const displayName = event.detail.value;
-    this.setData({ displayName, displayInitial: (displayName || this.data.username || "走").slice(0, 1) });
+    this.setData({
+      displayName,
+      displayInitial: (displayName || this.data.username || "走").slice(0, 1)
+    });
+  },
+
+  onSaveName() {
+    this.saveProfile({ closeEditing: true });
+  },
+
+  saveProfile(options = {}) {
+    if (this.data.saving) return Promise.resolve();
+    const { updateProfile, setCachedUser } = require("../../utils/api");
+    const displayName = (this.data.displayName || "").trim() || this.data.username || "走";
+    const avatarUrl = this.data.avatarUrl || "";
+    this.setData({ saving: true });
+
+    return updateProfile({ displayName, avatarUrl })
+      .then(() => {
+        setCachedUser({
+          username: this.data.username,
+          displayName,
+          avatarUrl
+        });
+        this.setData({
+          displayName,
+          displayInitial: displayName.slice(0, 1),
+          editingName: options.closeEditing ? false : this.data.editingName
+        });
+        wx.showToast({ title: "已保存", icon: "success" });
+      })
+      .catch(() => {
+        wx.showToast({ title: "保存失败", icon: "none" });
+      })
+      .then(() => {
+        this.setData({ saving: false });
+      });
   },
 
   onChooseAvatar() {
+    if (this.data.saving) return;
     wx.chooseImage({
       count: 1,
       sizeType: ["compressed"],
@@ -112,6 +194,7 @@ Page({
           return;
         }
         this.setData({ avatarUrl });
+        this.saveProfile({ closeEditing: false });
       },
       fail: () => {
         wx.hideLoading();
@@ -120,43 +203,20 @@ Page({
     });
   },
 
-  onResetAvatar() { this.setData({ avatarUrl: "" }); },
-
-  onSave() {
-    if (this.data.saving) return;
-    const { updateProfile, setCachedUser } = require("../../utils/api");
-    this.setData({ saving: true });
-    wx.showLoading({ title: "正在保存..." });
-    updateProfile({
-      displayName: this.data.displayName.trim(),
-      avatarUrl: this.data.avatarUrl
-    })
-      .then(() => {
-        wx.hideLoading();
-        setCachedUser({
-          username: this.data.username,
-          displayName: this.data.displayName.trim(),
-          avatarUrl: this.data.avatarUrl
-        });
-        this.setData({ saving: false });
-        wx.showToast({ title: "已保存", icon: "success" });
-      })
-      .catch(() => {
-        wx.hideLoading();
-        this.setData({ saving: false });
-        wx.showToast({ title: "保存失败", icon: "none" });
-      });
+  onThemeTap() {
+    const { toggleTheme } = require("../../utils/theme");
+    this.setData({ theme: toggleTheme() });
   },
 
-  onTabTap(event) {
-    const key = event.currentTarget.dataset.key;
-    if (key === "today") {
-      wx.reLaunch({ url: "/pages/today/today" });
-      return;
-    }
-    if (key === "desk") {
-      wx.reLaunch({ url: "/pages/workspace/workspace" });
-    }
+  onApiSettings() {
+    wx.showModal({
+      title: "API 连接",
+      content: this.data.serverConnected
+        ? "服务端已连接，小程序无需在本机配置 Key。"
+        : "当前使用本地规则。请到网页版个人页检查 API 连接。",
+      showCancel: false,
+      confirmText: "知道了"
+    });
   },
 
   onLogout() {

@@ -312,6 +312,10 @@ function deleteStickyNote(noteId) {
   });
 }
 
+function getProfile() {
+  return request("/api/miniprogram/profile");
+}
+
 function updateProfile(data) {
   return request("/api/miniprogram/profile/update", {
     method: "POST",
@@ -401,6 +405,7 @@ module.exports = {
   saveReview,
   sendReviewFeedback,
   getWorkspace,
+  getProfile,
   createProject,
   updateProject,
   deleteProject,

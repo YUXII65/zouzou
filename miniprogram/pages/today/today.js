@@ -71,6 +71,7 @@ function normalizeDimensions(clarification) {
 
 Page({
   data: {
+    theme: "light",
     userAvatar: "",
     userInitial: "走",
     content: "",
@@ -89,6 +90,11 @@ Page({
     this._todayCacheRestored = false;
   },
 
+  syncTheme() {
+    const { getTheme } = require("../../utils/theme");
+    this.setData({ theme: getTheme() });
+  },
+
   syncUserHeader() {
     const { getCachedUser } = require("../../utils/api");
     const user = getCachedUser();
@@ -99,6 +105,7 @@ Page({
     });
   },
   onShow() {
+    this.syncTheme();
     this.syncUserHeader();
     this.restoreTodayCache();
     this.loadToday();
@@ -526,15 +533,4 @@ Page({
   onProfileTap() { wx.navigateTo({ url: "/pages/profile/profile" }); },
 
 
-  onTabTap(event) {
-    const key = event.currentTarget.dataset.key;
-    const routes = {
-      today: "/pages/today/today",
-      desk: "/pages/workspace/workspace",
-      profile: "/pages/profile/profile",
-      review: "/pages/review/review"
-    };
-    if (key === "today" || !routes[key]) return;
-    wx.reLaunch({ url: routes[key] });
-  }
 });

@@ -92,7 +92,7 @@
   </view>
 </template>
 
-<view class="page">
+<view class="page theme-{{theme}}">
   <view class="content">
     <view class="list-toolbar" wx:if="{{projectsByTime.length}}">
       <text class="toolbar-item {{listMode === 'type' ? 'toolbar-item-active' : ''}}" data-mode="type" bindtap="onListModeTap">按类型</text>
@@ -126,18 +126,5 @@
     </view>
   </view>
 
-  <view class="bottom-nav">
-    <view class="nav-item" data-key="today" bindtap="onTabTap">
-      <text class="nav-icon">▦</text>
-      <text>首页</text>
-    </view>
-    <view class="nav-item nav-item-active" data-key="desk" bindtap="onTabTap">
-      <text class="nav-icon">▤</text>
-      <text>文件</text>
-    </view>
-    <view class="nav-item" data-key="profile" bindtap="onTabTap">
-      <text class="nav-icon">◉</text>
-      <text>个人</text>
-    </view>
-  </view>
+  <bottom-nav active="desk" theme="{{theme}}"></bottom-nav>
 </view>

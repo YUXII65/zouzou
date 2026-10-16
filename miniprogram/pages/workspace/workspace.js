@@ -130,6 +130,7 @@ function decorateUnassociated(tasks) {
 
 Page({
   data: {
+    theme: "light",
     userAvatar: "",
     userInitial: "走",
     groups: [],
@@ -148,8 +149,14 @@ Page({
   },
 
   onShow() {
+    this.syncTheme();
     this.syncUserHeader();
     this.loadWorkspace();
+  },
+
+  syncTheme() {
+    const { getTheme } = require("../../utils/theme");
+    this.setData({ theme: getTheme() });
   },
 
   syncUserHeader() {
@@ -277,15 +284,4 @@ Page({
     wx.navigateTo({ url: "/pages/profile/profile" });
   },
 
-  onTabTap(event) {
-    const key = event.currentTarget.dataset.key;
-    if (key === "desk") return;
-    if (key === "today") {
-      wx.reLaunch({ url: "/pages/today/today" });
-      return;
-    }
-    if (key === "profile") {
-      wx.reLaunch({ url: "/pages/profile/profile" });
-    }
-  }
 });

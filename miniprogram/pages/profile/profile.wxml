@@ -1,31 +1,80 @@
-<view class="page">
+<view class="page theme-{{theme}}">
   <canvas type="2d" id="avatar-canvas" class="avatar-canvas"></canvas>
 
-  <view class="profile-card">
-    <view class="avatar" bindtap="onChooseAvatar">
-      <image wx:if="{{avatarUrl}}" src="{{avatarUrl}}" mode="aspectFill"></image>
-      <text wx:else>{{displayInitial}}</text>
+  <view class="content">
+    <view class="name-card">
+      <view class="card-head">
+        <view class="avatar" bindtap="onChooseAvatar">
+          <image wx:if="{{avatarUrl}}" src="{{avatarUrl}}" mode="aspectFill"></image>
+          <text wx:else>{{displayInitial}}</text>
+        </view>
+
+        <view class="name-main">
+          <input
+            wx:if="{{editingName}}"
+            class="name-input"
+            value="{{displayName}}"
+            maxlength="24"
+            focus="{{editingName}}"
+            confirm-type="done"
+            bindinput="onNameInput"
+            bindconfirm="onSaveName"
+          />
+          <text wx:else class="name-text">{{displayName}}</text>
+        </view>
+
+        <view class="name-actions">
+          <block wx:if="{{editingName}}">
+            <view class="icon-button" bindtap="onCancelEditName">×</view>
+            <view class="icon-button icon-button-primary" bindtap="onSaveName">{{saving ? '…' : '✓'}}</view>
+          </block>
+          <view wx:else class="icon-button" bindtap="onEditName">✎</view>
+        </view>
+      </view>
+
+      <view class="mode-grid">
+        <view class="mode-cell">
+          <view class="mode-head">
+            <view class="mode-dot mode-dot-normal"></view>
+            <text class="mode-name">普通</text>
+          </view>
+          <text class="mode-count mode-count-normal">{{counts.normal}}</text>
+          <text class="mode-caption">推进中</text>
+        </view>
+        <view class="mode-cell">
+          <view class="mode-head">
+            <view class="mode-dot mode-dot-longterm"></view>
+            <text class="mode-name">长期</text>
+          </view>
+          <text class="mode-count mode-count-longterm">{{counts.longterm}}</text>
+          <text class="mode-caption">推进中</text>
+        </view>
+        <view class="mode-cell">
+          <view class="mode-head">
+            <view class="mode-dot mode-dot-explore"></view>
+            <text class="mode-name">探索</text>
+          </view>
+          <text class="mode-count mode-count-explore">{{counts.explore}}</text>
+          <text class="mode-caption">推进中</text>
+        </view>
+      </view>
     </view>
-    <text class="username">@{{username}}</text>
-    <view class="reset-avatar" wx:if="{{avatarUrl}}" bindtap="onResetAvatar">恢复默认头像</view>
-    <text class="label">昵称</text>
-    <input class="input" value="{{displayName}}" maxlength="20" placeholder="输入昵称" bindinput="onNameInput" />
-    <view class="save-button {{saving ? 'save-button-disabled' : ''}}" bindtap="onSave">{{saving ? '保存中...' : '保存资料'}}</view>
-    <view class="logout-button" bindtap="onLogout">退出登录</view>
+
+    <view class="action-grid">
+      <view class="action-button" bindtap="onThemeTap">
+        <text class="action-icon">{{theme === 'dark' ? '☀' : '☾'}}</text>
+        <text>{{theme === 'dark' ? '日间模式' : '夜间模式'}}</text>
+      </view>
+      <view class="action-button" bindtap="onApiSettings">
+        <text class="action-icon">◇</text>
+        <text>API 连接</text>
+      </view>
+      <view class="action-button" bindtap="onLogout">
+        <text class="action-icon">↪</text>
+        <text>退出登录</text>
+      </view>
+    </view>
   </view>
 
-  <view class="bottom-nav">
-    <view class="nav-item" data-key="today" bindtap="onTabTap">
-      <text class="nav-icon">▦</text>
-      <text>首页</text>
-    </view>
-    <view class="nav-item" data-key="desk" bindtap="onTabTap">
-      <text class="nav-icon">▤</text>
-      <text>文件</text>
-    </view>
-    <view class="nav-item nav-item-active" data-key="profile" bindtap="onTabTap">
-      <text class="nav-icon">◉</text>
-      <text>个人</text>
-    </view>
-  </view>
+  <bottom-nav active="profile" theme="{{theme}}"></bottom-nav>
 </view>
