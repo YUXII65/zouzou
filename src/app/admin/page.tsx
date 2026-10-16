@@ -223,13 +223,22 @@ export default async function AdminPage() {
         title="使用情况"
         description="仅供创建者查看的关键指标和用户漏斗"
         action={
-          <Link
-            href="/"
-            className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-border bg-surface px-3 text-sm font-medium text-ink-secondary transition-colors hover:border-accent hover:text-accent"
-          >
-            <ArrowLeft className="size-4" />
-            返回走走
-          </Link>
+          <div className="flex flex-wrap gap-2">
+            <Link
+              href="/admin/projects"
+              className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-accent px-3 text-sm font-medium text-white transition-colors hover:bg-accent-strong"
+            >
+              <FolderKanban className="size-4" />
+              项目数据
+            </Link>
+            <Link
+              href="/"
+              className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-border bg-surface px-3 text-sm font-medium text-ink-secondary transition-colors hover:border-accent hover:text-accent"
+            >
+              <ArrowLeft className="size-4" />
+              返回走走
+            </Link>
+          </div>
         }
       />
 
