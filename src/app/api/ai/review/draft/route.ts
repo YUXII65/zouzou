@@ -40,7 +40,7 @@ export async function POST(request: Request) {
   return createNdjsonResponse(async (send) => {
     send({
       type: "preview",
-      text: body.projectId ? "正在回看这个项目的进展..." : "正在回看这一天的任务...",
+      text: body.projectId ? "正在回看这个项目的进展…" : "正在回看这段时间…",
     });
     let raw = "";
     let lastPreview = "";

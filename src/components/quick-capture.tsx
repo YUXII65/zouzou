@@ -24,10 +24,10 @@ type CaptureResult = {
 };
 
 const CAPTURE_WAITING_LABELS = [
-  "正在读你的原话...",
-  "正在找最关键的问题...",
-  "正在把选项写具体...",
-  "快整理好了...",
+  "我在听，先别急着整理…",
+  "正在找最关键的那一点…",
+  "正在把选项写得更好选…",
+  "快问清楚了…",
 ];
 
 export function QuickCapture({

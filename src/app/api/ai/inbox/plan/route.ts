@@ -49,7 +49,7 @@ export async function POST(request: Request) {
     : [];
 
   return createNdjsonResponse(async (send) => {
-    send({ type: "preview", text: "正在把你的选择收成具体任务..." });
+    send({ type: "preview", text: "正在把你的回答收成能开始的第一步…" });
     let raw = "";
     let lastPreview = "";
     const plan = await createInboxPlan({

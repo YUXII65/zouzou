@@ -97,7 +97,7 @@ Page({
 
   onGenerateSticky() {
     const { createStickyNote } = require("../../utils/api");
-    wx.showLoading({ title: "正在写便利贴..." });
+    wx.showLoading({ title: "正在看任务" });
     createStickyNote(this.data.taskId, this.data.stickyMessage)
       .then(() => {
         markDataChanged(["today", "workspace"]);

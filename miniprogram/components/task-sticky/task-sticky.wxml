@@ -1,7 +1,7 @@
 <view class="sticky-inline">
   <view class="sticky-loading" wx:if="{{loading}}">
     <text class="sticky-spinner">◌</text>
-    <text>正在写能直接开始的步骤...</text>
+    <text>正在写成能直接开始的步骤…</text>
   </view>
 
   <block wx:elif="{{displayNotes.length}}">

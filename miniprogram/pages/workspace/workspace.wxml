@@ -75,7 +75,7 @@
             wx:if="{{project.stage.canAdvance}}"
             data-id="{{project.stage.id}}"
             catchtap="onAdvanceStage"
-          >→ {{submittingStageId === project.stage.id ? '正在进入...' : '进入下一阶段'}}</view>
+          >→ {{submittingStageId === project.stage.id ? '正在进入…' : '进入下一阶段'}}</view>
         </view>
       </block>
 

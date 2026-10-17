@@ -47,8 +47,12 @@ type Turn = {
 };
 
 const TYPING_MS = 600;
-const CLARIFY_WAITING_LABELS = ["正在想下一个问题...", "快好了..."];
-const PLAN_WAITING_LABELS = ["正在整理...", "快好了..."];
+const CLARIFY_WAITING_LABELS = ["正在想下一个问题…", "再确认一点就够…"];
+const PLAN_WAITING_LABELS = [
+  "正在收成能开始的第一步…",
+  "正在排先后顺序…",
+  "快整理好了…",
+];
 
 function initialAnswers(history: InboxClarificationHistoryItem[]) {
   return history

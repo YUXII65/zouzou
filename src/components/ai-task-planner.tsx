@@ -97,7 +97,7 @@ export function AiTaskPlanner({
                       <div className="rounded-xl rounded-tl-sm border border-border/70 bg-surface px-3 py-2.5 text-sm leading-6 text-ink">
                         <span className="flex items-center gap-2 text-ink-muted">
                           <Loader2 className="size-3.5 shrink-0 animate-spin text-accent/70" />
-                          <span>正在读你的原话...</span>
+                          <span>我在听，先别急着整理…</span>
                         </span>
                       </div>
                     </div>

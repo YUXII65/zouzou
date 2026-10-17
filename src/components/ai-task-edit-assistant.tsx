@@ -11,9 +11,9 @@ import { TypewriterText } from "@/components/typewriter-text";
 import type { TaskEditSuggestion } from "@/lib/ai";
 
 const WAITING_LABELS = [
-  "正在读你对任务的补充...",
-  "正在判断哪里需要改...",
-  "正在写修改建议...",
+  "正在理解你想改什么…",
+  "正在判断哪里需要动…",
+  "正在写修改建议…",
 ];
 
 const inputClass =

@@ -8,10 +8,10 @@ import { useRotatingText } from "@/components/rotating-text";
 import { consumeAiStream } from "@/lib/ai-stream-client";
 
 const WAITING_LABELS = [
-  "正在回看这一天的任务...",
-  "正在分清完成和卡点...",
-  "正在写明天的方向...",
-  "快写好了...",
+  "正在回看这段时间…",
+  "正在分清做成了什么、卡在哪里…",
+  "正在想下一步怎么走…",
+  "快写好了…",
 ];
 
 type ReviewDraftResult = {

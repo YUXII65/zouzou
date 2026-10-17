@@ -238,7 +238,7 @@ Page({
               ? "需要补充"
               : clarifyStatus === "done"
                 ? "信息够了"
-                : "正在梳理...";
+                : "正在理解…";
 
         const turns = buildClarifyTurns(clarification, item.content);
         const question = clarifyStatus === "done" ? null : currentClarifyQuestion(turns);
@@ -370,7 +370,7 @@ Page({
     }
 
     const { clarifyIdea } = require("../../utils/api");
-    wx.showLoading({ title: "正在读你的原话..." });
+    wx.showLoading({ title: "正在听你说" });
     clarifyIdea(content)
       .then((response) => {
         if (!canShowCaptureClarification(response)) {
@@ -452,7 +452,7 @@ Page({
     if (!item || this.data.submittingClarifyId) return;
     const { advanceClarify, planInbox } = require("../../utils/api");
     this.setData({ submittingClarifyId: item.id });
-    wx.showLoading({ title: "正在想下一个问题..." });
+    wx.showLoading({ title: "正在想下一问" });
     const next = item.clarifyMode === "socratic"
       ? advanceClarify(item.id, answer, item.questionKey)
       : Promise.resolve(null);
@@ -494,7 +494,7 @@ Page({
           [`pendingItems[${itemIndex}].directInput`]: false,
           [`pendingItems[${itemIndex}].action`]: "信息够了",
         });
-        wx.showLoading({ title: "正在整理下一步..." });
+        wx.showLoading({ title: "正在整理下一步" });
         return planInbox({
           itemId: item.id,
           option: answer.join("、"),
@@ -535,7 +535,7 @@ Page({
     if (!item || this.data.submittingClarifyId) return;
     const { planInbox } = require("../../utils/api");
     this.setData({ submittingClarifyId: item.id });
-    wx.showLoading({ title: "正在整理下一步..." });
+    wx.showLoading({ title: "正在整理下一步" });
     planInbox({ itemId: item.id })
       .then((planResult) => {
         if (!isUsableInboxPlan(planResult)) {
@@ -566,7 +566,7 @@ Page({
     if (!item || this.data.submittingPlanId) return;
 
     this.setData({ submittingPlanId: item.id });
-    wx.showLoading({ title: "正在整理..." });
+    wx.showLoading({ title: "正在收好" });
     this.finishResolvedPlan(item.id, null)
       .then((result) => {
         markDataChanged(["today", "workspace", "profile"]);
@@ -596,7 +596,7 @@ Page({
     if (!taskId || !status) return;
 
     const { setTaskStatus } = require("../../utils/api");
-    wx.showLoading({ title: "正在同步..." });
+    wx.showLoading({ title: "正在同步" });
     setTaskStatus(taskId, status)
       .then(() => {
         markDataChanged(["today", "workspace", "profile"]);

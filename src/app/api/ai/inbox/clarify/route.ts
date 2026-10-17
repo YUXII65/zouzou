@@ -50,7 +50,7 @@ export async function POST(request: Request) {
     }
 
     return createNdjsonResponse(async (send) => {
-      send({ type: "preview", text: "正在顺着你的回答往下判断..." });
+      send({ type: "preview", text: "正在顺着你的回答往下想…" });
       let raw = "";
       let lastPreview = "";
       const result = await advanceSocraticInboxClarification({
@@ -82,7 +82,7 @@ export async function POST(request: Request) {
   }
 
   return createNdjsonResponse(async (send) => {
-    send({ type: "preview", text: "正在读你的原话..." });
+    send({ type: "preview", text: "我在听，先别急着整理…" });
     let raw = "";
     let lastPreview = "";
     const onDelta = (delta: string) => {

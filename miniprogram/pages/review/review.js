@@ -123,7 +123,7 @@ Page({
 
   onGenerate() {
     const { generateReviewDraft } = require("../../utils/api");
-    wx.showLoading({ title: "正在回看..." });
+    wx.showLoading({ title: "正在回看" });
     generateReviewDraft(this.data.date)
       .then(() => {
         markDataChanged(["workspace"]);

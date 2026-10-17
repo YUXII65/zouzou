@@ -101,7 +101,7 @@
           data-item-index="{{itemIndex}}"
           bindtap="onGeneratePlan"
         >
-          {{submittingClarifyId === pending.id ? '正在整理...' : '信息够了，给我下一步'}}
+          {{submittingClarifyId === pending.id ? '正在整理下一步…' : '信息够了，给我下一步'}}
         </view>
 
         <view class="pending-plan" wx:if="{{pending.isAnswer}}">
@@ -110,7 +110,7 @@
             <text>{{pending.directAnswer}}</text>
           </view>
           <view class="pending-confirm {{submittingPlanId ? 'pending-confirm-disabled' : ''}}" data-item-index="{{itemIndex}}" bindtap="onConfirmPlan">
-            {{submittingPlanId === pending.id ? '正在收下...' : '收下回答'}}
+            {{submittingPlanId === pending.id ? '正在收好…' : '收下回答'}}
           </view>
         </view>
 
@@ -120,7 +120,7 @@
             <text>{{pending.reason}}</text>
           </view>
           <view class="pending-confirm {{submittingPlanId ? 'pending-confirm-disabled' : ''}}" data-item-index="{{itemIndex}}" bindtap="onConfirmPlan">
-            {{submittingPlanId === pending.id ? '正在整理...' : '放入文件页'}}
+            {{submittingPlanId === pending.id ? '正在收好…' : '放入文件页'}}
           </view>
         </view>
 

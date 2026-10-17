@@ -10,10 +10,10 @@ import { normalizeStickySteps, type TaskStickyNoteData } from "@/lib/task-sticky
 const DEFAULT_MESSAGE =
   "这个任务我还没有头绪，请给我一个能直接开始的行动方案";
 const WAITING_LABELS = [
-  "正在看这项任务...",
-  "正在找能立刻开始的动作...",
-  "正在写具体步骤...",
-  "快写好了...",
+  "正在看这项任务…",
+  "正在找一个马上能做的动作…",
+  "正在写成具体步骤…",
+  "快写好了…",
 ];
 
 /**

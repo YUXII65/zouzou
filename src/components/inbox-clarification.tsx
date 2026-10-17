@@ -219,7 +219,7 @@ export function InboxClarification({
       {finalizing ? (
         <div className="flex items-center gap-2 px-1 pt-1 text-sm text-ink-muted">
           <Loader2 className="size-4 shrink-0 animate-spin text-accent/70" />
-          <span>正在整理到文件页...</span>
+          <span>正在收成下一步…</span>
         </div>
       ) : null}
 

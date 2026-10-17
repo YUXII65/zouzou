@@ -40,9 +40,9 @@ const steps = [
 const inputClass =
   "zouzou-input w-full rounded-lg px-3.5 py-3 text-[15px] leading-7 text-ink";
 const UNDERSTANDING_LABELS = [
-  "正在理解你...",
-  "正在找你最在意的问题...",
-  "正在准备几个选项...",
+  "我在听，先别急着整理…",
+  "正在找最关键的那一点…",
+  "正在把选项写得更好选…",
 ];
 
 export function FirstRunGuide({
