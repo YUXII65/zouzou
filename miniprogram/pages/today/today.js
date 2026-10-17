@@ -509,11 +509,26 @@ Page({
     const item = this.data.pendingItems[itemIndex];
     if (!item || this.data.submittingClarifyId) return;
     const { advanceClarify, planInbox } = require("../../utils/api");
+    this._clarifyRollback = {
+      itemIndex,
+      turns: item.turns || [],
+      options: item.options || [],
+      multi: Boolean(item.multi),
+      questionKey: item.questionKey || "",
+      clarifyStatus: item.clarifyStatus || "asking"
+    };
+    const optimisticTurns = [
+      ...(item.turns || []),
+      { role: "user", text: answer.join("、") }
+    ];
     this.setData({
       submittingClarifyId: item.id,
+      [`pendingItems[${itemIndex}].turns`]: optimisticTurns,
       [`pendingItems[${itemIndex}].isThinking`]: true,
       [`pendingItems[${itemIndex}].thinkingText`]: "正在思考中",
       [`pendingItems[${itemIndex}].options`]: [],
+      [`pendingItems[${itemIndex}].multi`]: false,
+      [`pendingItems[${itemIndex}].typed`]: "",
       [`pendingItems[${itemIndex}].directInput`]: false
     });
     this.startInlineWaiting("clarify", itemIndex);
@@ -535,6 +550,7 @@ Page({
         if (clarification && clarification.status !== "done") {
           const question = currentClarifyQuestion(turns);
           const askingOptions = question && Array.isArray(question.options) ? question.options : [];
+          this._clarifyRollback = null;
           this.setData({
             [`pendingItems[${itemIndex}].turns`]: turns,
             [`pendingItems[${itemIndex}].options`]: askingOptions.map((label) => ({ label, selected: false })),
@@ -570,6 +586,7 @@ Page({
       })
       .then((planResult) => {
         if (!planResult) return null;
+        this._clarifyRollback = null;
         if (!isUsableInboxPlan(planResult)) {
           this.stopInlineWaiting();
           this.setData({
@@ -585,9 +602,20 @@ Page({
       })
       .catch((error) => {
         this.stopInlineWaiting();
+        const rollback = this._clarifyRollback;
+        this._clarifyRollback = null;
+        const restoreOptions = this.data.pendingItems[itemIndex] &&
+          this.data.pendingItems[itemIndex].clarifyStatus === "asking" &&
+          rollback && rollback.itemIndex === itemIndex;
         this.setData({
           submittingClarifyId: "",
-          [`pendingItems[${itemIndex}].isThinking`]: false
+          [`pendingItems[${itemIndex}].isThinking`]: false,
+          ...(restoreOptions ? {
+            [`pendingItems[${itemIndex}].turns`]: rollback.turns,
+            [`pendingItems[${itemIndex}].options`]: rollback.options,
+            [`pendingItems[${itemIndex}].multi`]: rollback.multi,
+            [`pendingItems[${itemIndex}].questionKey`]: rollback.questionKey
+          } : {})
         });
         if (error.statusCode === 401) {
           wx.reLaunch({ url: "/pages/login/login" });
@@ -600,6 +628,7 @@ Page({
   completePendingItem(itemIndex) {
     const item = this.data.pendingItems[itemIndex];
     if (!item) return;
+    this._clarifyRollback = null;
     this.stopInlineWaiting();
     this.setData({
       submittingClarifyId: "",
