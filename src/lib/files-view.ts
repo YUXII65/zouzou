@@ -2,6 +2,7 @@ import type { ProjectStatus } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { parseStagePreview, type StagePreview } from "@/lib/project-progress-types";
 import { buildTaskContract } from "@/lib/task-contract";
+import { repairUnassignedInboxProjects } from "@/lib/inbox-project";
 import {
   normalizeStickySteps,
   serializeTaskStickyNote,
@@ -87,6 +88,9 @@ function serializeStickyNotes(
 export async function buildFilesView(input: {
   userId: string;
 }): Promise<FilesView> {
+  // 两端共用：确认计划时可能先生成任务，但项目创建失败或旧包没建项目。
+  // 文件页展示前统一把带 inboxItemId 的未关联任务补进项目，避免只在小程序出现“散落任务”。
+  await repairUnassignedInboxProjects(input.userId);
   const [projects, tasks] = await Promise.all([
     prisma.project.findMany({
       where: { userId: input.userId },

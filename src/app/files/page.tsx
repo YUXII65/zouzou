@@ -20,7 +20,6 @@ import { prisma } from "@/lib/prisma";
 import { getCurrentUser, readSessionUserId } from "@/lib/auth";
 import { getFirstRunState } from "@/lib/first-run";
 import { buildFilesView } from "@/lib/files-view";
-import { repairUnassignedInboxProjects } from "@/lib/inbox-project";
 import { toDateInputValue } from "@/lib/date";
 
 export const metadata = {
@@ -43,10 +42,7 @@ export default async function FilesPage({
   // 新手状态只读、repair 是写：两者互不依赖可以并发。
   // repair 必须在读项目/任务之前完成，否则可能读到归属改到一半的数据。
   const userPromise = getCurrentUser();
-  const [firstRun] = await Promise.all([
-    getFirstRunState(userId),
-    repairUnassignedInboxProjects(userId),
-  ]);
+  const firstRun = await getFirstRunState(userId);
   const user = await userPromise;
   if (!user) redirect("/login");
   const projectParam =
