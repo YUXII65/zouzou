@@ -21,7 +21,6 @@ export function LogoutButton({
           type="button"
           onClick={() => setConfirming(true)}
           aria-label="退出登录"
-          title="退出登录"
           aria-haspopup="dialog"
           className={className}
         >

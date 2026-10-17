@@ -158,7 +158,6 @@ export function AnchoredHint({
             type="button"
             onClick={onDismiss}
             aria-label="关闭引导"
-            title="关闭引导"
             className="flex size-6 shrink-0 items-center justify-center rounded-md text-ink-muted transition-colors hover:bg-surface-muted hover:text-ink"
           >
             <X className="size-3.5" />

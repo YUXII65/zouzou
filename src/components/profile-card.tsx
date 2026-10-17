@@ -120,7 +120,6 @@ export function ProfileNameCard({
           type="button"
           onClick={() => fileRef.current?.click()}
           aria-label="更换头像"
-          title="更换头像"
           className="group relative flex size-16 shrink-0 items-center justify-center overflow-hidden rounded-full bg-accent-soft text-xl font-semibold text-accent-strong"
         >
           {avatar ? (
@@ -190,7 +189,6 @@ export function ProfileNameCard({
               type="button"
               onClick={() => setEditingName(true)}
               aria-label="修改昵称"
-              title="修改昵称"
               className="flex size-8 items-center justify-center rounded-lg text-ink-muted transition-colors hover:bg-surface-muted hover:text-ink"
             >
               <Pencil className="size-3.5" />

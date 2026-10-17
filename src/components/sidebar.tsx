@@ -37,7 +37,6 @@ export function Sidebar({ isAdmin = false }: { isAdmin?: boolean }) {
           <Link
             href="/admin"
             aria-label="使用情况"
-            title="使用情况"
             className="zouzou-icon-button flex size-9 items-center justify-center rounded-lg text-ink-muted transition-colors hover:bg-surface-hover hover:text-ink"
           >
             <BarChart3 className="size-[18px]" />
@@ -68,7 +67,6 @@ export function Sidebar({ isAdmin = false }: { isAdmin?: boolean }) {
                 prefetch
                 data-tour={item.href === "/" ? "home-nav" : undefined}
                 aria-label={item.label}
-                title={item.label}
                 aria-current={active ? "page" : undefined}
                 className={cx(
                   "relative flex size-10 items-center justify-center rounded-lg transition-colors",
@@ -87,7 +85,6 @@ export function Sidebar({ isAdmin = false }: { isAdmin?: boolean }) {
           <Link
             href="/admin"
             aria-label="使用情况"
-            title="使用情况"
             className="zouzou-icon-button flex size-10 items-center justify-center rounded-lg text-ink-muted transition-colors hover:bg-surface-hover hover:text-ink"
           >
             <BarChart3 className="size-[18px]" />

@@ -34,7 +34,6 @@ export function GuestStartButton({ className }: { className?: string }) {
                 type="button"
                 onClick={() => setConfirming(false)}
                 aria-label="关闭"
-                title="关闭"
                 className="flex size-7 items-center justify-center rounded-md text-ink-muted transition-colors hover:bg-surface-muted hover:text-ink"
               >
                 <X className="size-3.5" />

@@ -202,7 +202,6 @@ export function QuickCapture({
           type="button"
           onClick={refreshSamples}
           aria-label="换一批示例想法"
-          title="换一批示例想法"
           className="inline-flex h-8 items-center justify-center gap-1.5 rounded-lg px-2.5 text-xs font-medium text-ink-muted transition-colors hover:bg-surface hover:text-accent-strong"
         >
           <RefreshCw className="size-3.5" />

@@ -97,7 +97,6 @@ export function TodayTaskActions({
       data-tour="task-next"
       onClick={() => void cycle()}
       disabled={updating || locked}
-      title={locked ? "已完成，不能再改" : "点一下切换：待办 → 进行 → 完成"}
       aria-label={
         locked
           ? `任务状态：${LABELS[current] ?? current}，已完成`

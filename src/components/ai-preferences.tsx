@@ -208,7 +208,6 @@ export function AiPreferences() {
               type="button"
               onClick={dismissHint}
               aria-label="关闭提示"
-              title="关闭提示"
               className="flex size-6 shrink-0 items-center justify-center rounded-md text-ink-muted transition-colors hover:bg-surface-muted hover:text-ink"
             >
               <X className="size-3.5" />

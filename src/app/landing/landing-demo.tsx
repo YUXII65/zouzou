@@ -522,7 +522,6 @@ export function LandingDemo() {
           type="button"
           onClick={refreshDemo}
           aria-label="随机换一个演示"
-          title="随机换一个演示"
           className="absolute bottom-2 right-2 z-10 inline-flex h-11 items-center gap-2 rounded-full border border-accent/20 bg-surface px-4 text-sm font-medium text-accent-strong shadow-pop transition-colors hover:bg-accent-soft sm:bottom-3 sm:right-3"
         >
           <RefreshCw className="size-4" />
