@@ -113,6 +113,12 @@ function currentClarifyQuestion(turns) {
 
 const { getContentTop } = require("../../utils/layout");
 
+const INLINE_WAITING_MESSAGES = {
+  capture: ["正在读你的话", "正在理解你"],
+  clarify: ["正在思考中", "正在补充信息"],
+  finalizing: ["正在确认情况", "正在整理信息"]
+};
+
 Page({
   data: {
     theme: "light",
@@ -120,6 +126,9 @@ Page({
     userAvatar: "",
     userInitial: "走",
     content: "",
+    captureLoading: false,
+    pendingCaptureContent: "",
+    captureWaitingText: "",
     samples: sampleIdeasForDate(3),
     priorityLabels: PRIORITY_OPTIONS.map((item) => item.label),
     pendingItems: [],
@@ -137,6 +146,43 @@ Page({
     this._lastLoadAt = 0;
     this._loadingToday = null;
     this._onboardingChecked = false;
+    this._waitingTimer = null;
+  },
+
+  onHide() {
+    this.stopInlineWaiting();
+  },
+
+  onUnload() {
+    this.stopInlineWaiting();
+  },
+
+  startInlineWaiting(kind, itemIndex) {
+    this.stopInlineWaiting();
+    const messages = INLINE_WAITING_MESSAGES[kind] || [];
+    if (!messages.length) return;
+    let index = 0;
+    const apply = (text) => {
+      if (kind === "capture") {
+        this.setData({ captureWaitingText: text });
+        return;
+      }
+      if (Number.isInteger(itemIndex) && itemIndex >= 0) {
+        this.setData({ [`pendingItems[${itemIndex}].thinkingText`]: text });
+      }
+    };
+    apply(messages[0]);
+    this._waitingTimer = setInterval(() => {
+      index = (index + 1) % messages.length;
+      apply(messages[index]);
+    }, 1200);
+  },
+
+  stopInlineWaiting() {
+    if (this._waitingTimer) {
+      clearInterval(this._waitingTimer);
+      this._waitingTimer = null;
+    }
   },
 
   syncTheme() {
@@ -364,25 +410,37 @@ Page({
 
   onSubmit() {
     const content = this.data.content.trim();
-    if (!content) {
-      wx.showToast({ title: "先写一句想法", icon: "none" });
+    if (!content || this.data.captureLoading) {
+      if (!content) wx.showToast({ title: "先写一句想法", icon: "none" });
       return;
     }
 
     const { clarifyIdea } = require("../../utils/api");
-    wx.showLoading({ title: "正在听你说" });
+    this.setData({
+      captureLoading: true,
+      pendingCaptureContent: content,
+      captureWaitingText: "正在读你的话"
+    });
+    this.startInlineWaiting("capture");
     clarifyIdea(content)
       .then((response) => {
         if (!canShowCaptureClarification(response)) {
           throw new Error("missing_clarification");
         }
-        this.setData({ content: "" });
-        wx.hideLoading();
-        wx.showToast({ title: "先回答一个问题", icon: "none" });
-        this.loadToday();
+        return this.loadToday();
+      })
+      .then(() => {
+        this.stopInlineWaiting();
+        this.setData({
+          content: "",
+          captureLoading: false,
+          pendingCaptureContent: "",
+          captureWaitingText: ""
+        });
       })
       .catch((error) => {
-        wx.hideLoading();
+        this.stopInlineWaiting();
+        this.setData({ captureLoading: false, pendingCaptureContent: "", captureWaitingText: "" });
         if (error.statusCode === 401) {
           wx.reLaunch({ url: "/pages/login/login" });
           return;
@@ -451,8 +509,14 @@ Page({
     const item = this.data.pendingItems[itemIndex];
     if (!item || this.data.submittingClarifyId) return;
     const { advanceClarify, planInbox } = require("../../utils/api");
-    this.setData({ submittingClarifyId: item.id });
-    wx.showLoading({ title: "正在想下一问" });
+    this.setData({
+      submittingClarifyId: item.id,
+      [`pendingItems[${itemIndex}].isThinking`]: true,
+      [`pendingItems[${itemIndex}].thinkingText`]: "正在思考中",
+      [`pendingItems[${itemIndex}].options`]: [],
+      [`pendingItems[${itemIndex}].directInput`]: false
+    });
+    this.startInlineWaiting("clarify", itemIndex);
     const next = item.clarifyMode === "socratic"
       ? advanceClarify(item.id, answer, item.questionKey)
       : Promise.resolve(null);
@@ -478,9 +542,10 @@ Page({
             [`pendingItems[${itemIndex}].questionKey`]: question && question.key ? question.key : "",
             [`pendingItems[${itemIndex}].typed`]: "",
             [`pendingItems[${itemIndex}].directInput`]: false,
+            [`pendingItems[${itemIndex}].isThinking`]: false,
+            submittingClarifyId: ""
           });
-          wx.hideLoading();
-          this.setData({ submittingClarifyId: "" });
+          this.stopInlineWaiting();
           return null;
         }
         // 先落完成态，再请求方案。即使方案请求超时，界面也不会退回成一个悬空的旧问题。
@@ -493,8 +558,10 @@ Page({
           [`pendingItems[${itemIndex}].typed`]: "",
           [`pendingItems[${itemIndex}].directInput`]: false,
           [`pendingItems[${itemIndex}].action`]: "信息够了",
+          [`pendingItems[${itemIndex}].isThinking`]: true,
+          [`pendingItems[${itemIndex}].thinkingText`]: "正在确认情况"
         });
-        wx.showLoading({ title: "正在整理下一步" });
+        this.startInlineWaiting("finalizing", itemIndex);
         return planInbox({
           itemId: item.id,
           option: answer.join("、"),
@@ -504,23 +571,24 @@ Page({
       .then((planResult) => {
         if (!planResult) return null;
         if (!isUsableInboxPlan(planResult)) {
-          wx.hideLoading();
-          this.setData({ submittingClarifyId: "" });
+          this.stopInlineWaiting();
+          this.setData({
+            submittingClarifyId: "",
+            [`pendingItems[${itemIndex}].isThinking`]: false
+          });
           wx.showToast({ title: "这次没整理完整，点重试", icon: "none" });
-          this.loadToday();
           return null;
         }
         return this.finishResolvedPlan(item.id).then(() => {
-          markDataChanged(["today", "workspace", "profile"]);
-          wx.hideLoading();
-          this.setData({ submittingClarifyId: "" });
-          wx.showToast({ title: "已放进文件", icon: "success" });
-          this.loadToday();
+          this.completePendingItem(itemIndex);
         });
       })
       .catch((error) => {
-        wx.hideLoading();
-        this.setData({ submittingClarifyId: "" });
+        this.stopInlineWaiting();
+        this.setData({
+          submittingClarifyId: "",
+          [`pendingItems[${itemIndex}].isThinking`]: false
+        });
         if (error.statusCode === 401) {
           wx.reLaunch({ url: "/pages/login/login" });
           return;
@@ -529,29 +597,54 @@ Page({
       });
   },
 
+  completePendingItem(itemIndex) {
+    const item = this.data.pendingItems[itemIndex];
+    if (!item) return;
+    this.stopInlineWaiting();
+    this.setData({
+      submittingClarifyId: "",
+      submittingPlanId: "",
+      [`pendingItems[${itemIndex}].completed`]: true,
+      [`pendingItems[${itemIndex}].isThinking`]: false,
+      [`pendingItems[${itemIndex}].thinkingText`]: "",
+      [`pendingItems[${itemIndex}].completionText`]: "已整理到文件，可以去看看。",
+      [`pendingItems[${itemIndex}].options`]: [],
+      [`pendingItems[${itemIndex}].multi`]: false,
+      [`pendingItems[${itemIndex}].clarifyStatus`]: "done"
+    });
+    markDataChanged(["today", "workspace", "profile"]);
+  },
+
+  onGoFiles() {
+    openTab("desk");
+  },
+
   onGeneratePlan(event) {
     const itemIndex = Number(event.currentTarget.dataset.itemIndex);
     const item = this.data.pendingItems[itemIndex];
     if (!item || this.data.submittingClarifyId) return;
     const { planInbox } = require("../../utils/api");
-    this.setData({ submittingClarifyId: item.id });
-    wx.showLoading({ title: "正在整理下一步" });
+    this.setData({
+      submittingClarifyId: item.id,
+      [`pendingItems[${itemIndex}].isThinking`]: true,
+      [`pendingItems[${itemIndex}].thinkingText`]: "正在确认情况"
+    });
+    this.startInlineWaiting("finalizing", itemIndex);
     planInbox({ itemId: item.id })
       .then((planResult) => {
         if (!isUsableInboxPlan(planResult)) {
           throw new Error("agent_failed");
         }
         return this.finishResolvedPlan(item.id).then(() => {
-          markDataChanged(["today", "workspace", "profile"]);
-          wx.hideLoading();
-          this.setData({ submittingClarifyId: "" });
-          wx.showToast({ title: "已放进文件", icon: "success" });
-          this.loadToday();
+          this.completePendingItem(itemIndex);
         });
       })
       .catch((error) => {
-        wx.hideLoading();
-        this.setData({ submittingClarifyId: "" });
+        this.stopInlineWaiting();
+        this.setData({
+          submittingClarifyId: "",
+          [`pendingItems[${itemIndex}].isThinking`]: false
+        });
         if (error && error.statusCode === 401) {
           wx.reLaunch({ url: "/pages/login/login" });
           return;
@@ -565,22 +658,22 @@ Page({
     const item = this.data.pendingItems[itemIndex];
     if (!item || this.data.submittingPlanId) return;
 
-    this.setData({ submittingPlanId: item.id });
-    wx.showLoading({ title: "正在收好" });
+    this.setData({
+      submittingPlanId: item.id,
+      [`pendingItems[${itemIndex}].isThinking`]: true,
+      [`pendingItems[${itemIndex}].thinkingText`]: "正在整理信息"
+    });
+    this.startInlineWaiting("finalizing", itemIndex);
     this.finishResolvedPlan(item.id, null)
-      .then((result) => {
-        markDataChanged(["today", "workspace", "profile"]);
-        wx.hideLoading();
-        this.setData({ submittingPlanId: "" });
-        wx.showToast({
-          title: result && result.directAnswer ? "已直接回答" : "已放进文件",
-          icon: result && result.directAnswer ? "none" : "success"
-        });
-        this.loadToday();
+      .then(() => {
+        this.completePendingItem(itemIndex);
       })
       .catch((error) => {
-        wx.hideLoading();
-        this.setData({ submittingPlanId: "" });
+        this.stopInlineWaiting();
+        this.setData({
+          submittingPlanId: "",
+          [`pendingItems[${itemIndex}].isThinking`]: false
+        });
         if (error.statusCode === 401) {
           wx.reLaunch({ url: "/pages/login/login" });
           return;

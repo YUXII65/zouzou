@@ -41,6 +41,29 @@ if (tabBarIssues.length) {
 const tabPageSet = new Set(tabPages);
 
 const todaySource = fs.readFileSync(path.join(pagesDir, "today", "today.js"), "utf8").replace(/\r\n/g, "\n");
+for (const forbidden of ["先回答一个问题", "正在想下一问"]) {
+  if (todaySource.includes(forbidden)) {
+    console.error("✖ today: 仍包含旧澄清提示 " + forbidden);
+    issues += 1;
+  }
+}
+const todayWxmlForFlow = fs.readFileSync(path.join(pagesDir, "today", "today.wxml"), "utf8");
+for (const forbidden of ["先回答一个问题", "正在想下一问"]) {
+  if (todayWxmlForFlow.includes(forbidden)) {
+    console.error("✖ today: WXML 仍包含旧澄清结构 " + forbidden);
+    issues += 1;
+  }
+}
+if (todayWxmlForFlow.includes('wx:if="{{pending.reason}}"')) {
+  console.error("✖ today: 完成前仍在展示旧版计划解释段");
+  issues += 1;
+}
+const apiSourceForPlan = fs.readFileSync(path.join(root, "miniprogram", "utils", "api.js"), "utf8");
+if (!apiSourceForPlan.includes("response && response.plan ? response.plan : response")) {
+  console.error("✖ api.planInbox: 必须解开服务端 plan 包装");
+  issues += 1;
+}
+
 const submitMatch = todaySource.match(/onSubmit\(\) \{([\s\S]*?)\n  \},\n\n  onClarifyOptionTap/);
 if (!submitMatch) {
   console.error("✖ today.onSubmit: 无法定位提交逻辑");

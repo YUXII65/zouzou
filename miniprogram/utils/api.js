@@ -179,7 +179,7 @@ function planInbox(data) {
   return request("/api/miniprogram/ai/inbox/plan", {
     method: "POST",
     data
-  });
+  }).then((response) => response && response.plan ? response.plan : response);
 }
 
 

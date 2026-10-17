@@ -38,25 +38,37 @@
 
 <view class="page theme-{{theme}}">
   <view class="content" style="padding-top: {{contentTop}}px;">
-    <view class="capture-card" wx:if="{{pendingItems.length === 0}}">
-      <textarea
-        class="capture-input"
-        value="{{content}}"
-        maxlength="500"
-        placeholder="思考与困惑，计划与执行，直接倒出你的想法"
-        placeholder-class="capture-placeholder"
-        bindinput="onContentInput"
-      ></textarea>
-      <view class="capture-actions">
-        <view class="next-button" bindtap="onSubmit">✦ 下一步</view>
+    <view class="planner-card">
+      <view class="capture-card" wx:if="{{pendingItems.length === 0}}">
+        <block wx:if="{{captureLoading}}">
+          <view class="chat-turn chat-turn-user">
+            <view class="chat-bubble chat-bubble-user">{{pendingCaptureContent}}</view>
+          </view>
+          <view class="chat-turn chat-turn-ai">
+            <view class="chat-avatar">✦</view>
+            <view class="chat-bubble chat-bubble-ai chat-loading-bubble"><text class="inline-spinner">◌</text><text>{{captureWaitingText}}</text></view>
+          </view>
+        </block>
+        <block wx:else>
+          <textarea
+            class="capture-input"
+            value="{{content}}"
+            maxlength="500"
+            placeholder="思考与困惑，计划与执行，直接倒出你的想法"
+            placeholder-class="capture-placeholder"
+            bindinput="onContentInput"
+          ></textarea>
+          <view class="capture-actions">
+            <view class="next-button" bindtap="onSubmit">✦ 下一步</view>
+          </view>
+          <view class="sample-list">
+            <view class="sample-chip" wx:for="{{samples}}" wx:key="title" data-sample="{{item.content}}" bindtap="onSampleTap">{{item.title}}</view>
+          </view>
+          <view class="sample-refresh-row">
+            <view class="refresh-button" bindtap="onRefreshSamples">↻ 换一批</view>
+          </view>
+        </block>
       </view>
-      <view class="sample-list">
-        <view class="sample-chip" wx:for="{{samples}}" wx:key="title" data-sample="{{item.content}}" bindtap="onSampleTap">{{item.title}}</view>
-      </view>
-      <view class="sample-refresh-row">
-        <view class="refresh-button" bindtap="onRefreshSamples">↻ 换一批</view>
-      </view>
-    </view>
 
     <view class="pending-list" wx:if="{{pendingItems.length > 0}}">
       <view class="pending-card" wx:for="{{pendingItems}}" wx:key="id" wx:for-item="pending" wx:for-index="itemIndex">
@@ -71,7 +83,7 @@
           <view class="chat-bubble chat-bubble-{{turn.role}}">{{turn.text}}</view>
         </view>
 
-        <view class="chat-options" wx:if="{{pending.options.length > 0}}">
+        <view class="chat-options" wx:if="{{pending.options.length > 0 && !pending.isThinking && !pending.completed}}">
           <view
             class="chat-option {{option.selected ? 'chat-option-selected' : ''}}"
             wx:for="{{pending.options}}"
@@ -85,26 +97,26 @@
           <view class="chat-direct-toggle {{pending.directInput ? 'chat-direct-toggle-active' : ''}}" data-item-index="{{itemIndex}}" bindtap="onClarifyDirectToggle">↩ 想自己说</view>
         </view>
 
-        <view class="chat-multi-actions" wx:if="{{pending.multi}}">
+        <view class="chat-multi-actions" wx:if="{{pending.multi && !pending.isThinking && !pending.completed}}">
           <text class="chat-multi-hint">可多选</text>
           <view class="chat-confirm" data-item-index="{{itemIndex}}" bindtap="onClarifyMultiConfirm">确定</view>
         </view>
 
-        <view class="chat-direct" wx:if="{{pending.directInput}}">
+        <view class="chat-direct" wx:if="{{pending.directInput && !pending.isThinking && !pending.completed}}">
           <input class="chat-input" value="{{pending.typed}}" placeholder="输入你想说的话" data-item-index="{{itemIndex}}" bindinput="onClarifyTypedInput" />
           <view class="chat-send" data-item-index="{{itemIndex}}" bindtap="onClarifyDirectSend">发送</view>
         </view>
 
         <view
           class="pending-confirm {{submittingClarifyId ? 'pending-confirm-disabled' : ''}}"
-          wx:if="{{pending.clarifyStatus === 'done' && !pending.planReady && !pending.isAnswer}}"
+          wx:if="{{pending.clarifyStatus === 'done' && !pending.planReady && !pending.isAnswer && !pending.isThinking && !pending.completed}}"
           data-item-index="{{itemIndex}}"
           bindtap="onGeneratePlan"
         >
-          {{submittingClarifyId === pending.id ? '正在整理下一步…' : '信息够了，给我下一步'}}
+          信息够了，给我下一步
         </view>
 
-        <view class="pending-plan" wx:if="{{pending.isAnswer}}">
+        <view class="pending-plan" wx:if="{{pending.isAnswer && !pending.isThinking && !pending.completed}}">
           <view class="plan-reason" wx:if="{{pending.directAnswer}}">
             <text class="plan-reason-icon">✦</text>
             <text>{{pending.directAnswer}}</text>
@@ -114,17 +126,25 @@
           </view>
         </view>
 
-        <view class="pending-plan" wx:if="{{pending.planReady}}">
-          <view class="plan-reason" wx:if="{{pending.reason}}">
-            <text class="plan-reason-icon">✦</text>
-            <text>{{pending.reason}}</text>
-          </view>
+        <view class="pending-plan" wx:if="{{pending.planReady && !pending.isThinking && !pending.completed}}">
           <view class="pending-confirm {{submittingPlanId ? 'pending-confirm-disabled' : ''}}" data-item-index="{{itemIndex}}" bindtap="onConfirmPlan">
-            {{submittingPlanId === pending.id ? '正在收好…' : '放入文件页'}}
+            收好并继续
           </view>
         </view>
 
+        <view class="chat-turn chat-turn-ai" wx:if="{{pending.isThinking}}">
+          <view class="chat-avatar">✦</view>
+          <view class="chat-bubble chat-bubble-ai chat-loading-bubble"><text class="inline-spinner">◌</text><text>{{pending.thinkingText}}</text></view>
+        </view>
+
+        <view class="chat-turn chat-turn-ai" wx:if="{{pending.completed}}">
+          <view class="chat-avatar">✦</view>
+          <view class="chat-bubble chat-bubble-ai">{{pending.completionText}}</view>
+        </view>
+        <view class="pending-go" wx:if="{{pending.completed}}" bindtap="onGoFiles">去看看</view>
+
       </view>
+    </view>
     </view>
 
     <view class="panel tasks-panel">
