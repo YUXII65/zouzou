@@ -4,7 +4,7 @@ import { withAiQuota } from "@/lib/ai-quota";
 import { generateTaskCoachAdvice } from "@/lib/ai";
 import { getMiniProgramUser } from "@/lib/miniprogram-auth";
 import { prisma } from "@/lib/prisma";
-import { serializeTaskStickyNote } from "@/lib/task-sticky";
+import { normalizeStickySteps, serializeTaskStickyNote } from "@/lib/task-sticky";
 
 export const dynamic = "force-dynamic";
 
@@ -16,7 +16,12 @@ export async function GET(request: Request) {
   const task = await prisma.task.findFirst({ where: { id: taskId, userId: user.id }, select: { id: true } });
   if (!task) return NextResponse.json({ error: "not_found" }, { status: 404 });
   const notes = await prisma.taskStickyNote.findMany({ where: { userId: user.id, taskId }, orderBy: { createdAt: "desc" }, take: 10 });
-  return NextResponse.json({ notes: notes.map(serializeTaskStickyNote) });
+  return NextResponse.json({
+    notes: notes.map((note) => {
+      const serialized = serializeTaskStickyNote(note);
+      return { ...serialized, steps: normalizeStickySteps(serialized) };
+    }),
+  });
 }
 
 export async function POST(request: Request) {
@@ -27,14 +32,32 @@ export async function POST(request: Request) {
   const taskId = body.taskId?.trim();
   const task = taskId ? await prisma.task.findFirst({ where: { id: taskId, userId: user.id }, select: { id: true, title: true, notes: true, status: true, executionMode: true, doneWhen: true, methodHint: true, project: { select: { name: true, mode: true } } } }) : null;
   if (!task) return NextResponse.json({ error: "not_found" }, { status: 404 });
+
+  const previousNotes = await prisma.taskStickyNote.findMany({
+    where: { userId: user.id, taskId: task.id },
+    orderBy: { createdAt: "desc" },
+    take: 3,
+  });
+  const previousStickyNotes = previousNotes.map((note) => {
+    const serialized = serializeTaskStickyNote(note);
+    return {
+      sourceMessage: serialized.sourceMessage,
+      title: serialized.title,
+      steps: serialized.steps,
+      nextStep: serialized.nextStep,
+    };
+  });
   const message = body.message?.trim() || "这个任务我还没有头绪，请给我一个能直接开始的行动方案";
   const aiContext = await buildAiContext({ kind: "task_coach", taskId: task.id, userId: user.id });
   try {
-    const advice = await withAiQuota("task_coach", () => generateTaskCoachAdvice({ title: task.title, notes: task.notes, projectName: task.project?.name ?? null, status: task.status, message, projectMode: task.project?.mode ?? null, executionMode: task.executionMode, doneWhen: task.doneWhen, methodHint: task.methodHint }, aiContext.summary, aiContext.evidence), user.id);
+    const advice = await withAiQuota("task_coach", () => generateTaskCoachAdvice({ title: task.title, notes: task.notes, projectName: task.project?.name ?? null, status: task.status, message, projectMode: task.project?.mode ?? null, executionMode: task.executionMode, doneWhen: task.doneWhen, methodHint: task.methodHint, previousStickyNotes }, aiContext.summary, aiContext.evidence), user.id);
     const note = await prisma.taskStickyNote.create({ data: { userId: user.id, taskId: task.id, sourceMessage: message, title: advice.title, encouragement: advice.encouragement, stepsJson: JSON.stringify(advice.steps), nextStep: advice.nextStep } });
     const overflow = await prisma.taskStickyNote.findMany({ where: { userId: user.id, taskId: task.id, id: { not: note.id } }, orderBy: { createdAt: "desc" }, skip: 9, select: { id: true } });
     if (overflow.length) await prisma.taskStickyNote.deleteMany({ where: { id: { in: overflow.map((item) => item.id) } } });
-    return NextResponse.json({ note: serializeTaskStickyNote(note) });
+    const serialized = serializeTaskStickyNote(note);
+    return NextResponse.json({
+      note: { ...serialized, steps: normalizeStickySteps(serialized) },
+    });
   } catch (error) {
     return NextResponse.json({ error: error instanceof Error ? error.message : "ai_error" }, { status: 500 });
   }

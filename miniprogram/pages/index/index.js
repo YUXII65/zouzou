@@ -1,4 +1,5 @@
 const DEMO_SCENARIOS = require("./demo-data");
+const { openTab } = require("../../utils/tab-bar");
 
 const STEP_MS = 4600;
 const STEP_COUNT = 3;
@@ -87,7 +88,7 @@ Page({
     // 已登录用户不必再看落地页，直接进主界面；首跑引导由 today 页接管。
     const { getToken } = require("../../utils/api");
     if (getToken()) {
-      wx.reLaunch({ url: "/pages/today/today" });
+      openTab("today");
       return;
     }
 

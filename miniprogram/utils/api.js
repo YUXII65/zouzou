@@ -81,7 +81,7 @@ function wxRequest(path, options, token) {
       method: options.method || "GET",
       data: options.data,
       header,
-      timeout: 25000,
+      timeout: 30000,
       success(response) {
         const status = response.statusCode;
         if (status >= 200 && status < 300) {
@@ -168,10 +168,10 @@ function clarifyIdea(content) {
   });
 }
 
-function advanceClarify(itemId, answer) {
+function advanceClarify(itemId, answer, questionKey) {
   return request("/api/miniprogram/ai/inbox/clarify", {
     method: "POST",
-    data: { mode: "socratic", itemId, answer }
+    data: { mode: "socratic", itemId, answer, questionKey }
   });
 }
 
@@ -191,12 +191,6 @@ function confirmPlan(data) {
   });
 }
 
-function ignoreInbox(itemId) {
-  return request("/api/miniprogram/inbox/ignore", {
-    method: "POST",
-    data: { itemId }
-  });
-}
 
 function setTaskStatus(taskId, status) {
   return request("/api/miniprogram/tasks/status", {
@@ -416,7 +410,6 @@ module.exports = {
   advanceClarify,
   planInbox,
   confirmPlan,
-  ignoreInbox,
   setTaskStatus,
   generateReviewDraft,
   getReview,

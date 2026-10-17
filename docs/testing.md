@@ -87,17 +87,19 @@ pnpm eval:ai --print-prompt                     # 只打印生产用的 system p
 之前 `scripts/evaluate-ai.mjs` 里**另写了一份** system prompt。改 `src/lib/ai.ts`
 不会反映到评测里，所以"评测通过"说明不了生产输出合格——这是最坏的一种假绿灯。
 
-现在提示词集中在 `src/lib/ai-prompts.ts`：
+现在提示词按职责拆分：
 
-- `PLAN_SYSTEM_PROMPT` —— `planInbox` 的 system prompt
+- `buildPlanAgentSystemPrompt(workMode)` —— 生产两段链的方案 Agent prompt
+- `PLAN_AGENT_MODE_PROMPTS` —— 普通 / 长期 / 探索各自的专项规则
+- `PLAN_SYSTEM_PROMPT` —— 旧链 `planInbox` 的 system prompt
 - `OUTPUT_QUALITY_RULES` —— 全局输出约束，`callModel` 会给每条 system prompt 追加
 - `buildPlanUserPayload` —— user 消息的字段与默认值
 
-生产代码和评测脚本导入同一份常量，字段不会再各写各的。
+生产代码和评测脚本导入同一份组装逻辑，字段不会再各写各的。
 
 ### 提示词指纹
 
-每次评测会把 `sha256(PLAN_SYSTEM_PROMPT + OUTPUT_QUALITY_RULES)` 的前 12 位写进结果文件。
+每次计划评测会把 `sha256(CLARIFICATION_TRANSLATION_SYSTEM_PROMPT + PLAN_AGENT_PROMPT_BUNDLE + OUTPUT_QUALITY_RULES)` 的前 12 位写进结果文件。
 对比基线时先看这个指纹：
 
 - 指纹相同 → 差异来自模型波动或随机性；

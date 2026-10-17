@@ -1,7 +1,7 @@
 /**
  * AI 计划质量评测
  *
- * 重要：这里的 system prompt 直接引用 src/lib/ai-prompts.ts 里生产用的那一份。
+ * 重要：第 1 段直接引用 src/lib/ai-prompts.ts 的生产 prompt；第 2 段通过 run-chain 的 buildPlanAgentSystemPrompt(workMode) 与生产共用组装逻辑。
  * 之前的版本在这里另写了一份近似的提示词，改 src/lib/ai.ts 不会反映到评测结果上，
  * 于是「评测通过」并不能说明生产输出合格。现在两边共用同一常量，不会再分叉。
  *

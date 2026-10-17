@@ -351,8 +351,8 @@ export function ChatClarify({
                           aria-expanded={directInput}
                           className={
                             directInput
-                              ? "inline-flex items-center gap-1.5 rounded-lg border border-accent bg-accent-soft px-3 py-2 text-sm font-medium text-accent-strong transition-colors disabled:cursor-not-allowed disabled:opacity-50"
-                              : "inline-flex items-center gap-1.5 rounded-lg border border-dashed border-border bg-transparent px-3 py-2 text-sm text-ink-muted transition-colors hover:border-accent hover:text-accent disabled:cursor-not-allowed disabled:opacity-50"
+                              ? "inline-flex items-center gap-1.5 rounded-lg border-2 border-accent bg-accent-soft px-3 py-2 text-sm font-medium text-accent-strong transition-colors disabled:cursor-not-allowed disabled:opacity-50"
+                              : "inline-flex items-center gap-1.5 rounded-lg border border-border bg-surface-muted px-3 py-2 text-sm font-medium text-ink-secondary transition-colors hover:border-accent hover:text-accent disabled:cursor-not-allowed disabled:opacity-50"
                           }
                         >
                           <CornerDownLeft className="size-3.5" />

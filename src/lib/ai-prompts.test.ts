@@ -5,12 +5,14 @@ import {
   OUTPUT_QUALITY_RULES,
   MODE_JUDGMENT_SYSTEM_PROMPT,
   PLAN_SYSTEM_PROMPT,
+  TASK_STICKY_SYSTEM_PROMPT,
   buildClarificationTranslationUserPayload,
   buildPlanUserPayload,
 } from "@/lib/ai-prompts";
 import {
   CONTENT_GENERATION_SYSTEM_PROMPT,
-  PLAN_AGENT_SYSTEM_PROMPT,
+  PLAN_AGENT_PROMPT_BUNDLE,
+  buildPlanAgentSystemPrompt,
   PLAN_CRITIC_SYSTEM_PROMPT,
 } from "@/lib/agent-plan/prompts";
 import { BANNED_OUTPUT_PHRASES } from "@/lib/ai-quality";
@@ -223,12 +225,13 @@ test("链路第 2 段：方案 Agent 直接输出行动卡和任务", () => {
     "fallback",
   ]) {
     assert.ok(
-      PLAN_AGENT_SYSTEM_PROMPT.includes(token),
+      PLAN_AGENT_PROMPT_BUNDLE.includes(token),
       `方案 Agent 提示词缺少：${token}`,
     );
   }
-  assert.ok(PLAN_AGENT_SYSTEM_PROMPT.includes("不超过 maxTasks"));
-  assert.ok(PLAN_AGENT_SYSTEM_PROMPT.includes("只给一条路"));
+  assert.ok(PLAN_AGENT_PROMPT_BUNDLE.includes("不超过 maxTasks"));
+  assert.ok(PLAN_AGENT_PROMPT_BUNDLE.includes("modeJudgment"));
+  assert.ok(PLAN_AGENT_PROMPT_BUNDLE.includes("只给一条路"));
 });
 
 test("计划 user 消息保留结构化澄清历史", () => {
@@ -292,13 +295,13 @@ test("提示词不再点名记录工具，改为约束载体和信息差", () =>
   for (const prompt of [
     OUTPUT_QUALITY_RULES,
     CONTENT_GENERATION_SYSTEM_PROMPT,
-    PLAN_AGENT_SYSTEM_PROMPT,
+    PLAN_AGENT_PROMPT_BUNDLE,
   ]) {
     assert.ok(!prompt.includes("备忘录"), "提示词不该再点名备忘录");
   }
   assert.ok(OUTPUT_QUALITY_RULES.includes("载体必须是这件事真正发生的地方"));
   assert.ok(OUTPUT_QUALITY_RULES.includes("抹平信息差"));
-  assert.ok(PLAN_AGENT_SYSTEM_PROMPT.includes("记录、复盘、打卡、日报不是默认动作"));
+  assert.ok(PLAN_AGENT_PROMPT_BUNDLE.includes("记录、复盘、打卡、日报不是默认动作"));
 });
 
 test("软件选择默认免费或系统自带方案", () => {
@@ -331,12 +334,73 @@ test("翻译 Agent 的 responseMode 只剩 action / plan", () => {
   assert.ok(CLARIFICATION_TRANSLATION_SYSTEM_PROMPT.includes("推进成现实里的一件事"));
 });
 
+test("便利贴提示词只保留基本规则和上下文整合", () => {
+  for (const token of [
+    "只输出这张便利贴",
+    "supplement",
+    "context",
+    "previousStickyNotes",
+    "不重新规划任务",
+  ]) {
+    assert.ok(
+      TASK_STICKY_SYSTEM_PROMPT.includes(token),
+      `便利贴提示词缺少：${token}`,
+    );
+  }
+  assert.ok(!TASK_STICKY_SYSTEM_PROMPT.includes("按项目模式调整详略"));
+  assert.ok(!TASK_STICKY_SYSTEM_PROMPT.includes("需要代码、提示词或文案"));
+});
+test("方案 Agent 按 workMode 注入模式专项规则", () => {
+  const normal = buildPlanAgentSystemPrompt("normal");
+  const longterm = buildPlanAgentSystemPrompt("longterm");
+  const explore = buildPlanAgentSystemPrompt("explore");
+
+  assert.match(normal, /当前模式：normal/);
+  assert.match(longterm, /当前模式：longterm/);
+  assert.match(explore, /当前模式：explore/);
+  assert.ok(normal.includes("今天或明天"));
+  assert.ok(normal.includes("整件事不能跨天"));
+  assert.ok(longterm.includes("当前阶段"));
+  assert.ok(longterm.includes("时间边界"));
+  assert.ok(explore.includes("1-3 条方向线"));
+  assert.ok(explore.includes("反馈闭环"));
+  assert.ok(!normal.includes("当前练到哪"));
+  assert.ok(!longterm.includes("1-3 条方向线"));
+});
+
+test("模式判断器先建立目标框再判模式", () => {
+  for (const token of [
+    "endState",
+    "endStateType",
+    "timeHorizon",
+    "continuationIntent",
+    "decisiveEvidence",
+    "fallbackMode",
+  ]) {
+    assert.ok(
+      MODE_JUDGMENT_SYSTEM_PROMPT.includes(token),
+      `模式判断器缺少目标框字段：${token}`,
+    );
+  }
+  assert.ok(MODE_JUDGMENT_SYSTEM_PROMPT.includes("不是关键词"));
+  assert.ok(MODE_JUDGMENT_SYSTEM_PROMPT.includes("第一件作品只是路径上的一个台阶"));
+  assert.ok(MODE_JUDGMENT_SYSTEM_PROMPT.includes("拿不准时不要判 explore"));
+});
+
+test("翻译 Agent 在收口前补齐模式判断事实", () => {
+  assert.ok(
+    CLARIFICATION_TRANSLATION_SYSTEM_PROMPT.includes("这一轮做到什么算结束"),
+  );
+  assert.ok(
+    CLARIFICATION_TRANSLATION_SYSTEM_PROMPT.includes("不要问“你要短期还是长期”"),
+  );
+});
+
 test("开放能力的第一件作品仍然是 explore", () => {
-  assert.ok(MODE_JUDGMENT_SYSTEM_PROMPT.includes("第一轮练习"));
-  assert.ok(MODE_JUDGMENT_SYSTEM_PROMPT.includes("想学手工"));
+  assert.ok(MODE_JUDGMENT_SYSTEM_PROMPT.includes("第一件作品只是路径上的一个台阶"));
   assert.ok(CONTENT_GENERATION_SYSTEM_PROMPT.includes("第一件小作品只是这一轮"));
-  assert.ok(PLAN_AGENT_SYSTEM_PROMPT.includes("第一件作品只是这一轮的练习"));
-  assert.ok(PLAN_AGENT_SYSTEM_PROMPT.includes("下一轮怎么接着练"));
+  assert.ok(PLAN_AGENT_PROMPT_BUNDLE.includes("第一件作品只是这一轮的练习"));
+  assert.ok(PLAN_AGENT_PROMPT_BUNDLE.includes("下一轮怎么接着练"));
 });
 
 test("提示词里不再逐条列举具体反例", () => {
@@ -346,7 +410,7 @@ test("提示词里不再逐条列举具体反例", () => {
     ["OUTPUT_QUALITY_RULES", OUTPUT_QUALITY_RULES],
     ["PLAN_SYSTEM_PROMPT", PLAN_SYSTEM_PROMPT],
     ["CLARIFICATION_TRANSLATION_SYSTEM_PROMPT", CLARIFICATION_TRANSLATION_SYSTEM_PROMPT],
-    ["PLAN_AGENT_SYSTEM_PROMPT", PLAN_AGENT_SYSTEM_PROMPT],
+    ["PLAN_AGENT_PROMPT_BUNDLE", PLAN_AGENT_PROMPT_BUNDLE],
   ];
   for (const [name, text] of prompts) {
     for (const line of text.split("\n")) {

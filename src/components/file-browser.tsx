@@ -142,34 +142,21 @@ export function FileBrowser({
       {REVIEW_ENABLED ? reviewPanel : null}
 
       {projects.length ? (
-        <div className="flex items-center justify-end gap-1 px-1 text-[10px] leading-none">
-          {(
-            [
-              { value: "type", label: "按类型" },
-              { value: "time", label: "按时间" },
-            ] as const
-          ).map((option, index) => (
-            <span key={option.value} className="flex items-center gap-1">
-              {index > 0 ? (
-                <span aria-hidden className="text-border-strong">
-                  ·
-                </span>
-              ) : null}
-              <button
-                type="button"
-                onClick={() => setListMode(option.value)}
-                aria-pressed={listMode === option.value}
-                className={cx(
-                  "rounded transition-colors",
-                  listMode === option.value
-                    ? "font-semibold text-ink-secondary"
-                    : "text-ink-muted hover:text-ink-secondary",
-                )}
-              >
-                {option.label}
-              </button>
-            </span>
-          ))}
+        <div className="flex items-center justify-end px-1 text-[10px] leading-none">
+          {/* 单按钮切换：文字显示当前排序方式，点一下换成另一种（与小程序端一致） */}
+          <button
+            type="button"
+            onClick={() => setListMode(listMode === "type" ? "time" : "type")}
+            aria-label={
+              listMode === "type"
+                ? "当前按模式排序，点击切换为按时间排序"
+                : "当前按时间排序，点击切换为按模式排序"
+            }
+            className="inline-flex items-center gap-1 rounded px-1 py-0.5 text-ink-muted transition-colors hover:text-ink-secondary"
+          >
+            <span aria-hidden>⇅</span>
+            <span>{listMode === "type" ? "模式排序" : "时间排序"}</span>
+          </button>
         </div>
       ) : null}
 

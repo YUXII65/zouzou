@@ -60,6 +60,7 @@
 
 ## 小程序上传与发布
 
+- **提审前先过清单**：[`miniprogram-review-checklist.md`](./miniprogram-review-checklist.md)。一条命令 `pnpm check:review` 跑完自动门禁，再人工确认平台侧配置和真机路径。
 - 开发者工具的安装路径、小程序目录、appid 见 [`private/local.md`](./private/local.md)。
 - 用之前先确认登录：`cli.bat islogin` 返回 `{"login":true}`。没登录要让用户扫码，agent 代不了。
 - **版本号只是上传时手填的标签，不代表包里的代码**：后台显示「线上版本 3.5.0」不等于线上跑的就是那版代码。判断内容对不对，只看真机 / 预览里的实际页面（底部署名），别拿版本号当证据。

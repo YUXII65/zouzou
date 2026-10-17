@@ -17,12 +17,14 @@ export type ToolDecision = {
 };
 
 const WRITE_SIGNAL =
-  /发布|上线|提交表单|注册(?:一个|个|新)?(?:账号|帐号|账户)|投稿|下单|购买|付款|支付|发送消息|私信|评论|回复|填写表单|申请|报名|预约|注销|退订/;
+  /发布|上线|提交表单|注册(?:一个|个|新)?(?:账号|帐号|账户)|投稿|下单|购买|买|采购|付款|支付|发送消息|私信|评论|回复|填写表单|申请|报名|预约|注销|退订/;
 const READ_URL_SIGNAL = /https?:\/\/|网址|链接|这个网页|这篇文章|那个页面/;
+const RESEARCH_BEFORE_WRITE_SIGNAL =
+  /买|购|价格|报价|预算|库存|优惠|折扣|促销|保修|哪款|哪个|值得|多少钱|招聘|报名|申请|截止/;
 const GITHUB_SIGNAL = /github|仓库|开源项目|代码库|pull request|\bpr\b/;
 const DOCS_SIGNAL = /\bapi\b|接口文档|官方文档|文档|sdk|开发文档/i;
 const FRESH_SIGNAL =
-  /最新|最近|现在|今年|今天|价格|行情|政策|新闻|版本|更新|发布了吗|有没有|找一下|搜一下|查一下|查一查|调研|对比/;
+  /最新|价格|行情|政策|新闻|版本|更新|发布了吗|有没有|找一下|搜一下|查一下|查一查|调研|对比|推荐|哪款|多少钱|报价|库存|优惠|折扣|促销|保修|招聘|报名|截止|天气|路况|航班|高铁|车票|股价|汇率|税率|法规|报名时间/;
 
 export function routeTool(input: string): ToolDecision {
   const text = input.trim();
@@ -32,10 +34,13 @@ export function routeTool(input: string): ToolDecision {
   }
 
   if (WRITE_SIGNAL.test(text)) {
+    const shouldResearch = RESEARCH_BEFORE_WRITE_SIGNAL.test(text);
     return {
-      kind: "none",
+      kind: shouldResearch ? "search" : "none",
       policy: "confirm-write",
-      reason: "这一步会真的对外写内容，需要你确认后我再执行",
+      reason: shouldResearch
+        ? "先查清当前信息，真正写操作仍需你确认后执行"
+        : "这一步会真的对外写内容，需要你确认后我再执行",
     };
   }
 

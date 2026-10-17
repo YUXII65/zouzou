@@ -19,6 +19,7 @@ export async function POST(request: Request) {
     mode?: "socratic";
     itemId?: string;
     answer?: string[];
+    questionKey?: string;
     apiKey?: string;
     model?: string;
     baseUrl?: string;
@@ -52,6 +53,7 @@ export async function POST(request: Request) {
         userId: user.id,
         itemId: body.itemId.trim(),
         answer,
+        questionKey: body.questionKey?.trim().slice(0, 40),
         overrides,
       });
       if (!result) {

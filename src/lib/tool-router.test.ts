@@ -63,6 +63,7 @@ test("依赖最新信息的判断才联网搜索", () => {
 test("不依赖外部信息的任务不联网", () => {
   assert.equal(routeTool("把简历里三个项目讲清楚").policy, "none");
   assert.equal(routeTool("整理这周的会议记录").policy, "none");
+  assert.equal(routeTool("今天整理书桌").policy, "none");
 });
 
 test("空输入不联网", () => {

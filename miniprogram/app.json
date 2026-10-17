@@ -17,6 +17,26 @@
     "backgroundColor": "#edf4fb",
     "backgroundTextStyle": "light"
   },
+  "tabBar": {
+    "custom": true,
+    "color": "#7e93ae",
+    "selectedColor": "#2f63e6",
+    "backgroundColor": "#ffffff",
+    "list": [
+      {
+        "pagePath": "pages/today/today",
+        "text": "首页"
+      },
+      {
+        "pagePath": "pages/workspace/workspace",
+        "text": "文件"
+      },
+      {
+        "pagePath": "pages/profile/profile",
+        "text": "个人"
+      }
+    ]
+  },
   "style": "v2",
   "sitemapLocation": "sitemap.json"
 }

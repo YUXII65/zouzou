@@ -64,7 +64,7 @@ export default async function FilesPage({
     missingStagePreviewIds,
   } = view;
 
-  // 已经进入「待确认」但还没生成下一阶段总结的阶段，进页面时后台补一次。
+  // 当前阶段进行中或待确认时还没生成下一阶段总结，进页面时后台补一次。
   // 一次打开页面最多补 3 个，避免 longterm 项目多时集中打 AI。
   if (missingStagePreviewIds.length) {
     after(async () => {

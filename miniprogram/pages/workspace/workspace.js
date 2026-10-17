@@ -1,3 +1,6 @@
+const { openTab, syncTabBar } = require("../../utils/tab-bar");
+const { markDataChanged, shouldRefresh } = require("../../utils/data-refresh");
+
 const MODE_META = {
   normal: { label: "普通" },
   longterm: { label: "长期" },
@@ -40,26 +43,16 @@ function normalizeMode(mode) {
 
 function decorateTask(task) {
   const dueDate = parseDate(task.dueDate);
-  const stickyNote = Array.isArray(task.stickyNotes) && task.stickyNotes.length
-    ? task.stickyNotes[0]
-    : null;
   const today = formatDateKey(new Date());
   const scheduledDate = parseDate(task.scheduledDate);
   const focusDate = parseDate(task.focusDate);
   const status = task.status || "todo";
   const nextStatus = status === "todo" ? "in_progress" : status === "in_progress" ? "done" : "";
+  const statusClass = status === "done" ? "done" : status === "in_progress" ? "in_progress" : "todo";
 
   return {
     ...task,
-    sticky: stickyNote
-      ? {
-          id: stickyNote.id,
-          title: stickyNote.title,
-          encouragement: stickyNote.encouragement,
-          steps: Array.isArray(stickyNote.steps) ? stickyNote.steps : [],
-          nextStep: stickyNote.nextStep,
-        }
-      : null,
+    stickyNotes: Array.isArray(task.stickyNotes) ? task.stickyNotes.slice(0, 10) : [],
     displayTitle: task.shortTitle && task.shortTitle.trim() ? task.shortTitle.trim() : fallbackTitle(task.title),
     priorityLabel: PRIORITY_LABELS[task.priority] || "中",
     dueDateText: formatDate(dueDate),
@@ -69,6 +62,8 @@ function decorateTask(task) {
     isScheduled: Boolean(scheduledDate && formatDateKey(scheduledDate) === today),
     isFocused: Boolean(focusDate && formatDateKey(focusDate) === today),
     canChangeStatus: status !== "done",
+    statusClass,
+    statusIcon: status === "done" ? "✓" : status === "in_progress" ? "▶" : "○",
     actionLabel: status === "todo" ? "待办" : status === "in_progress" ? "进行" : "完成",
     nextStatus
   };
@@ -110,7 +105,8 @@ function decorateStage(stage) {
       18
     ),
     nextOrder: Math.min((Number(stage.order) || 1) + 1, 5),
-    canAdvance: stage.status === "ready" && nextTasks.length > 0
+    canAdvance: stage.status === "ready" && nextTasks.length > 0,
+    missingNextStage: !nextStage
   };
 }
 
@@ -123,6 +119,10 @@ function decorateProject(project) {
     const right = parseDate(b.completedAt);
     return (right ? right.getTime() : 0) - (left ? left.getTime() : 0);
   });
+  const dueTimes = openTasks.map((task) => parseDate(task.dueDate)).filter(Boolean);
+  const nextDue = dueTimes.length ? new Date(Math.min(...dueTimes.map((date) => date.getTime()))) : null;
+  const todayStart = new Date(formatDateKey(new Date()) + "T00:00:00");
+  const daysLeft = nextDue ? Math.max(0, Math.ceil((nextDue.getTime() - todayStart.getTime()) / 86400000)) : null;
 
   return {
     ...project,
@@ -133,6 +133,7 @@ function decorateProject(project) {
     doneTasks,
     openCount: openTasks.length,
     doneCount: doneTasks.length,
+    daysLeft,
     allDone: openTasks.length === 0 && doneTasks.length > 0,
     stage: decorateStage(project.stage),
     reviews: Array.isArray(project.reviews)
@@ -168,9 +169,12 @@ function decorateUnassociated(tasks) {
   };
 }
 
+const { getContentTop } = require("../../utils/layout");
+
 Page({
   data: {
     theme: "light",
+    contentTop: 92,
     userAvatar: "",
     userInitial: "走",
     groups: [],
@@ -186,40 +190,50 @@ Page({
   },
 
   onLoad() {
-    this._loaded = false;
+    this.setData({ contentTop: getContentTop() });
+    this._lastLoadAt = 0;
+    this._loadingWorkspace = null;
   },
 
   onShow() {
-    this.syncTheme();
+    const theme = this.syncTheme();
     this.syncUserHeader();
+    syncTabBar(this, "desk", theme);
+    if (!shouldRefresh("workspace", this._lastLoadAt)) return;
     this.loadWorkspace();
   },
 
   syncTheme() {
     const { getTheme } = require("../../utils/theme");
-    this.setData({ theme: getTheme() });
+    const theme = getTheme();
+    if (theme !== this.data.theme) this.setData({ theme });
+    return theme;
   },
 
   syncUserHeader() {
     const { getCachedUser } = require("../../utils/api");
     const user = getCachedUser();
     const displayName = user ? (user.displayName || user.username || "走") : "走";
-    this.setData({
-      userAvatar: user && user.avatarUrl ? user.avatarUrl : "",
-      userInitial: displayName.slice(0, 1)
-    });
+    const userAvatar = user && user.avatarUrl ? user.avatarUrl : "";
+    const userInitial = displayName.slice(0, 1);
+    if (userAvatar !== this.data.userAvatar || userInitial !== this.data.userInitial) {
+      this.setData({ userAvatar, userInitial });
+    }
   },
 
   loadWorkspace() {
     const { getWorkspace, getToken } = require("../../utils/api");
     if (!getToken()) {
       wx.reLaunch({ url: "/pages/login/login" });
-      return;
+      return Promise.resolve();
     }
-    getWorkspace()
+    if (this._loadingWorkspace) return this._loadingWorkspace;
+
+    this._loadingWorkspace = getWorkspace()
       .then((response) => {
         const result = response && response.result ? response.result : response;
         this.applyWorkspace(result || {});
+        this._lastLoadAt = Date.now();
       })
       .catch((error) => {
         if (error && error.statusCode === 401) {
@@ -227,7 +241,11 @@ Page({
           return;
         }
         wx.showToast({ title: "文件没加载出来", icon: "none" });
+      })
+      .then(() => {
+        this._loadingWorkspace = null;
       });
+    return this._loadingWorkspace;
   },
 
   applyWorkspace(result) {
@@ -292,6 +310,29 @@ Page({
     });
   },
 
+  onStickyChange(event) {
+    const taskId = event.currentTarget.dataset.id;
+    const stickyNotes = Array.isArray(event.detail.notes) ? event.detail.notes : [];
+    if (!taskId) return;
+    const patchProject = (project) => {
+      if (!project) return project;
+      const patchTask = (task) => task.id === taskId ? { ...task, stickyNotes } : task;
+      return {
+        ...project,
+        openTasks: (project.openTasks || []).map(patchTask),
+        doneTasks: (project.doneTasks || []).map(patchTask),
+      };
+    };
+    this.setData({
+      groups: (this.data.groups || []).map((group) => ({
+        ...group,
+        projects: (group.projects || []).map(patchProject),
+      })),
+      projectsByTime: (this.data.projectsByTime || []).map(patchProject),
+      unassociated: patchProject(this.data.unassociated),
+    });
+  },
+
   // 复盘目前是独立页面：文件页只负责给入口（与网页探索项目的「复盘」一致）。
   onOpenReview(event) {
     const date = event.currentTarget.dataset.date;
@@ -309,6 +350,7 @@ Page({
     wx.showLoading({ title: "正在进入下一阶段..." });
     advanceStage(stageId)
       .then(() => {
+        markDataChanged(["workspace", "profile"]);
         wx.hideLoading();
         this.setData({ submittingStageId: "" });
         this.loadWorkspace();
@@ -333,6 +375,7 @@ Page({
     this.setData({ submittingTaskId: taskId });
     setTaskStatus(taskId, status)
       .then(() => {
+        markDataChanged(["today", "workspace", "profile"]);
         this.setData({ submittingTaskId: "" });
         this.loadWorkspace();
       })
@@ -348,7 +391,7 @@ Page({
 
 
   onProfileTap() {
-    wx.navigateTo({ url: "/pages/profile/profile" });
+    openTab("profile");
   },
 
 });

@@ -1,0 +1,42 @@
+<view class="sticky-inline">
+  <view class="sticky-loading" wx:if="{{loading}}">
+    <text class="sticky-spinner">◌</text>
+    <text>正在写能直接开始的步骤...</text>
+  </view>
+
+  <block wx:elif="{{displayNotes.length}}">
+    <view class="sticky-step" wx:for="{{displayNotes[0].steps}}" wx:key="*this" wx:for-item="step">{{step}}</view>
+
+    <view class="sticky-history" wx:if="{{displayNotes.length > 1}}">
+      <view class="sticky-history-toggle" bindtap="onTogglePrevious">
+        查看之前的便利贴（{{displayNotes.length - 1}}）
+      </view>
+      <view class="sticky-history-list" wx:if="{{showPrevious}}">
+        <block wx:for="{{displayNotes}}" wx:key="id" wx:for-item="note" wx:for-index="noteIndex">
+          <view class="sticky-history-note" wx:if="{{noteIndex > 0}}">
+            <view class="sticky-step sticky-step-old" wx:for="{{note.steps}}" wx:key="*this" wx:for-item="step">{{step}}</view>
+          </view>
+        </block>
+      </view>
+    </view>
+  </block>
+
+  <view class="sticky-empty" wx:else>
+    还没有便利贴。写一句你的想法，它会给出能直接开始的做法。
+  </view>
+
+  <view class="sticky-footer">
+    <view class="sticky-supplement" wx:if="{{displayNotes.length}}">
+      <input
+        class="sticky-input"
+        value="{{message}}"
+        placeholder="有卡顿？说说想法"
+        confirm-type="send"
+        bindinput="onMessageInput"
+        bindconfirm="onSubmitSupplement"
+      />
+      <view class="sticky-send {{message ? '' : 'sticky-send-disabled'}}" bindtap="onSubmitSupplement">发送</view>
+    </view>
+    <view class="sticky-generate" wx:else bindtap="onGenerate">生成便利贴</view>
+  </view>
+</view>

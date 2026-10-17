@@ -1,3 +1,6 @@
+const { markDataChanged } = require("../../utils/data-refresh");
+const { normalizeStickySteps } = require("../../utils/sticky");
+
 const PRIORITIES = ["low", "medium", "high", "urgent"];
 const PRIORITY_LABELS = ["低", "中", "高", "紧急"];
 
@@ -63,7 +66,12 @@ Page({
   loadStickyNotes() {
     const { getStickyNotes } = require("../../utils/api");
     getStickyNotes(this.data.taskId)
-      .then((result) => this.setData({ stickyNotes: result.notes || [] }))
+      .then((result) => this.setData({
+        stickyNotes: (result.notes || []).map((note) => ({
+          ...note,
+          steps: normalizeStickySteps(note),
+        })),
+      }))
       .catch(() => {});
   },
 
@@ -92,6 +100,7 @@ Page({
     wx.showLoading({ title: "正在写便利贴..." });
     createStickyNote(this.data.taskId, this.data.stickyMessage)
       .then(() => {
+        markDataChanged(["today", "workspace"]);
         wx.hideLoading();
         this.setData({ stickyMessage: "" });
         this.loadStickyNotes();
@@ -111,7 +120,10 @@ Page({
       success: (result) => {
         if (!result.confirm) return;
         deleteStickyNote(noteId)
-          .then(() => this.loadStickyNotes())
+          .then(() => {
+            markDataChanged(["today", "workspace"]);
+            this.loadStickyNotes();
+          })
           .catch(() => wx.showToast({ title: "删除失败", icon: "none" }));
       }
     });
@@ -139,6 +151,7 @@ Page({
       focusDate: this.data.focusDate
     })
       .then(() => {
+        markDataChanged(["today", "workspace", "profile"]);
         wx.hideLoading();
         wx.showToast({ title: "已保存", icon: "success" });
         setTimeout(() => wx.navigateBack(), 400);
@@ -159,6 +172,7 @@ Page({
         wx.showLoading({ title: "正在删除..." });
         deleteTask(this.data.taskId)
           .then(() => {
+            markDataChanged(["today", "workspace", "profile"]);
             wx.hideLoading();
             wx.showToast({ title: "已删除", icon: "success" });
             setTimeout(() => wx.navigateBack(), 400);

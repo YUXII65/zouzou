@@ -1,3 +1,5 @@
+const { openTab } = require("../../utils/tab-bar");
+
 Page({
   data: {
     username: "",
@@ -53,9 +55,13 @@ Page({
         wx.hideLoading();
         getOnboarding()
           .then((state) => {
-            wx.reLaunch({ url: state.isFirstRun && state.tourStep !== "done" ? "/pages/onboarding/onboarding" : "/pages/today/today" });
+            if (state.isFirstRun && state.tourStep !== "done") {
+              wx.reLaunch({ url: "/pages/onboarding/onboarding" });
+              return;
+            }
+            openTab("today");
           })
-          .catch(() => wx.reLaunch({ url: "/pages/today/today" }));
+          .catch(() => openTab("today"));
       })
       .catch((error) => {
         wx.hideLoading();

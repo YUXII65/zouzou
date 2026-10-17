@@ -1,7 +1,4 @@
 {
   "navigationStyle": "custom",
-  "enablePullDownRefresh": false,
-  "usingComponents": {
-    "bottom-nav": "/components/bottom-nav/bottom-nav"
-  }
+  "enablePullDownRefresh": false
 }

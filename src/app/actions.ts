@@ -590,6 +590,20 @@ export async function createTaskStickyNote(input: {
   });
 
   if (!task) throw new Error("任务不存在或无权访问");
+  const previousNotes = await prisma.taskStickyNote.findMany({
+    where: { userId: user.id, taskId: input.taskId },
+    orderBy: { createdAt: "desc" },
+    take: 3,
+  });
+  const previousStickyNotes = previousNotes.map((note) => {
+    const serialized = serializeTaskStickyNote(note);
+    return {
+      sourceMessage: serialized.sourceMessage,
+      title: serialized.title,
+      steps: serialized.steps,
+      nextStep: serialized.nextStep,
+    };
+  });
 
   const aiContext = await buildAiContext({
     kind: "task_coach",
@@ -604,6 +618,7 @@ export async function createTaskStickyNote(input: {
         executionMode: task.executionMode,
         doneWhen: task.doneWhen,
         methodHint: task.methodHint,
+        previousStickyNotes,
       },
       aiContext.summary,
       aiContext.evidence,

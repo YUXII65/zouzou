@@ -26,7 +26,7 @@ import {
 import {
   NORMAL_COMPOSE_SYSTEM_PROMPT_V1,
   NORMAL_STRATEGY_SYSTEM_PROMPT,
-  PLAN_AGENT_SYSTEM_PROMPT,
+  buildPlanAgentSystemPrompt,
   PLAN_CRITIC_SYSTEM_PROMPT,
 } from "@/lib/agent-plan/prompts";
 import { runContentAgent } from "@/lib/agent-plan/content";
@@ -34,6 +34,12 @@ import { buildDecisionSession } from "@/lib/decision";
 import { readPlanTracks } from "@/lib/project-track";
 import { toDateInputValue } from "@/lib/date";
 import { type ProjectMode } from "@/lib/work-mode";
+import {
+  attachWebEvidenceSources,
+  collectPlanWebEvidence,
+  webEvidenceForModel,
+  webEvidenceSources,
+} from "@/lib/web-search";
 
 export {
   auditNormalAgentPlan,
@@ -155,6 +161,7 @@ function readComposedPlan(
       confidence: 0.82,
     }),
     userCard,
+    sources: webEvidenceSources(input.webEvidence),
     agent: {
       usedFacts: readList(value.usedFacts),
       assumptionsUsed: readList(value.assumptionsUsed),
@@ -227,6 +234,7 @@ async function critiqueNormalAgentPlan(input: {
   apiKey?: string;
   model?: string;
   baseUrl?: string;
+  timeoutMs: number;
 }): Promise<PlanCriticResult | null> {
   const text = await callNormalAgent({
     system: PLAN_CRITIC_SYSTEM_PROMPT,
@@ -249,7 +257,7 @@ async function critiqueNormalAgentPlan(input: {
     baseUrl: input.baseUrl,
     temperature: 0.1,
     maxTokens: 1200,
-    timeoutMs: 10000,
+    timeoutMs: input.timeoutMs,
   });
   return readCriticResult(parseObject(text));
 }
@@ -270,6 +278,14 @@ export async function planNormalWithAgents(
   input: NormalAgentInput,
 ): Promise<NormalAgentOutcome> {
   if (!isNormalAgentPlanEnabled()) return { status: "disabled" };
+
+  // 整条规划链共用一份时间预算。单次模型调用各自超时还不够，
+  // 否则“方案 + 重写 + 旧链兜底”叠加后会超过小程序请求超时。
+  const startedAt = Date.now();
+  const totalBudgetMs = 22_000;
+  const remainingBudgetMs = () => Math.max(0, totalBudgetMs - (Date.now() - startedAt));
+  const callTimeoutMs = (requested: number, reserveMs = 1_200) =>
+    Math.max(0, Math.min(requested, remainingBudgetMs() - reserveMs));
 
   const common = {
     originalIdea: input.content,
@@ -305,6 +321,17 @@ export async function planNormalWithAgents(
       })
     ).translation;
 
+  const webEvidence =
+    input.webEvidence ??
+    (await collectPlanWebEvidence({
+      content: input.content,
+      history: input.history,
+      translation,
+      apiKey: input.apiKey,
+      baseUrl: input.baseUrl,
+    }));
+  const inputWithEvidence = { ...input, webEvidence };
+
   const brief = {
     route: "normal" as const,
     reason: translation.reason || "链路第 1 段完成的语言翻译。",
@@ -315,18 +342,21 @@ export async function planNormalWithAgents(
   // 旧的内容生成 + 收敛排版链只在它失败或显式关闭时回退。
   const useTwoStageAgent = process.env.TWO_STAGE_AGENT_PLAN !== "false";
   if (useTwoStageAgent) {
-    const workMode =
-      input.workMode ??
-      (await judgeWorkMode({
-        content: input.content,
-        translation,
-        summary: input.summary,
-        history: input.history,
-        apiKey: input.apiKey,
-        model: input.model,
-        baseUrl: input.baseUrl,
-      }));
-    const planInput = input.workMode ? input : { ...input, workMode };
+    const inferredJudgment = input.workMode
+      ? null
+      : await judgeWorkMode({
+          content: input.content,
+          translation,
+          summary: input.summary,
+          frame: input.frame,
+          history: input.history,
+          apiKey: input.apiKey,
+          model: input.model,
+          baseUrl: input.baseUrl,
+        });
+    const workMode = input.workMode ?? inferredJudgment?.mode ?? "normal";
+    const modeJudgment = input.modeJudgment ?? inferredJudgment ?? null;
+    const planInput = { ...inputWithEvidence, workMode, modeJudgment };
     const translationForPlan = {
       ...translation,
       desiredOutcome:
@@ -341,11 +371,13 @@ export async function planNormalWithAgents(
     const planPayload = {
       translation: translationForPlan,
       workMode,
+      modeJudgment,
       currentDate: common.currentDate,
       maxTasks: Math.min(input.maxTasks ?? MAX_CHAIN_TASKS, MAX_CHAIN_TASKS),
       originalIdea: input.content,
       contextSummary: input.memorySummary ?? null,
       contextEvidence: input.evidence ?? [],
+      webEvidence: webEvidenceForModel(webEvidence),
       projectContext: input.projectContext ?? [],
       decisionMemory: input.decisionMemory ?? [],
       clarificationHistory: common.clarificationHistory,
@@ -353,20 +385,21 @@ export async function planNormalWithAgents(
       clarificationFrame: input.frame ?? null,
       brief: brief.brief,
     };
-    const runPlanAgent = (payload: unknown, temperature: number) =>
+    const runPlanAgent = (payload: unknown, temperature: number, timeoutMs: number) =>
       callNormalAgent({
-        system: PLAN_AGENT_SYSTEM_PROMPT,
+        system: buildPlanAgentSystemPrompt(workMode),
         payload,
         apiKey: input.apiKey,
         model: input.model,
         baseUrl: input.baseUrl,
         temperature,
         maxTokens: 2600,
-        timeoutMs: 20000,
+        timeoutMs,
         onDelta: input.onDelta,
       });
 
-    let planText = await runPlanAgent(planPayload, 0.2);
+    const firstTimeout = callTimeoutMs(20_000);
+    let planText = firstTimeout >= 2_000 ? await runPlanAgent(planPayload, 0.2, firstTimeout) : null;
     let twoStagePlan = readComposedPlan(
       parseObject(planText),
       planInput,
@@ -379,10 +412,12 @@ export async function planNormalWithAgents(
     let retryWorthy = twoStageIssues.filter(
       (issue) => !issue.includes("软件点击教程"),
     );
-    if (!twoStagePlan || retryWorthy.length) {
+    const retryTimeout = callTimeoutMs(20_000);
+    if ((!twoStagePlan || retryWorthy.length) && retryTimeout >= 2_000) {
       planText = await runPlanAgent(
         { ...planPayload, previousAuditIssues: retryWorthy },
         0.15,
+        retryTimeout,
       );
       const retryPlan = readComposedPlan(
         parseObject(planText),
@@ -396,6 +431,7 @@ export async function planNormalWithAgents(
       }
     }
     if (twoStagePlan) {
+      attachWebEvidenceSources(twoStagePlan, webEvidence);
       if (twoStageIssues.length) {
         console.warn(
           "[agent-plan] two-stage audit accepted with warnings",
@@ -410,6 +446,13 @@ export async function planNormalWithAgents(
       twoStagePlan.content = null;
       return { status: "ok", plan: twoStagePlan };
     }
+    if (remainingBudgetMs() <= 6_000) {
+      return {
+        status: "failed",
+        reason: "规划时间预算用尽",
+        issues: ["规划超时"],
+      };
+    }
     console.warn(
       "[agent-plan] two-stage plan failed; falling back to legacy chain",
     );
@@ -417,7 +460,8 @@ export async function planNormalWithAgents(
 
   let agentPlan: NormalAgentPlan | null = null;
   let contentTrace: InboxPlanContentTrace | null = null;
-  if (isContentAgentEnabled()) {
+  const contentTimeout = callTimeoutMs(20_000, 3_000);
+  if (isContentAgentEnabled() && contentTimeout >= 4_000) {
     const content = await runContentAgent({
       content: input.content,
       translation,
@@ -427,10 +471,12 @@ export async function planNormalWithAgents(
       projectContext: input.projectContext,
       memorySummary: input.memorySummary,
       evidence: input.evidence,
+      webEvidence: webEvidenceForModel(webEvidence),
       decisionMemory: input.decisionMemory,
       apiKey: input.apiKey,
       model: input.model,
       baseUrl: input.baseUrl,
+      timeoutMs: contentTimeout,
     });
     if (content.plan) {
       agentPlan = content.plan;
@@ -447,12 +493,21 @@ export async function planNormalWithAgents(
   }
 
   if (!agentPlan) {
+    const strategyTimeout = callTimeoutMs(10_000);
+    if (strategyTimeout < 2_000) {
+      return {
+        status: "failed",
+        reason: "规划时间预算用尽",
+        issues: ["规划超时"],
+      };
+    }
     const strategyText = await callNormalAgent({
       system: NORMAL_STRATEGY_SYSTEM_PROMPT,
       payload: {
         brief: brief.brief,
         originalIdea: input.content,
         projectContext: input.projectContext ?? [],
+        webEvidence: webEvidenceForModel(webEvidence),
         decisionMemory: input.decisionMemory ?? [],
       },
       apiKey: input.apiKey,
@@ -460,7 +515,7 @@ export async function planNormalWithAgents(
       baseUrl: input.baseUrl,
       temperature: 0.7,
       maxTokens: 1600,
-      timeoutMs: 10000,
+      timeoutMs: strategyTimeout,
     });
     agentPlan = readPlan(parseObject(strategyText));
     if (!agentPlan) {
@@ -479,11 +534,20 @@ export async function planNormalWithAgents(
     workMode: input.workMode ?? null,
     originalIdea: input.content,
     projectContext: input.projectContext ?? [],
+    webEvidence: webEvidenceForModel(webEvidence),
     decisionMemory: input.decisionMemory ?? [],
     currentDate: common.currentDate,
     maxTasks: Math.min(input.maxTasks ?? MAX_CHAIN_TASKS, MAX_CHAIN_TASKS),
   };
 
+  const composeTimeout = callTimeoutMs(20_000);
+  if (composeTimeout < 2_000) {
+    return {
+      status: "failed",
+      reason: "规划时间预算用尽",
+      issues: ["规划超时"],
+    };
+  }
   let planText = await callNormalAgent({
     system: NORMAL_COMPOSE_SYSTEM_PROMPT_V1,
     payload: composePayload,
@@ -492,18 +556,25 @@ export async function planNormalWithAgents(
     baseUrl: input.baseUrl,
     temperature: 0.2,
     maxTokens: 2600,
-    timeoutMs: 20000,
+    timeoutMs: composeTimeout,
     onDelta: input.onDelta,
   });
-  let plan = readComposedPlan(parseObject(planText), input, brief.brief, contentTrace);
+  let plan = readComposedPlan(
+    parseObject(planText),
+    inputWithEvidence,
+    brief.brief,
+    contentTrace,
+  );
   let auditIssues = plan
     ? auditNormalAgentPlan(plan, brief.brief)
     : [];
 
   let criticTrace: string[] = [];
+  const criticTimeout = callTimeoutMs(10_000, 2_000);
   if (
     plan &&
     isPlanCriticEnabled() &&
+    criticTimeout >= 2_000 &&
     !auditIssues.some((issue) => !issue.includes("软件点击教程"))
   ) {
     const critic = await critiqueNormalAgentPlan({
@@ -515,6 +586,7 @@ export async function planNormalWithAgents(
       apiKey: input.apiKey,
       model: input.model,
       baseUrl: input.baseUrl,
+      timeoutMs: criticTimeout,
     });
     if (critic) {
       console.warn("[agent-plan] critic", critic);
@@ -543,6 +615,14 @@ export async function planNormalWithAgents(
       : [
           "上一次输出不是完整 JSON，或缺少 userCard（understanding / firstAction / how / doneWhen）、tasks（至少一条）或 selectedApproachId。请严格按格式重写，只返回 JSON。",
         ];
+    const retryComposeTimeout = callTimeoutMs(20_000);
+    if (retryComposeTimeout < 2_000) {
+      return {
+        status: "failed",
+        reason: "规划时间预算用尽",
+        issues: ["规划超时"],
+      };
+    }
     console.warn("[agent-plan] compose retry", retryNotes);
     planText = await callNormalAgent({
       system: NORMAL_COMPOSE_SYSTEM_PROMPT_V1,
@@ -552,7 +632,7 @@ export async function planNormalWithAgents(
       baseUrl: input.baseUrl,
       temperature: 0.15,
       maxTokens: 2600,
-      timeoutMs: 20000,
+      timeoutMs: retryComposeTimeout,
       onDelta: input.onDelta,
     });
     const retryPlan = readComposedPlan(
@@ -593,5 +673,6 @@ export async function planNormalWithAgents(
     ],
   };
   plan.content = contentTrace;
+  attachWebEvidenceSources(plan, webEvidence);
   return { status: "ok", plan };
 }

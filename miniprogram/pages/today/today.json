@@ -2,6 +2,6 @@
   "navigationStyle": "custom",
   "enablePullDownRefresh": false,
   "usingComponents": {
-    "bottom-nav": "/components/bottom-nav/bottom-nav"
+    "task-sticky": "/components/task-sticky/task-sticky"
   }
 }

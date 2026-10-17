@@ -37,7 +37,7 @@ export default async function ProfilePage() {
 
         {/* 功能区：三个动作并列 */}
         <div className="mt-5 grid grid-cols-3 gap-2 sm:gap-3">
-          <ThemeToggle variant="row" className="w-full justify-center" />
+          <ThemeToggle variant="row" className="w-full" />
           <AiSettings serverConnected={serverConnected} />
           <LogoutButton
             showLabel

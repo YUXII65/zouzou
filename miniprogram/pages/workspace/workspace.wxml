@@ -12,25 +12,29 @@
         <text wx:if="{{task.dueDateText}}">建议 {{task.dueDateText}}前完成</text>
       </view>
       <view class="task-detail" wx:if="{{expandedTaskId === task.id}}">
-        <view class="task-sticky" wx:if="{{task.sticky}}">
-          <view class="task-sticky-title">{{task.sticky.title}}</view>
-          <view class="task-sticky-copy" wx:if="{{task.sticky.encouragement}}">{{task.sticky.encouragement}}</view>
-          <view class="task-sticky-step" wx:for="{{task.sticky.steps}}" wx:key="*this" wx:for-item="step">{{index + 1}}. {{step}}</view>
-          <view class="task-sticky-next" wx:if="{{task.sticky.nextStep}}">现在可以做：{{task.sticky.nextStep}}</view>
-        </view>
-        <view class="task-detail-title">{{task.title}}</view>
-        <view class="task-detail-copy" wx:if="{{task.notes && task.notes !== task.title}}">{{task.notes}}</view>
-        <view class="task-detail-standard" wx:if="{{task.doneWhen}}">完成标准：{{task.doneWhen}}</view>
-        <view class="task-detail-standard" wx:if="{{task.methodHint}}">做法：{{task.methodHint}}</view>
+        <task-sticky
+          id="task-sticky-{{task.id}}"
+          task-id="{{task.id}}"
+          title="{{task.title}}"
+          notes="{{task.notes}}"
+          project-name="{{task.projectName}}"
+          status="{{task.status}}"
+          initial-notes="{{task.stickyNotes}}"
+          data-id="{{task.id}}"
+          bind:change="onStickyChange"
+        ></task-sticky>
       </view>
     </view>
     <view class="file-task-actions">
       <view
-        class="task-action {{submittingTaskId === task.id || !task.canChangeStatus ? 'task-action-disabled' : ''}}"
+        class="task-action task-action-{{task.statusClass}} {{submittingTaskId === task.id || !task.canChangeStatus ? 'task-action-disabled' : ''}}"
         data-id="{{task.id}}"
         data-status="{{task.nextStatus}}"
         catchtap="onTaskStatusTap"
-      >{{submittingTaskId === task.id ? '同步中' : task.actionLabel}}</view>
+      >
+        <text class="task-action-icon">{{submittingTaskId === task.id ? '◌' : task.statusIcon}}</text>
+        <text>{{submittingTaskId === task.id ? '同步中' : task.actionLabel}}</text>
+      </view>
     </view>
   </view>
 </template>
@@ -48,20 +52,32 @@
     </view>
 
     <view class="folder-body" wx:if="{{openId === project.id}}">
-      <view class="stage-card stage-card-{{project.stage.status}}" wx:if="{{project.modeKey === 'longterm' && project.stage}}">
-        <text class="stage-label">第 {{project.stage.order}}/5 阶段</text>
-        <text class="stage-copy">{{project.stage.summary}}</text>
-        <view class="stage-next">
-          <text class="stage-label">下一阶段 · 第 {{project.stage.nextOrder}}/5 阶段 · 预览</text>
-          <text class="stage-copy">{{project.stage.nextSummary}}</text>
+      <view class="stage-remaining" wx:if="{{project.modeKey === 'longterm' && project.daysLeft !== null}}">还有 {{project.daysLeft}} 天</view>
+
+      <block wx:if="{{project.modeKey === 'longterm' && project.stage}}">
+        <view class="stage-current" wx:if="{{project.stage.status !== 'ready'}}">
+          <text class="stage-order">{{project.stage.order}}/5 阶段：</text>
+          <text>{{project.stage.summary}}</text>
         </view>
-        <view
-          class="stage-advance {{submittingStageId ? 'stage-advance-disabled' : ''}}"
-          wx:if="{{project.stage.canAdvance}}"
-          data-id="{{project.stage.id}}"
-          catchtap="onAdvanceStage"
-        >{{submittingStageId === project.stage.id ? '正在进入...' : '进入下一阶段'}}</view>
-      </view>
+        <view class="stage-preview" wx:if="{{project.stage.status !== 'ready'}}">
+          <text class="stage-order-muted">{{project.stage.nextOrder}}/5 阶段：</text>
+          <text>{{project.stage.nextSummary}}</text>
+        </view>
+
+        <view class="stage-ready" wx:if="{{project.stage.status === 'ready'}}">
+          <text class="stage-ready-copy" wx:if="{{project.stage.canAdvance || project.stage.missingNextStage}}"><text class="stage-order-success">{{project.stage.nextOrder}}/5 阶段：</text>{{project.stage.nextSummary}}</text>
+          <block wx:else>
+            <text class="stage-ready-copy"><text class="stage-order-success">{{project.stage.order}}/5 阶段：</text>{{project.stage.summary}}</text>
+            <text class="stage-closed">当前阶段已收口，不再自动接下一阶段。</text>
+          </block>
+          <view
+            class="stage-advance {{submittingStageId ? 'stage-advance-disabled' : ''}}"
+            wx:if="{{project.stage.canAdvance}}"
+            data-id="{{project.stage.id}}"
+            catchtap="onAdvanceStage"
+          >→ {{submittingStageId === project.stage.id ? '正在进入...' : '进入下一阶段'}}</view>
+        </view>
+      </block>
 
       <view class="track-list" wx:if="{{project.modeKey === 'explore' && project.tracks.length}}">
         <view class="track-row track-row-{{track.role}}" wx:for="{{project.tracks}}" wx:key="id" wx:for-item="track">
@@ -110,11 +126,11 @@
 </template>
 
 <view class="page theme-{{theme}}">
-  <view class="content">
+  <view class="content" style="padding-top: {{contentTop}}px;">
     <view class="list-toolbar" wx:if="{{projectsByTime.length}}">
       <view class="sort-toggle" bindtap="onToggleListMode">
         <text class="sort-icon">⇅</text>
-        <text>{{listMode === 'type' ? '类型排序' : '时间排序'}}</text>
+        <text>{{listMode === 'type' ? '模式排序' : '时间排序'}}</text>
       </view>
     </view>
 
@@ -144,5 +160,4 @@
     </view>
   </view>
 
-  <bottom-nav active="desk" theme="{{theme}}"></bottom-nav>
 </view>

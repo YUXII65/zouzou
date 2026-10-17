@@ -235,16 +235,16 @@ try {
   const accentOnCurrent = await evaluate(
     `(() => {
       const label = Array.from(document.querySelectorAll("span")).find(
-        (node) => new RegExp("^第 [0-9]+/[0-9]+ 阶段$").test(node.textContent.trim()),
+        (node) => new RegExp("^[0-9]+/[0-9]+ 阶段：$").test(node.textContent.trim()),
       );
-      return label && label.parentElement
-        ? label.parentElement.className.includes("accent")
-        : null;
+      return label ? label.className.includes("accent") : null;
     })()`,
   );
   const longtermChecks = [
-    ["强调色标在「第 X/5 阶段」", accentOnCurrent === true],
-    ["显示阶段序号和总数", longtermText.includes("第 1/5 阶段")],
+    ["强调色标在当前阶段", accentOnCurrent === true],
+    ["当前阶段显示为 1/5 阶段：小标题", longtermText.includes("1/5 阶段：把工具做到陌生人也能用")],
+    ["下一阶段显示为 2/5 阶段：小标题", longtermText.includes("2/5 阶段：补齐错误提示和使用说明")],
+    ["显示阶段序号和总数", longtermText.includes("1/5 阶段")],
     ["当前阶段显示总结版", longtermText.includes("把工具做到陌生人也能用")],
     ["下一阶段在当前阶段就显示短总结", longtermText.includes("补齐错误提示和使用说明")],
     ["下一阶段在当前阶段只显示短总结", !longtermText.includes("补错误提示")],

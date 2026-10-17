@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Moon, Sun } from "lucide-react";
+import { CheckCircle2, Circle, Moon, Sun } from "lucide-react";
 
 const THEME_STORAGE = "theme";
 
@@ -41,15 +41,38 @@ export function ThemeToggle({
 
   if (variant === "row") {
     return (
+      // 开关样式：左侧固定标签，右侧显示当前开/关状态（与「API 连接」的槽位对齐）。
       <button
         type="button"
         onClick={() => setTheme(!dark)}
-        aria-label={dark ? "切换到白天模式" : "切换到夜晚模式"}
-        title={dark ? "切换到白天" : "切换到夜晚"}
-        className={`inline-flex h-10 min-w-0 items-center justify-center gap-1.5 rounded-lg border border-border bg-surface/70 px-2 text-xs font-medium text-ink-secondary transition-colors hover:bg-surface-hover hover:text-ink sm:gap-2 sm:px-4 sm:text-sm ${className}`}
+        aria-label={dark ? "关闭夜间模式" : "开启夜间模式"}
+        aria-pressed={dark}
+        title={dark ? "关闭夜间模式" : "开启夜间模式"}
+        className={`flex h-10 min-w-0 items-center justify-between gap-2 rounded-lg border border-border bg-surface/70 px-2 text-xs font-medium text-ink-secondary transition-colors hover:bg-surface-hover hover:text-ink sm:gap-3 sm:px-4 sm:text-sm ${className}`}
       >
-        {dark ? <Sun className="size-4" /> : <Moon className="size-4" />}
-        <span>{dark ? "白天模式" : "夜间模式"}</span>
+        <span className="flex min-w-0 items-center gap-1.5">
+          <Moon className="size-3.5 shrink-0" />
+          <span className="truncate">夜间模式</span>
+        </span>
+        <span
+          className={
+            dark
+              ? "inline-flex shrink-0 items-center gap-1 text-xs text-success"
+              : "inline-flex shrink-0 items-center gap-1 text-xs text-ink-muted"
+          }
+        >
+          {dark ? (
+            <>
+              <CheckCircle2 className="size-3.5 shrink-0" />
+              <span className="hidden truncate sm:inline">已开启</span>
+            </>
+          ) : (
+            <>
+              <Circle className="size-3.5 shrink-0" />
+              <span className="hidden truncate sm:inline">已关闭</span>
+            </>
+          )}
+        </span>
       </button>
     );
   }

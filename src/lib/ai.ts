@@ -1,5 +1,9 @@
 import { toDateInputValue } from "@/lib/date";
-import { pickModeFromJudgment } from "@/lib/mode-judgment";
+import {
+  heuristicModeJudgment,
+  parseModeJudgment,
+  type WorkModeJudgment,
+} from "@/lib/mode-judgment";
 import {
   heuristicProjectMode,
   isProjectMode,
@@ -30,6 +34,7 @@ import {
   CLARIFICATION_TRANSLATION_SYSTEM_PROMPT,
   MODE_JUDGMENT_SYSTEM_PROMPT,
   OUTPUT_QUALITY_RULES,
+  TASK_STICKY_SYSTEM_PROMPT,
   PLAN_SYSTEM_PROMPT,
   buildClarificationTranslationUserPayload,
   buildModeJudgmentUserPayload,
@@ -75,6 +80,14 @@ export type InboxPlanUserCard = {
   ifWrongThen?: string;
 };
 
+export type InboxPlanSourceLink = {
+  title: string;
+  url: string;
+  siteName?: string | null;
+  publishedAt?: string | null;
+  authority?: number;
+};
+
 export type InboxPlanAgentTrace = {
   usedFacts: string[];
   assumptionsUsed: string[];
@@ -114,6 +127,8 @@ export type InboxPlan = {
   session?: DecisionSession | null;
   source?: InboxPlanSource;
   userCard?: InboxPlanUserCard | null;
+  /** 真实联网检索得到的来源；没有搜索或搜索失败时为空。 */
+  sources?: InboxPlanSourceLink[] | null;
   agent?: InboxPlanAgentTrace | null;
   content?: InboxPlanContentTrace | null;
 };
@@ -206,6 +221,8 @@ export type InboxClarification = {
   mode?: "socratic";
   /** 澄清收口后定下的推进模式；第 2 段方案 Agent 只承接，不再自己判。 */
   workMode?: ProjectMode | null;
+  /** 模式判断的完整结果，供方案 Agent 使用目标框和置信度。 */
+  modeJudgment?: WorkModeJudgment | null;
   status?: "asking" | "done";
   askedCount?: number;
   maxQuestions?: number;
@@ -1387,10 +1404,11 @@ export async function generateSocraticClarification(input: {
     };
   }
   // 澄清收口 → 先定模式，再交给第 2 段方案 Agent，它只承接这个结论。
-  const workMode = await judgeWorkMode({
+  const modeJudgment = await judgeWorkMode({
     content: input.content,
     translation,
     summary,
+    frame,
     history: input.history,
     apiKey: input.apiKey,
     model: input.model,
@@ -1402,7 +1420,8 @@ export async function generateSocraticClarification(input: {
     supplementPlaceholder: "",
     mode: "socratic",
     status: "done",
-    workMode,
+    workMode: modeJudgment.mode,
+    modeJudgment,
     askedCount: input.history.length,
     maxQuestions,
     history: input.history,
@@ -1423,22 +1442,35 @@ export async function judgeWorkMode(input: {
   content: string;
   translation?: InboxClarificationTranslation | null;
   summary?: InboxClarificationSummary | null;
+  frame?: InboxClarificationFrame | null;
   history?: InboxClarificationHistoryItem[];
   apiKey?: string;
   model?: string;
   baseUrl?: string;
-}): Promise<ProjectMode> {
+}): Promise<WorkModeJudgment> {
   const answers = (input.history ?? [])
     .flatMap((item) => item.answer)
     .map((entry) => entry.trim())
     .filter(Boolean);
-  const clarified = [
+  const clarifiedParts = [
+    input.translation?.desiredOutcome,
     input.translation?.normalizedIntent,
     input.summary?.realProblem,
+    ...(input.translation?.confirmedFacts ?? []),
+    ...(input.translation?.goals ?? []),
+    ...(input.translation?.constraints ?? []),
+    ...(input.translation?.unknowns ?? []),
+    ...(input.summary?.confirmedFacts ?? []),
+    ...(input.summary?.goals ?? []),
+    ...(input.summary?.unverifiedAssumptions ?? []),
+    input.frame?.coreNeedHypothesis,
+    input.frame?.decisionFork,
+    input.frame?.decisiveUnknown,
     ...answers,
   ]
     .filter((item): item is string => Boolean(item && String(item).trim()))
-    .join("；");
+    .map((item) => String(item).trim());
+  const clarified = [...new Set(clarifiedParts)].join("；").slice(0, 3000);
   const text = await callModel(
     MODE_JUDGMENT_SYSTEM_PROMPT,
     buildModeJudgmentUserPayload([
@@ -1465,12 +1497,24 @@ export async function judgeWorkMode(input: {
   // 落 normal 等于「做完一次就结束」，会把长期 / 探索目标压小；
   // 所以模型没给出结论时，再用本地规则兜一层。
   if (!text || !text.trim()) {
-    return heuristicProjectMode(
+    return heuristicModeJudgment({
+      mode: heuristicProjectMode(
+        [clarified, input.content].filter(Boolean).join("；"),
+        false,
+      ),
+      realNeed: clarified || input.content,
+    });
+  }
+  const judgment = parseModeJudgment(text);
+  if (judgment) return judgment;
+  // 非空但损坏的 JSON 也必须走本地兜底，不能静默落成 normal。
+  return heuristicModeJudgment({
+    mode: heuristicProjectMode(
       [clarified, input.content].filter(Boolean).join("；"),
       false,
-    );
-  }
-  return pickModeFromJudgment(text);
+    ),
+    realNeed: clarified || input.content,
+  });
 }
 
 export async function planInbox(
@@ -1871,6 +1915,12 @@ export async function generateTaskCoachAdvice(input: {
   executionMode?: string | null;
   doneWhen?: string | null;
   methodHint?: string | null;
+  previousStickyNotes?: Array<{
+    sourceMessage: string;
+    title: string;
+    steps: string[];
+    nextStep: string;
+  }>;
 }, memorySummary?: string, evidence?: string[]): Promise<TaskCoachAdvice> {
   const fallback = buildLocalTaskCoachAdvice(input);
   const decisionKind = routeDecisionKind({
@@ -1879,32 +1929,7 @@ export async function generateTaskCoachAdvice(input: {
   });
 
   const text = await callModel(
-    `你是走走里的任务伙伴，不是标准助手。用户会给你一个任务标题和一段很随意的想法。你要像熟悉他的朋友一样，先接住他的话，再写一张便利贴。
-本次决策类型：${decisionKind}。如果是 recommend 或 compare，不要只给执行步骤，要在 encouragement、steps 和 nextStep 里直接给出具体推荐或比较结论；如果是 plan，给出可执行路径；如果是 coach，帮他排除当前阻力。
-硬性要求：
-- 必须回应用户原话和任务标题，不能只讲通用道理。
-- 禁止使用通用的安慰或鼓励模板句。
-- 禁止每次使用同一套结构；根据用户原话里的具体词改变标题、鼓励语、步骤和下一步。
-- 把用户原话中的细节直接带进内容，不要只替换任务名。
-- 先判断用户更需要澄清、取舍、找反馈、降低阻力还是直接动手，不必每次都拆成“小步”。
-- 步骤要具体到马上能做；nextStep 是接下来最该动手做的真实动作，指向一个能交出去的结果，不要把它写成口号式的起步动作，也不要把动作压缩到无关痛痒的程度。
-- nextStep 不能是停留在思考或整理层面的抽象指令。
-- steps 是执行卡片上的行动块，可以带序号，但不是把任务拆成空洞步骤。每块要是一段完整行动：做什么、用什么工具或方法、最后拿到什么；能合并就合并，不要为了凑结构拆碎。
-- 大多数任务 2-4 块就够；只有步骤之间有明显前后依赖或各自有独立产出时才多分，不要为了完整感把一件事拆成很多块。
-- steps 文本里不要自己写序号，序号由界面统一显示，你只写每块的行动内容。
-- 每块写到能直接照做就停，不要展开成教程；需要代码、提示词或文案时可以直接给出，其他说明尽量压短。
-- 按项目模式调整详略：普通模式给完整处理方法和完成标志；长期模式只说这一轮怎么推进当前阶段、做完后从哪里继续；探索模式说这次练什么或试什么、记录什么反馈，不谈完成度。
-- 工具自然融进行动里：需要外部工具就写清打开什么、输入什么、拿到什么；不需要就写清怎么做和得到什么。不要单独列工具清单，也不要为了显得具体硬塞。
-- 需要判断时写清怎么算做到；不需要判断就不要硬加验收标准。AI 现在就能产出的内容（文案、比较、改法、清单、判断）要直接写出来，不要让用户再问一遍 AI。
-- 涉及日期、年份或有效期时，必须基于输入里的 currentDate，不能凭记忆写错年份。
-- 工具名和网址必须准确；不确定网址就不要写，只写工具名和搜索关键词，避免编造链接。
-- 只返回一个 JSON 对象，不要把多个 JSON 对象拼在一起，也不要重复输出同一步。
-- 不要用说教句式。
-- 语气像人写的，不像 AI 生成的。
-- 只返回 JSON，不要 Markdown。
-格式：{"title":"便利贴标题","encouragement":"一句鼓励","steps":["可以带序号，也可以不写序号；每块是一段完整行动"],"nextStep":"接下来可做的具体动作"}
-示例输入：任务“整理作品集”，想法“我不知道该放什么”
-示例输出：{"title":"先按目标岗位反推作品顺序","encouragement":"你不知道放什么，是因为还没定作品集要给谁看。","steps":["把目标岗位的招聘要求和现有简历贴给 AI，让它列出对方最在意的 3 类能力","从现有作品里挑出分别证明这 3 类能力的 3 个项目","把项目按“问题—做法—结果”改写成三句话，先放进作品集"],"nextStep":"把目标岗位链接和简历贴给 AI，让它反推作品顺序"}`,
+    TASK_STICKY_SYSTEM_PROMPT,
     JSON.stringify({
       ...input,
       currentDate: toDateInputValue(new Date()),
@@ -1916,7 +1941,7 @@ export async function generateTaskCoachAdvice(input: {
     undefined,
     undefined,
     0.75,
-    { maxTokens: 4000, reasoningEffort: "none" },
+    { maxTokens: 4000, reasoningEffort: "none", qualityRules: "" },
   );
 
   if (!text) return fallback;

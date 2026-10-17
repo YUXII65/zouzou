@@ -1,0 +1,123 @@
+.sticky-inline {
+  margin-top: 8rpx;
+  padding: 12rpx;
+  border: 1rpx solid rgba(212, 134, 43, 0.25);
+  border-radius: 14rpx;
+  background: rgba(212, 134, 43, 0.05);
+}
+
+.sticky-step {
+  padding: 10rpx 12rpx;
+  text-align: left;
+  border: 1rpx solid rgba(212, 134, 43, 0.15);
+  border-radius: 10rpx;
+  background: rgba(255, 255, 255, 0.68);
+  color: #182238;
+  font-size: 24rpx;
+  line-height: 1.7;
+  white-space: pre-wrap;
+}
+
+.sticky-step + .sticky-step {
+  margin-top: 8rpx;
+}
+
+.sticky-step-old {
+  background: rgba(255, 255, 255, 0.5);
+  color: #4d6d94;
+}
+
+.sticky-loading {
+  display: flex;
+  align-items: center;
+  gap: 10rpx;
+  padding: 6rpx 2rpx;
+  color: #4d6d94;
+  font-size: 23rpx;
+  line-height: 1.6;
+}
+
+.sticky-spinner {
+  color: #0faec8;
+  font-size: 28rpx;
+}
+
+.sticky-history {
+  margin-top: 8rpx;
+}
+
+.sticky-history-toggle {
+  color: #8296b0;
+  font-size: 21rpx;
+  line-height: 1.6;
+}
+
+.sticky-history-list {
+  margin-top: 8rpx;
+}
+
+.sticky-history-note + .sticky-history-note {
+  margin-top: 8rpx;
+}
+
+.sticky-empty {
+  color: #8296b0;
+  font-size: 22rpx;
+  line-height: 1.6;
+}
+
+.sticky-footer {
+  margin-top: 10rpx;
+  padding-top: 10rpx;
+  border-top: 1rpx solid rgba(212, 134, 43, 0.2);
+}
+
+.sticky-supplement {
+  display: flex;
+  align-items: center;
+  gap: 10rpx;
+}
+
+.sticky-input {
+  flex: 1;
+  min-width: 0;
+  height: 64rpx;
+  padding: 0 16rpx;
+  box-sizing: border-box;
+  border: 1rpx solid #dce8f7;
+  border-radius: 10rpx;
+  background: rgba(255, 255, 255, 0.82);
+  color: #182238;
+  font-size: 23rpx;
+}
+
+.sticky-send {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 64rpx;
+  padding: 0 18rpx;
+  border-radius: 10rpx;
+  background: #e8f0ff;
+  color: #1e45b4;
+  font-size: 22rpx;
+  font-weight: 600;
+}
+
+.sticky-send-disabled {
+  opacity: 0.45;
+}
+
+.sticky-generate {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 64rpx;
+  padding: 0 18rpx;
+  border: 1rpx solid rgba(15, 174, 200, 0.3);
+  border-radius: 10rpx;
+  background: rgba(15, 174, 200, 0.09);
+  color: #0b8ca2;
+  font-size: 22rpx;
+  font-weight: 600;
+}

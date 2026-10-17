@@ -1,4 +1,7 @@
 const { sampleIdeasForDate, pickRandomSampleIdeas } = require("../../utils/sample-ideas");
+const { canShowCaptureClarification, isUsableInboxPlan, normalizeTodayResult } = require("../../utils/today-result");
+const { openTab, syncTabBar } = require("../../utils/tab-bar");
+const { markDataChanged, shouldRefresh } = require("../../utils/data-refresh");
 
 const PRIORITY_OPTIONS = [
   { value: "low", label: "低" },
@@ -108,9 +111,12 @@ function currentClarifyQuestion(turns) {
   return last && last.role === "ai" ? last : null;
 }
 
+const { getContentTop } = require("../../utils/layout");
+
 Page({
   data: {
     theme: "light",
+    contentTop: 92,
     userAvatar: "",
     userInitial: "走",
     content: "",
@@ -118,36 +124,52 @@ Page({
     priorityLabels: PRIORITY_OPTIONS.map((item) => item.label),
     pendingItems: [],
     tasks: [],
+    plannedTasks: [],
+    completedTodayTasks: [],
     submittingPlanId: "",
     submittingClarifyId: "",
-    ignoringInboxId: "",
     expandedTaskId: ""
   },
 
   onLoad() {
+    this.setData({ contentTop: getContentTop() });
     this._todayCacheRestored = false;
+    this._lastLoadAt = 0;
+    this._loadingToday = null;
+    this._onboardingChecked = false;
   },
 
   syncTheme() {
     const { getTheme } = require("../../utils/theme");
-    this.setData({ theme: getTheme() });
+    const theme = getTheme();
+    if (theme !== this.data.theme) this.setData({ theme });
+    return theme;
   },
 
   syncUserHeader() {
     const { getCachedUser } = require("../../utils/api");
     const user = getCachedUser();
     const displayName = user ? (user.displayName || user.username || "走") : "走";
-    this.setData({
-      userAvatar: user && user.avatarUrl ? user.avatarUrl : "",
-      userInitial: displayName.slice(0, 1)
-    });
+    const userAvatar = user && user.avatarUrl ? user.avatarUrl : "";
+    const userInitial = displayName.slice(0, 1);
+    if (userAvatar !== this.data.userAvatar || userInitial !== this.data.userInitial) {
+      this.setData({ userAvatar, userInitial });
+    }
   },
+
   onShow() {
-    this.syncTheme();
+    const theme = this.syncTheme();
     this.syncUserHeader();
+    syncTabBar(this, "today", theme);
+
+    if (!this._onboardingChecked) {
+      this._onboardingChecked = true;
+      this.ensureOnboarding();
+    }
+
+    if (!shouldRefresh("today", this._lastLoadAt)) return;
     this.restoreTodayCache();
     this.loadToday();
-    this.ensureOnboarding();
   },
 
   ensureOnboarding() {
@@ -180,8 +202,9 @@ Page({
   },
 
   applyTodayResult(result) {
+    const normalized = normalizeTodayResult(result);
     this.setData({
-      pendingItems: (result.pendingInbox || []).map((item) => {
+      pendingItems: normalized.pendingInbox.map((item) => {
         const plan = parseJson(item.aiPlanJson);
         const clarification = parseJson(item.aiSuggestionJson);
         const rawDimensions = normalizeDimensions(clarification);
@@ -195,11 +218,11 @@ Page({
           plan && (plan.action === "answer" || plan.responseMode === "answer")
         );
         const hasPlan = Boolean(
-          plan &&
+          clarifyStatus === "done" &&
+            plan &&
             plan.action !== "ignore" &&
             !isAnswer &&
-            Array.isArray(plan.tasks) &&
-            plan.tasks.length
+            isUsableInboxPlan(plan)
         );
         const actionLabels = {
           create_project: "新建项目",
@@ -244,47 +267,32 @@ Page({
             : "如果这些选项都不准确，可以补充两句。"
         };
       }),
-      tasks: [
-        ...(result.plannedTasks || []),
-        ...(result.completedTodayTasks || []),
-      ].map((task) => {
-        const isDone = task.status === "done";
-        const stickyNote =
-          Array.isArray(task.stickyNotes) && task.stickyNotes.length
-            ? task.stickyNotes[0]
-            : null;
-        return {
-          ...task,
-          projectName: task.projectName || "未关联项目",
-          dueDateText: task.dueDate ? String(task.dueDate).slice(0, 10) : "",
-          displayTitle: task.shortTitle && task.shortTitle.trim() ? task.shortTitle.trim() : fallbackTitle(task.title),
-          priorityLabel: (PRIORITY_OPTIONS.find((item) => item.value === task.priority) || PRIORITY_OPTIONS[1]).label,
-          sticky: stickyNote
-            ? {
-                id: stickyNote.id,
-                title: stickyNote.title,
-                encouragement: stickyNote.encouragement,
-                steps: Array.isArray(stickyNote.steps) ? stickyNote.steps : [],
-                nextStep: stickyNote.nextStep,
-              }
-            : null,
-          canChangeStatus: !isDone,
-          actionLabel: isDone
-            ? "完成"
-            : task.status === "todo"
-              ? "待办"
-              : task.status === "in_progress"
-                ? "进行"
-                : "完成",
-          nextStatus: isDone
-            ? ""
-            : task.status === "todo"
-              ? "in_progress"
-              : task.status === "in_progress"
-                ? "done"
-                : ""
+      ...(() => {
+        const decorateTask = (task) => {
+          const isDone = task.status === "done";
+          const status = isDone ? "done" : task.status === "in_progress" ? "in_progress" : "todo";
+          return {
+            ...task,
+            projectName: task.projectName || "未关联项目",
+            dueDateText: task.dueDate ? String(task.dueDate).slice(0, 10) : "",
+            displayTitle: task.shortTitle && task.shortTitle.trim() ? task.shortTitle.trim() : fallbackTitle(task.title),
+            priorityLabel: (PRIORITY_OPTIONS.find((item) => item.value === task.priority) || PRIORITY_OPTIONS[1]).label,
+            stickyNotes: Array.isArray(task.stickyNotes) ? task.stickyNotes.slice(0, 10) : [],
+            canChangeStatus: !isDone,
+            statusClass: status,
+            statusIcon: isDone ? "✓" : task.status === "in_progress" ? "▶" : "○",
+            actionLabel: isDone ? "完成" : task.status === "todo" ? "待办" : task.status === "in_progress" ? "进行" : "完成",
+            nextStatus: isDone ? "" : task.status === "todo" ? "in_progress" : task.status === "in_progress" ? "done" : ""
+          };
         };
-      })
+        const plannedTasks = normalized.plannedTasks.map(decorateTask);
+        const completedTodayTasks = normalized.completedTodayTasks.map(decorateTask);
+        return {
+          plannedTasks,
+          completedTodayTasks,
+          tasks: [...plannedTasks, ...completedTodayTasks],
+        };
+      })()
     });
   },
 
@@ -292,12 +300,14 @@ Page({
     const { getToken, getToday } = require("../../utils/api");
     if (!getToken()) {
       wx.reLaunch({ url: "/pages/login/login" });
-      return;
+      return Promise.resolve();
     }
+    if (this._loadingToday) return this._loadingToday;
 
-    getToday()
+    this._loadingToday = getToday()
       .then((result) => {
         this.applyTodayResult(result);
+        this._lastLoadAt = Date.now();
         writeTodayCache(result);
         this.maybeGenerateFocus(result);
       })
@@ -307,7 +317,11 @@ Page({
           return;
         }
         wx.showToast({ title: "今日数据没加载出来", icon: "none" });
+      })
+      .then(() => {
+        this._loadingToday = null;
       });
+    return this._loadingToday;
   },
 
   // 当天还没有 AI 推荐时补算一次；每天只试一次，失败也不打断页面。
@@ -355,37 +369,17 @@ Page({
       return;
     }
 
-    const { clarifyIdea, planInbox } = require("../../utils/api");
+    const { clarifyIdea } = require("../../utils/api");
     wx.showLoading({ title: "正在读你的原话..." });
     clarifyIdea(content)
       .then((response) => {
-        const result = response && response.result ? response.result : response;
-        const clarification = result && result.clarification;
-        const itemId = result && result.itemId;
-        this.setData({ content: "" });
-        const needsNoQuestion = Boolean(
-          itemId &&
-            (!clarification ||
-              clarification.status === "done" ||
-              !Array.isArray(clarification.dimensions) ||
-              clarification.dimensions.length === 0)
-        );
-        if (!needsNoQuestion) {
-          wx.hideLoading();
-          wx.showToast({ title: "已收进收件箱", icon: "none" });
-          this.loadToday();
-          return null;
+        if (!canShowCaptureClarification(response)) {
+          throw new Error("missing_clarification");
         }
-        return planInbox({ itemId })
-          .then((planResult) => this.finishResolvedPlan(itemId, planResult))
-          .then((result) => {
-            wx.hideLoading();
-            wx.showToast({
-              title: result && result.directAnswer ? "已直接回答" : "已放进文件",
-              icon: result && result.directAnswer ? "none" : "success"
-            });
-            this.loadToday();
-          });
+        this.setData({ content: "" });
+        wx.hideLoading();
+        wx.showToast({ title: "先回答一个问题", icon: "none" });
+        this.loadToday();
       })
       .catch((error) => {
         wx.hideLoading();
@@ -460,7 +454,7 @@ Page({
     this.setData({ submittingClarifyId: item.id });
     wx.showLoading({ title: "正在想下一个问题..." });
     const next = item.clarifyMode === "socratic"
-      ? advanceClarify(item.id, answer)
+      ? advanceClarify(item.id, answer, item.questionKey)
       : Promise.resolve(null);
     next
       .then((response) => {
@@ -473,8 +467,8 @@ Page({
         }
         const result = response && response.result ? response.result : response;
         const clarification = result && result.clarification ? result.clarification : result;
+        const turns = buildClarifyTurns(clarification, item.content);
         if (clarification && clarification.status !== "done") {
-          const turns = buildClarifyTurns(clarification, item.content);
           const question = currentClarifyQuestion(turns);
           const askingOptions = question && Array.isArray(question.options) ? question.options : [];
           this.setData({
@@ -489,6 +483,18 @@ Page({
           this.setData({ submittingClarifyId: "" });
           return null;
         }
+        // 先落完成态，再请求方案。即使方案请求超时，界面也不会退回成一个悬空的旧问题。
+        this.setData({
+          [`pendingItems[${itemIndex}].clarifyStatus`]: "done",
+          [`pendingItems[${itemIndex}].turns`]: turns,
+          [`pendingItems[${itemIndex}].options`]: [],
+          [`pendingItems[${itemIndex}].multi`]: false,
+          [`pendingItems[${itemIndex}].questionKey`]: "",
+          [`pendingItems[${itemIndex}].typed`]: "",
+          [`pendingItems[${itemIndex}].directInput`]: false,
+          [`pendingItems[${itemIndex}].action`]: "信息够了",
+        });
+        wx.showLoading({ title: "正在整理下一步..." });
         return planInbox({
           itemId: item.id,
           option: answer.join("、"),
@@ -497,7 +503,15 @@ Page({
       })
       .then((planResult) => {
         if (!planResult) return null;
+        if (!isUsableInboxPlan(planResult)) {
+          wx.hideLoading();
+          this.setData({ submittingClarifyId: "" });
+          wx.showToast({ title: "这次没整理完整，点重试", icon: "none" });
+          this.loadToday();
+          return null;
+        }
         return this.finishResolvedPlan(item.id).then(() => {
+          markDataChanged(["today", "workspace", "profile"]);
           wx.hideLoading();
           this.setData({ submittingClarifyId: "" });
           wx.showToast({ title: "已放进文件", icon: "success" });
@@ -516,7 +530,34 @@ Page({
   },
 
   onGeneratePlan(event) {
-    this.onConfirmPlan(event);
+    const itemIndex = Number(event.currentTarget.dataset.itemIndex);
+    const item = this.data.pendingItems[itemIndex];
+    if (!item || this.data.submittingClarifyId) return;
+    const { planInbox } = require("../../utils/api");
+    this.setData({ submittingClarifyId: item.id });
+    wx.showLoading({ title: "正在整理下一步..." });
+    planInbox({ itemId: item.id })
+      .then((planResult) => {
+        if (!isUsableInboxPlan(planResult)) {
+          throw new Error("agent_failed");
+        }
+        return this.finishResolvedPlan(item.id).then(() => {
+          markDataChanged(["today", "workspace", "profile"]);
+          wx.hideLoading();
+          this.setData({ submittingClarifyId: "" });
+          wx.showToast({ title: "已放进文件", icon: "success" });
+          this.loadToday();
+        });
+      })
+      .catch((error) => {
+        wx.hideLoading();
+        this.setData({ submittingClarifyId: "" });
+        if (error && error.statusCode === 401) {
+          wx.reLaunch({ url: "/pages/login/login" });
+          return;
+        }
+        wx.showToast({ title: "这次没整理完整，点重试", icon: "none" });
+      });
   },
 
   onConfirmPlan(event) {
@@ -528,6 +569,7 @@ Page({
     wx.showLoading({ title: "正在整理..." });
     this.finishResolvedPlan(item.id, null)
       .then((result) => {
+        markDataChanged(["today", "workspace", "profile"]);
         wx.hideLoading();
         this.setData({ submittingPlanId: "" });
         wx.showToast({
@@ -547,28 +589,6 @@ Page({
       });
   },
 
-  onIgnoreInbox(event) {
-    const itemId = event.currentTarget.dataset.id;
-    if (!itemId || this.data.ignoringInboxId) return;
-    const { ignoreInbox } = require("../../utils/api");
-    this.setData({ ignoringInboxId: itemId });
-    wx.showLoading({ title: "正在忽略..." });
-    ignoreInbox(itemId)
-      .then(() => {
-        wx.hideLoading();
-        this.setData({ ignoringInboxId: "" });
-        this.loadToday();
-      })
-      .catch((error) => {
-        wx.hideLoading();
-        this.setData({ ignoringInboxId: "" });
-        if (error.statusCode === 401) {
-          wx.reLaunch({ url: "/pages/login/login" });
-          return;
-        }
-        wx.showToast({ title: "忽略失败，再试一次", icon: "none" });
-      });
-  },
 
   onTaskStatusTap(event) {
     const taskId = event.currentTarget.dataset.id;
@@ -579,6 +599,7 @@ Page({
     wx.showLoading({ title: "正在同步..." });
     setTaskStatus(taskId, status)
       .then(() => {
+        markDataChanged(["today", "workspace", "profile"]);
         wx.hideLoading();
         this.loadToday();
       })
@@ -598,8 +619,23 @@ Page({
     this.setData({ expandedTaskId: this.data.expandedTaskId === taskId ? "" : taskId });
   },
 
+  onStickyChange(event) {
+    const taskId = event.currentTarget.dataset.id;
+    const stickyNotes = Array.isArray(event.detail.notes) ? event.detail.notes : [];
+    if (!taskId) return;
+    const patch = (tasks) => (tasks || []).map((task) =>
+      task.id === taskId ? { ...task, stickyNotes } : task
+    );
+    markDataChanged(["today", "workspace"]);
+    this.setData({
+      tasks: patch(this.data.tasks),
+      plannedTasks: patch(this.data.plannedTasks),
+      completedTodayTasks: patch(this.data.completedTodayTasks),
+    });
+  },
 
-  onProfileTap() { wx.navigateTo({ url: "/pages/profile/profile" }); },
+
+  onProfileTap() { openTab("profile"); },
 
 
 });

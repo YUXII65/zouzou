@@ -24,11 +24,15 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 
 - 第 1 段翻译 Agent（`translateIdea`）：用户原话 → 结构化 `translation`（`desiredOutcome` / `workingAssumption` / `ifWrongThen`），判 `readiness` 和 `responseMode`，**提问也由这一段负责**。
 - 第 2 段方案 Agent（`PLAN_AGENT_SYSTEM_PROMPT`）：澄清收口后直接产出唯一执行路径 + 任务，填 `executionMode` / `doneWhen` / `maxTurns` / `toolPolicy` / `methodHint` / `recommendation` / `executionSteps` / `fallback`，只承接已定好的 `workMode`，不自己判 mode。
-- 澄清**最少 2 轮、最多 4 轮**（到上限强制收口）；没有「直接回答」出口（2026-10-16 移除），任何输入都先澄清，再产出行动卡 / 任务。
+- 澄清**最少 2 轮、最多5 轮**（到上限强制收口）；任何输入都先澄清，再产出行动卡 / 任务。
 - 三种模式 normal / longterm / explore 按「有没有终点」分，**用户永远不选模式**；模式在澄清收口之后、生成之前判定。
 - 生产链只有这一条，旧三段链只作失败回退。全部细节见 [`docs/ai-pipeline.md`](docs/ai-pipeline.md)。
 
 ## 小程序与网页共用一份数据契约
+
+- **网页端已验收的组件是 UI / 交互唯一真源。** 改小程序前必须先定位对应网页组件，列出结构、文案、状态和交互的逐项映射；不得以小程序现有旧实现为基线继续局部修补。旧结构与网页不一致时，直接替换，不要“保留原风格再优化”。
+- **UI 一致性不能只靠小程序截图或静态检查通过来证明。** 必须做网页组件 ↔ 小程序组件的逐项对照；容易回退的旧结构要写进 `pnpm verify:miniprogram` 的反回归门禁。
+- **便利贴唯一基准是 `src/components/task-sticky-inline.tsx`**：只展示可执行步骤卡片，不展示便利贴标题、鼓励语、“现在可以做”，不重复任务标题；支持历史便利贴折叠和“有卡顿？说说想法”补充输入。小程序首页、文件页、任务编辑页都按这一结构渲染。
 
 - 三页各有唯一契约：今天页 `src/lib/today-view.ts`、文件页 `src/lib/files-view.ts`、个人页 `src/lib/profile-view.ts`；网页页面和 `/api/miniprogram/*` 都调同一份。
 - 禁止在小程序端另写取数聚合（旧的 `src/lib/miniprogram-today.ts` 已删除）；小程序页面只做渲染和局部交互，不判业务分支（不判 `answer`、不拼 `dimensions`、不自己造状态）。
@@ -77,12 +81,11 @@ pnpm check:online   # 上线前检查
 
 ## 红线
 
-- 提示词里不准出现具体记录工具名（如「备忘录」）——负面例子也会被模型模仿。门禁：`src/lib/ai-quality.ts` 的 `RECORD_TOOL_PHRASES`。
 - 任务「完成」是终态：按钮 `disabled`、点击直接 `return`，不允许再点回待办。
 - 新增整屏页面必须加进 `FULLSCREEN_ROUTES`。
 - 任务确认保存走 interactive transaction，**必须用 `withTransactionRetry`**；Neon 抖动导致写库失败时不能用「保存按钮没反应」糊过去。
 - 任何 AI 请求都要有总时间预算（总 26s、单次 20s），不能让按钮无限停在「处理中」。
-- 系统不实际联网、不接 Tool / MCP。需要外部信息时，输出「查什么 / 去哪查 / 按什么标准判断」的可用结论。
+- 系统按需使用 DeepSeek Search / Fetch（同一个 `DEEPSEEK_API_KEY`）获取实时信息。有搜索结果时必须使用并带来源；没有结果或失败时，不能假装已联网，只能输出「查什么 / 去哪查 / 按什么标准判断」的可用结论。
 - 本机路径、数据库主机名等敏感信息只写 `docs/private/`（已在 `.gitignore`），主文档一律引用 [`docs/private/local.md`](docs/private/local.md)（仅本地）。
 
 ## 文档索引
@@ -97,6 +100,7 @@ pnpm check:online   # 上线前检查
 | [`docs/_open-questions.md`](docs/_open-questions.md) | 遇到文档说法冲突、或想认领未完成事项时 |
 | `docs/testing.md` | 想知道测试 / CI / AI 评测怎么设计时 |
 | `docs/beian-launch-runbook.md` | ICP 备案到小程序上线的完整操作 |
+| [`docs/miniprogram-review-checklist.md`](docs/miniprogram-review-checklist.md) | 每次提交小程序审核前的检查清单（`pnpm check:review`） |
 | `docs/deploy-edgeone.md` | EdgeOne 首次部署与账号配置 |
 | `docs/backup.md` | 数据库备份恢复的具体步骤 |
 | `docs/db-region-migration.md` | 换数据库区域的操作手册 |

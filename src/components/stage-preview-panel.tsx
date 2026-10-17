@@ -49,7 +49,7 @@ export function StagePreviewPanel({
     Boolean(stage.nextStage?.tasks.length) && nextOrder <= MAX_LONGTERM_STAGES;
   const missingNextStage = !stage.nextStage;
 
-  // 下一阶段总结由服务端在响应之后补生成（after()）。这里自动补取两次，
+  // 当前阶段的下一阶段总结会在任务状态变化后预生成；这里只做首屏兜底补取两次，
   // 用户不必手点「生成 / 重新生成」，也不会让「正在整理下一阶段」一直停着。
   useEffect(() => {
     if (!missingNextStage || autoRetry >= 2) return;
@@ -89,18 +89,18 @@ export function StagePreviewPanel({
     return (
       <div className="mt-3 space-y-2">
         <div className="rounded-xl border border-accent/25 bg-accent-soft/60 px-3 py-2">
-          <span className="text-[11px] font-medium text-accent-strong">
-            第 {stage.order}/{MAX_LONGTERM_STAGES} 阶段
-          </span>
-          <p className="mt-0.5 text-xs leading-relaxed text-ink">
+          <p className="text-xs leading-relaxed text-ink">
+            <span className="font-medium text-accent-strong">
+              {stage.order}/{MAX_LONGTERM_STAGES} 阶段：
+            </span>
             {currentSummary}
           </p>
         </div>
         <div className="rounded-xl border border-border/70 bg-surface-muted/40 px-3 py-2">
-          <span className="text-[11px] font-medium text-ink-muted">
-            下一阶段 · 第 {nextOrder}/{MAX_LONGTERM_STAGES} 阶段 · 预览
-          </span>
-          <p className="mt-0.5 text-xs leading-relaxed text-ink">
+          <p className="text-xs leading-relaxed text-ink">
+            <span className="font-medium text-ink-muted">
+              {nextOrder}/{MAX_LONGTERM_STAGES} 阶段：
+            </span>
             {nextSummary}
           </p>
         </div>
@@ -112,10 +112,10 @@ export function StagePreviewPanel({
     <div className="mt-3 rounded-xl border border-success/25 bg-success/5 p-4">
       {canAdvance ? (
         <>
-          <p className="text-xs font-semibold text-success">
-            下一阶段 · 第 {nextOrder}/{MAX_LONGTERM_STAGES} 阶段
-          </p>
-          <p className="mt-2 text-sm font-medium leading-6 text-ink">
+          <p className="text-sm font-medium leading-6 text-ink">
+            <span className="font-semibold text-success">
+              {nextOrder}/{MAX_LONGTERM_STAGES} 阶段：
+            </span>
             {nextSummary}
           </p>
           <div className="mt-4 flex justify-end">
@@ -136,19 +136,19 @@ export function StagePreviewPanel({
         </>
       ) : missingNextStage ? (
         <>
-          <p className="text-xs font-semibold text-success">
-            下一阶段 · 第 {nextOrder}/{MAX_LONGTERM_STAGES} 阶段
-          </p>
-          <p className="mt-2 text-sm font-medium leading-6 text-ink">
+          <p className="text-sm font-medium leading-6 text-ink">
+            <span className="font-semibold text-success">
+              {nextOrder}/{MAX_LONGTERM_STAGES} 阶段：
+            </span>
             {nextSummary}
           </p>
         </>
       ) : (
         <>
-          <p className="text-xs font-semibold text-success">
-            第 {stage.order}/{MAX_LONGTERM_STAGES} 阶段
-          </p>
-          <p className="mt-2 text-sm font-medium leading-6 text-ink">
+          <p className="text-sm font-medium leading-6 text-ink">
+            <span className="font-semibold text-success">
+              {stage.order}/{MAX_LONGTERM_STAGES} 阶段：
+            </span>
             {currentSummary}
           </p>
           <p className="mt-3 text-xs text-ink-muted">

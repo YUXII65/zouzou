@@ -177,6 +177,12 @@ try {
   if (!persisted.aiSuggestionJson.includes('"translation"')) {
     throw new Error("澄清没有把语言翻译持久化到 aiSuggestionJson");
   }
+  if (
+    !persisted.aiSuggestionJson.includes('"modeJudgment"') ||
+    !persisted.aiSuggestionJson.includes('"endStateType"')
+  ) {
+    throw new Error("澄清没有把完整模式判断持久化到 aiSuggestionJson");
+  }
   if (!persisted.aiSuggestionJson.includes('"session"')) {
     throw new Error("澄清没有把 DecisionSession 持久化到 aiSuggestionJson");
   }

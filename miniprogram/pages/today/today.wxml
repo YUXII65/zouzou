@@ -1,6 +1,44 @@
+<template name="agenda-task">
+  <view class="task-row">
+    <view class="task-copy">
+      <view class="task-tags">
+        <text class="task-tag task-tag-focus" wx:if="{{item.isFocused}}">重点</text>
+        <text class="task-tag task-tag-overdue" wx:if="{{item.isOverdue}}">逾期</text>
+        <text class="task-tag task-tag-plan" wx:if="{{item.isScheduled}}">计划</text>
+      </view>
+      <view class="task-title" data-id="{{item.id}}" bindtap="onTaskExpandTap">{{item.displayTitle}}</view>
+      <view class="task-meta-row">
+        <text class="task-priority">{{item.priorityLabel}}</text>
+        <text class="task-meta">{{item.projectName}}</text>
+        <text class="task-reason" wx:if="{{item.reason}}">{{item.reason}}</text>
+      </view>
+      <text class="task-due" wx:if="{{item.dueDateText}}">建议 {{item.dueDateText}}前完成</text>
+      <view class="task-detail" wx:if="{{expandedTaskId === item.id}}">
+        <task-sticky
+          id="task-sticky-{{item.id}}"
+          task-id="{{item.id}}"
+          title="{{item.title}}"
+          notes="{{item.notes}}"
+          project-name="{{item.projectName}}"
+          status="{{item.status}}"
+          initial-notes="{{item.stickyNotes}}"
+          data-id="{{item.id}}"
+          bind:change="onStickyChange"
+        ></task-sticky>
+      </view>
+    </view>
+    <view class="task-action-row">
+      <view class="task-action task-action-{{item.statusClass}} {{item.canChangeStatus ? '' : 'task-action-disabled'}}" data-id="{{item.id}}" data-status="{{item.nextStatus}}" bindtap="onTaskStatusTap">
+        <text class="task-action-icon">{{item.statusIcon}}</text>
+        <text>{{item.actionLabel}}</text>
+      </view>
+    </view>
+  </view>
+</template>
+
 <view class="page theme-{{theme}}">
-  <view class="content">
-    <view class="capture-card">
+  <view class="content" style="padding-top: {{contentTop}}px;">
+    <view class="capture-card" wx:if="{{pendingItems.length === 0}}">
       <textarea
         class="capture-input"
         value="{{content}}"
@@ -29,6 +67,7 @@
           wx:for-item="turn"
           wx:for-index="turnIndex"
         >
+          <view class="chat-avatar" wx:if="{{turn.role === 'ai'}}">✦</view>
           <view class="chat-bubble chat-bubble-{{turn.role}}">{{turn.text}}</view>
         </view>
 
@@ -43,11 +82,12 @@
             data-option-index="{{optionIndex}}"
             bindtap="onClarifyOptionTap"
           >{{option.label}}</view>
+          <view class="chat-direct-toggle {{pending.directInput ? 'chat-direct-toggle-active' : ''}}" data-item-index="{{itemIndex}}" bindtap="onClarifyDirectToggle">↩ 想自己说</view>
         </view>
 
-        <view class="chat-tools" wx:if="{{pending.options.length > 0}}">
-          <view class="chat-direct-toggle" data-item-index="{{itemIndex}}" bindtap="onClarifyDirectToggle">想自己说</view>
-          <view class="chat-confirm" wx:if="{{pending.multi}}" data-item-index="{{itemIndex}}" bindtap="onClarifyMultiConfirm">确定</view>
+        <view class="chat-multi-actions" wx:if="{{pending.multi}}">
+          <text class="chat-multi-hint">可多选</text>
+          <view class="chat-confirm" data-item-index="{{itemIndex}}" bindtap="onClarifyMultiConfirm">确定</view>
         </view>
 
         <view class="chat-direct" wx:if="{{pending.directInput}}">
@@ -84,56 +124,26 @@
           </view>
         </view>
 
-        <view class="pending-footer">
-          <view class="pending-ignore {{ignoringInboxId === pending.id ? 'pending-confirm-disabled' : ''}}" data-id="{{pending.id}}" bindtap="onIgnoreInbox">忽略</view>
-        </view>
       </view>
     </view>
 
     <view class="panel tasks-panel">
       <view class="panel-header">
         <text class="panel-title">今日建议</text>
-        <text class="panel-count">{{tasks.length}} 条</text>
+        <text class="panel-count">{{plannedTasks.length}} 条</text>
       </view>
-      <view class="empty-state" wx:if="{{tasks.length === 0}}">
+      <view class="empty-state" wx:if="{{plannedTasks.length === 0 && completedTodayTasks.length === 0}}">
         <view class="empty-icon">◎</view>
         <view class="empty-title">今天还没有重点</view>
-        <view class="empty-hint">先记录一个想法，会先听懂你，再陪你真正做起来。</view>
-        <view class="empty-action" bindtap="onSubmit">记一个想法 →</view>
       </view>
       <view class="task-list" wx:else>
-        <view class="task-row" wx:for="{{tasks}}" wx:key="id">
-          <view class="task-copy">
-            <view class="task-tags">
-              <text class="task-tag task-tag-focus" wx:if="{{item.isFocused}}">重点</text>
-              <text class="task-tag task-tag-overdue" wx:if="{{item.isOverdue}}">逾期</text>
-              <text class="task-tag task-tag-plan" wx:if="{{item.isScheduled}}">计划</text>
-            </view>
-            <view class="task-title" data-id="{{item.id}}" bindtap="onTaskExpandTap">{{item.displayTitle}}</view>
-            <view class="task-meta-row">
-              <text class="task-priority">{{item.priorityLabel}}</text>
-              <text class="task-meta">{{item.projectName}}</text>
-              <text class="task-reason" wx:if="{{item.reason}}">{{item.reason}}</text>
-            </view>
-            <text class="task-due" wx:if="{{item.dueDateText}}">截止 {{item.dueDateText}}</text>
-            <view class="task-detail" wx:if="{{expandedTaskId === item.id}}">
-              <view class="task-sticky" wx:if="{{item.sticky}}">
-                <view class="task-sticky-title">{{item.sticky.title}}</view>
-                <view class="task-sticky-copy" wx:if="{{item.sticky.encouragement}}">{{item.sticky.encouragement}}</view>
-                <view class="task-sticky-step" wx:for="{{item.sticky.steps}}" wx:key="*this" wx:for-item="step">{{index + 1}}. {{step}}</view>
-                <view class="task-sticky-next" wx:if="{{item.sticky.nextStep}}">现在可以做：{{item.sticky.nextStep}}</view>
-              </view>
-              <view class="task-detail-title">{{item.title}}</view>
-              <view class="task-detail-copy" wx:if="{{item.notes && item.notes !== item.title}}">{{item.notes}}</view>
-              <view class="task-detail-standard" wx:if="{{item.doneWhen}}">完成标准：{{item.doneWhen}}</view>
-            </view>
-          </view>
-          <view class="task-action {{item.canChangeStatus ? '' : 'task-action-disabled'}}" data-id="{{item.id}}" data-status="{{item.nextStatus}}" bindtap="onTaskStatusTap">{{item.actionLabel}}</view>
+        <template is="agenda-task" wx:for="{{plannedTasks}}" wx:key="id" data="{{item: item, expandedTaskId: expandedTaskId}}"></template>
+        <view class="completed-divider" wx:if="{{completedTodayTasks.length}}">
+          <text class="completed-check">✓</text>
+          <text>今天完成 {{completedTodayTasks.length}}</text>
         </view>
+        <template is="agenda-task" wx:for="{{completedTodayTasks}}" wx:key="id" data="{{item: item, expandedTaskId: expandedTaskId}}"></template>
       </view>
     </view>
-
   </view>
-
-  <bottom-nav active="today" theme="{{theme}}"></bottom-nav>
 </view>

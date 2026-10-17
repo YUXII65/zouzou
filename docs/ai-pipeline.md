@@ -5,9 +5,9 @@
 
 ## 链路总览
 
-- 输出逻辑固定为一条两段 Agent 链：**翻译 → 方案**。任何输入（想法、思绪、随便什么）都走同一条链。生成计划主链不接外部搜索 API，也不要把「方案生成」理解成联网搜索。
+- 输出逻辑固定为一条两段 Agent 链：**翻译 → 方案**。任何输入（想法、思绪、随便什么）都走同一条链。生成计划主链在需要外部事实时调用 DeepSeek Search / Fetch；搜索结果作为 `webEvidence` 进入方案 Agent，搜索失败不能假装已查。
 - 第 1 段翻译 Agent（`translateIdea`）：用户原话 → 结构化 `translation`（`desiredOutcome` / `workingAssumption` / `ifWrongThen`），同时给 `readiness` 和 `responseMode`。**提问也由这一段负责**。
-- 第 2 段方案 Agent（`PLAN_AGENT_SYSTEM_PROMPT`）：基于翻译、澄清事实和上下文，直接产出唯一执行路径、行动卡和任务，填全每条任务的执行合同字段。它不依赖中间草案，也不给候选。
+- 第 2 段方案 Agent（`buildPlanAgentSystemPrompt(workMode)`）：基于翻译、澄清事实和上下文，按普通 / 长期 / 探索三种模式追加各自的专项规则，直接产出唯一执行路径、行动卡和任务，填全每条任务的执行合同字段。共享骨架和输出合同只有一份，模式差异只放在 `PLAN_AGENT_MODE_PROMPTS`。
 - 两段都用用户传入的 DeepSeek `apiKey` / `model` / `baseUrl`。
 - 旧的三段链（`CONTENT_GENERATION_SYSTEM_PROMPT` + `NORMAL_COMPOSE_SYSTEM_PROMPT_V1`）只作为失败回退保留；`TWO_STAGE_AGENT_PLAN=false` 才显式切回。
 - `NORMAL_AGENT_PLAN=false` 关闭 Agent 链、回退旧 `planInbox`；`CONTENT_AGENT_PLAN=false` 只影响旧链回退。
@@ -38,7 +38,7 @@
 - 代码层保证**最少 2 轮、最多 4 轮**：`generateSocraticClarification` 把 `maxQuestions` 夹在 ≤4（调用方传 4），`minQuestions` 默认 2，`inbox-ai.ts` 显式传 2；到上限无论 readiness 如何都往下走。
 - `answeredCount === 0` 时 `question` 必须非空（模型没给就用本地兜底），返回 `status: "asking"`；用户答过一次且 `readiness === "ready"` 时才允许 `question` 为 null。
 - 低风险、可默认完成的小任务也至少问满两轮，之后没有新的关键未知点再收口。
-- 模式在**澄清收口之后、生成之前**由独立的 `judgeWorkMode`（`src/lib/ai.ts`）判定，结果存 `InboxClarification.workMode` 并随 `aiSuggestionJson` 落库。第 2 段方案 Agent 只承接这个结论，不许自己再判 mode（`readComposedPlan` 也以 `input.workMode` 为准）。
+- 模式在**澄清收口之后、生成之前**由独立的 `judgeWorkMode`（`src/lib/ai.ts`）判定。完整的 `WorkModeJudgment`（mode / confidence / frame / decisiveEvidence / fallbackMode / reason）随 `InboxClarification` 落库，并传给第 2 段方案 Agent；`workMode` 仍是兼容字段和落库快捷值。方案 Agent 只承接这个结论，不许自己再判 mode（`readComposedPlan` 也以 `input.workMode` 为准）。
 
 ### frame
 
@@ -106,7 +106,7 @@
 - explore 的门槛刻意抬高（这一档最难控、内容质量最不稳）。**三条全满足才判 explore**：① 要的是持续、没有终点的状态 / 能力 / 习惯 / 关系；② 有明确的持续意图（长期 / 持续 / 慢慢 / 一直 / 每天，或明说不要终点）；③ 连「这一段先做成什么」都说不清。只要出现可交付结果、任何截止，或一次性的「试试 / 调研一下 / 了解一下 / 看看 / 做一次准备」，就判 normal / longterm。
 - 开放能力的第一件作品仍按 explore：学手工、学插画、学音乐这类没有终点的能力，即使第一轮只是「先完成第一件作品 / 第一次练习」，也不能把整个目标降级成 normal。explore 计划必须带下一轮怎么接、练习节奏或换材料 / 技法的入口。
 - 落点：`MODE_JUDGMENT_SYSTEM_PROMPT`（主判，生产与评测共用）、`heuristicProjectMode`（兜底，`src/lib/work-mode.ts`）；回归语料 `scripts/mode-judgment-corpus.json` 的 `explore-bar` 组。
-- 判断输出必须带 `mode` + `confidence` + `realNeed` + `reason`；低置信度默认落普通并在计划里说明假设，**不要再问用户**。
+- 判断输出必须带 `mode` + `confidence` + `realNeed` + `frame`（endState / endStateType / timeHorizon / hasDeliverable / hasDeadline / continuationIntent）+ `decisiveEvidence` + `fallbackMode` + `reason`；低置信度默认落普通，并在计划里说明假设，**不要再问用户**。
 - 解析模式判断结果时必须同时兼容「单对象」和「对象数组」：`extractJsonObject` 只取第一个平衡的 `{...}`，模型返回 `[...]` 会被剥成单个对象。回归测试 `src/lib/mode-judgment.test.ts`。
 
 ### 探索：多线路、有主次
@@ -123,7 +123,7 @@
 
 ### 长期：阶段推进
 
-- 长期项目在当前阶段结束后先出简短的「下一阶段预览」：目标、交付物、第一条任务、预计窗口；用户确认后再落下一阶段任务。
+- 长期项目在当前阶段进行中就先预生成简短的「下一阶段预览」：阶段总结、目标、交付物、第一条任务、预计窗口。阶段真正收口时按最终结果重算；用户点「进入下一阶段」后只做事务落库，不再等待模型。
 - 必须过「阶段完成门」：当前阶段的交付物 / 完成条件真正达成后，才生成下一阶段预览。仅任务清空、全部关闭、取消或延期不算阶段完成；交付物没达成只能继续补齐当前阶段。
 - `confirmStagePreviewAction` 必须用条件 `updateMany` 原子抢占 ready 阶段；同一个阶段只能生成一个下一阶段，不能先读 status 再无条件创建。
 - 长期项目最多 `MAX_LONGTERM_STAGES = 5` 个阶段；每阶段默认 2-4 条任务，超过 4 条必须合并。
@@ -153,10 +153,11 @@
 - `OUTPUT_QUALITY_RULES`（`src/lib/ai.ts`）禁止删除。它约束：不要在每轮开头先肯定用户，不要复用「我大概知道你真正看重什么了」「接下来不再套标准流程」「先做最小下一步」「不是 A 而是 B」这类模板句，也不要把用户最后选的选项原样复述一遍当作理解。
 - **提示词里不准出现具体记录工具名**（「备忘录」这类）——负面例子也会被模型模仿，这正是它一直吐「备忘录」的直接原因。门禁：`src/lib/ai-quality.ts` 的 `RECORD_TOOL_PHRASES`。
 - 「工具」对走走意味着**用 AI 的搜索 / 查证能力抹平信息差**，不是把输出绑定到某个 App。需要外部信息时，让模型直接给出「查什么 / 去哪查 / 按什么标准判断」的可用结论，不要把「先了解 / 先调研」丢回给用户。
-- 系统目前不真的联网、也不调用外部工具：普通模式 Agent 不接 Tool / MCP。`src/lib/tool-router.ts` 只做「该不该借助外部信息」的 kind 标签（none / search / read / github / docs），由 `src/lib/task-contract.ts` 使用，不发起真实请求。需要实时事实时，只能把「用户自行核实」写成动作，不能假装系统已经查到。
+- 系统按需调用 DeepSeek 官方 Search / Fetch API：`POST /v1/tools/search` 与 `POST /v1/tools/fetch`，使用同一个 DeepSeek API Key。`src/lib/web-search.ts` 负责判断、调用、超时和失败降级；`src/lib/tool-router.ts` 继续做 kind 标签。`webEvidence.status=ok` 时必须使用结果并带来源；没有结果或失败时，不能假装系统已经查到。
 - 软件 / 工具选择默认先给免费或系统自带方案。用户没有明确要付费资源或更强功能时，不要默认推荐付费工具。
 - 上下文回灌：不要把旧便利贴的 `nextStep` 原样放进 `decisionMemory`，只保留语义化标题 / 决策摘要，避免模型模仿旧载体。便利贴 AI 失败兜底必须先用任务的 `methodHint` / `doneWhen`，不要再生成「写下 / 列出」。计划 Agent 的「理想动作示例」不要包含「写下」；记录、清点、列清单不是默认任务动作。
-- 生产与评测必须共用同一份 prompt 常量，禁止在脚本里另写近似版（`MODE_JUDGMENT_SYSTEM_PROMPT`、`FIRST_RUN_PLAN_SYSTEM_PROMPT` 等）。
+- 便利贴手动补充的 TASK_STICKY_SYSTEM_PROMPT 只保留两类内容：便利贴基本写作规则，以及本次补充如何合并任务、memorySummary、contextEvidence 和 previousStickyNotes。不要在这段提示词里重复模式判断、项目规划、工具选择、日期或任务拆分规则。
+- 生产与评测必须共用同一份 prompt 组装逻辑，禁止在脚本里另写近似版（`MODE_JUDGMENT_SYSTEM_PROMPT`、`buildPlanAgentSystemPrompt`、`FIRST_RUN_PLAN_SYSTEM_PROMPT` 等）。计划 Agent 的共享合同和三种模式 playbook 分开维护；模式 playbook 必须包含规划算法、硬约束、反例和自检问题，不能只写几句定义。计划评测的提示词指纹使用 `PLAN_AGENT_PROMPT_BUNDLE`，必须覆盖三种模式。
 
 ## DeepSeek 推理档位与时间预算
 

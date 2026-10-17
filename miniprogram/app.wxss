@@ -63,8 +63,7 @@ button::after {
 .page.theme-dark .refresh-button,
 .page.theme-dark .action-button,
 .page.theme-dark .icon-button,
-.page.theme-dark .pending-option,
-.page.theme-dark .pending-ignore {
+.page.theme-dark .pending-option {
   border-color: #2d3a49;
   background: #202b38;
   color: #b4c1d0;
@@ -102,8 +101,7 @@ button::after {
 .page.theme-dark .file-task + .file-task,
 .page.theme-dark .mode-grid,
 .page.theme-dark .mode-cell + .mode-cell,
-.page.theme-dark .stage-next,
-.page.theme-dark .pending-footer {
+.page.theme-dark .stage-next {
   border-color: #2d3a49;
 }
 

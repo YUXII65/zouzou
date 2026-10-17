@@ -1,11 +1,17 @@
+const { syncTabBar } = require("../../utils/tab-bar");
+const { markDataChanged, shouldRefresh } = require("../../utils/data-refresh");
+
 const AVATAR_PIXELS = 192;
 const MAX_AVATAR_CHARS = 400000;
 
 const EMPTY_COUNTS = { normal: 0, longterm: 0, explore: 0 };
 
+const { getContentTop } = require("../../utils/layout");
+
 Page({
   data: {
     theme: "light",
+    contentTop: 92,
     username: "",
     displayName: "",
     avatarUrl: "",
@@ -17,14 +23,19 @@ Page({
   },
 
   onShow() {
-    this.syncTheme();
+    this.setData({ contentTop: getContentTop() });
+    const theme = this.syncTheme();
+    syncTabBar(this, "profile", theme);
     if (this._loading || this.data.editingName || this.data.saving) return;
+    if (!shouldRefresh("profile", this._lastLoadAt)) return;
     this.loadProfile();
   },
 
   syncTheme() {
     const { getTheme } = require("../../utils/theme");
-    this.setData({ theme: getTheme() });
+    const theme = getTheme();
+    if (theme !== this.data.theme) this.setData({ theme });
+    return theme;
   },
 
   loadProfile() {
@@ -48,6 +59,7 @@ Page({
           counts: result.counts || EMPTY_COUNTS,
           serverConnected: Boolean(result.serverConnected)
         });
+        this._lastLoadAt = Date.now();
       })
       .catch((error) => {
         if (error && error.statusCode === 401) {
@@ -102,6 +114,7 @@ Page({
           displayName,
           avatarUrl
         });
+        markDataChanged(["today", "workspace", "profile"]);
         this.setData({
           displayName,
           displayInitial: displayName.slice(0, 1),
@@ -205,7 +218,9 @@ Page({
 
   onThemeTap() {
     const { toggleTheme } = require("../../utils/theme");
-    this.setData({ theme: toggleTheme() });
+    const theme = toggleTheme();
+    this.setData({ theme });
+    syncTabBar(this, "profile", theme);
   },
 
   onApiSettings() {

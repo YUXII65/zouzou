@@ -1,3 +1,6 @@
+const { openTab } = require("../../utils/tab-bar");
+const { markDataChanged } = require("../../utils/data-refresh");
+
 Page({
   data: {
     userAvatar: "",
@@ -123,6 +126,7 @@ Page({
     wx.showLoading({ title: "正在回看..." });
     generateReviewDraft(this.data.date)
       .then(() => {
+        markDataChanged(["workspace"]);
         wx.hideLoading();
         wx.showToast({ title: "复盘草稿已生成", icon: "success" });
         this.loadReview();
@@ -151,6 +155,7 @@ Page({
     wx.showLoading({ title: "正在保存..." });
     saveReview({ reviewId: this.data.reviewId, summary: this.data.summary, nextActions: this.data.nextActions })
       .then(() => {
+        markDataChanged(["today", "workspace", "profile"]);
         wx.hideLoading();
         this.setData({ reviewSavedAlready: true });
         wx.showToast({ title: "已保存", icon: "success" });
@@ -177,7 +182,7 @@ Page({
     });
   },
 
-  onProfileTap() { wx.navigateTo({ url: "/pages/profile/profile" }); },
+  onProfileTap() { openTab("profile"); },
 
   onBackTap() {
     const pages = getCurrentPages();
@@ -185,6 +190,6 @@ Page({
       wx.navigateBack();
       return;
     }
-    wx.reLaunch({ url: "/pages/workspace/workspace" });
+    openTab("desk");
   },
 });

@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { revalidatePath } from "next/cache";
 import { buildAiContext } from "@/lib/ai-context";
 import {
+  createAgentFailedPlan,
   isNormalAgentPlanEnabled,
   planNormalWithAgents,
 } from "@/lib/agent-plan/normal";
@@ -222,6 +223,7 @@ export async function createInboxPlan(input: {
   }
 
   const clarificationState = parseSocraticState(item.aiSuggestionJson);
+  const planStartedAt = Date.now();
   const aiContext = await buildAiContext({
     kind: "inbox_plan",
     inboxItemId: item.id,
@@ -236,6 +238,7 @@ export async function createInboxPlan(input: {
         frame: clarificationState?.frame,
         translation: clarificationState?.translation,
         workMode: clarificationState?.workMode ?? null,
+        modeJudgment: clarificationState?.modeJudgment ?? null,
         projectContext: aiContext.projectFacts,
         memorySummary: aiContext.summary,
         evidence: aiContext.evidence,
@@ -249,8 +252,15 @@ export async function createInboxPlan(input: {
 
       if (normalResult.status === "ok") return normalResult.plan;
       if (normalResult.status === "failed") {
-        // 新版方案链失败时不要给用户一张空计划：退回旧的一次性计划链，
-        // 至少保证他拿到一条能走的路。（代价：质量降级，但不空手。）
+        // 时间预算已经耗尽时不能继续叠旧链，否则小程序请求会被客户端先切断，
+        // 用户只看到澄清停在一半。明确返回可重试的失败结果，不生成散落任务。
+        if (Date.now() - planStartedAt >= 18_000) {
+          return createAgentFailedPlan({
+            reason: normalResult.reason || "规划时间预算用尽",
+            issues: normalResult.issues,
+          });
+        }
+        // 新版方案链快速失败时才回退旧链；保留一次质量兜底。
         console.warn(
           "[inbox] chain failed, falling back to planInbox:",
           normalResult.reason,
@@ -279,7 +289,7 @@ export async function createInboxPlan(input: {
       clarificationState?.frame,
       clarificationState?.session,
       aiContext.decisionMemory,
-      item.mode ?? undefined,
+      clarificationState?.workMode ?? item.mode ?? undefined,
     );
   }, input.userId);
 

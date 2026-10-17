@@ -12,7 +12,9 @@ import { readPlanTracks } from "@/lib/project-track";
 import { checkPlanQuality } from "@/lib/ai-quality";
 import { MAX_AI_TASKS_PER_PLAN } from "@/lib/task-flow";
 import { extractJsonObject as extractJson } from "@/lib/json-extract";
+import type { WorkModeJudgment } from "@/lib/mode-judgment";
 import type { ProjectMode } from "@/lib/work-mode";
+import type { PlanWebEvidence } from "@/lib/web-search";
 
 export type NormalAgentBrief = {
   goal: string;
@@ -55,9 +57,11 @@ export type NormalAgentInput = {
   memorySummary?: string | null;
   evidence?: string[];
   decisionMemory?: string[];
+  webEvidence?: PlanWebEvidence | null;
   maxTasks?: number | null;
   /** 澄清收口后定下的模式；有它时第 2 段方案 Agent 只承接，不再自己判。 */
   workMode?: ProjectMode | null;
+  modeJudgment?: WorkModeJudgment | null;
   apiKey?: string;
   model?: string;
   baseUrl?: string;
@@ -136,14 +140,29 @@ export function readPlan(raw: unknown): NormalAgentPlan | null {
 
 const PROJECT_NAME_META =
   /用户想|想从|这一类|这类|开始|做这件事|相关/;
+const PROJECT_NAME_SIGNAL =
+  /进阶|提升|练习|学习|训练|整理|搭建|建立|完成|做出|做成|制作|发布|写作|分享|管理|复盘|改进|优化|养成|探索|规划|做饭|烹饪|焖饭|煮饭|求职|转行|备考|设计|开发|运营|创作|拍摄|剪辑|维护|健身|减脂|读书|阅读|输出|记录|沟通|谈判|面试|申请|推进|落地|交付|经营|启动|系统|平台|作品集|账号|计划|闭环|方案|流程|手册|指南|课程|网站|应用|工具|项目|系列/;
 
 function projectNameFromGoal(goal: string) {
-  const firstClause = goal.split(/[，,。；;：:！？!?]/)[0]?.trim() || "";
-  const cleaned = firstClause
+  const clauses = goal
+    .split(/[，,。；;：:！？!?]/)
+    .map((clause) => clause.trim())
+    .filter(Boolean);
+  const actionClause =
+    clauses.find((clause) => PROJECT_NAME_SIGNAL.test(clause)) ??
+    clauses.at(-1) ??
+    goal;
+  let cleaned = actionClause
     .replace(/^(?:用户|我)?(?:想|想要|希望|打算|准备|需要)?(?:从)?\s*/u, "")
+    .replace(/^(?:让|把|将|用|对|给)\s*/u, "")
     .replace(/(?:这一类|这类|这样的)?(?:开始|进行|相关).*$/u, "")
-    .replace(/^(?:让|把|用)\s*/u, "")
+    .replace(/(?:日常的|现在的|当前的|原来的|那一个|这一个)\s*/gu, "")
+    .replace(/(?:做出|做成|做到|完成|得到|形成|变成|实现|提升|改进|优化).*$/u, "")
     .trim();
+  if (!cleaned) cleaned = actionClause.trim();
+  if (cleaned.length < 6 && /进阶|提升|更好|明显更好|改善|升级/.test(goal)) {
+    cleaned += "进阶";
+  }
   return cleaned.slice(0, 14) || "新项目";
 }
 
@@ -153,7 +172,9 @@ export function normalizeProjectName(rawName: unknown, goal: string) {
     typeof rawName === "string"
       ? rawName.replace(/[（(][^）)]*[）)]/g, "").trim().replace(/\s+/g, " ")
       : "";
-  if (name && !PROJECT_NAME_META.test(name)) return name.slice(0, 14);
+  if (name && !PROJECT_NAME_META.test(name) && PROJECT_NAME_SIGNAL.test(name)) {
+    return name.slice(0, 14);
+  }
   const fallback = projectNameFromGoal(goal);
   return PROJECT_NAME_META.test(fallback) ? "新项目" : fallback;
 }

@@ -29,11 +29,14 @@ export async function runContentAgent(input: {
   projectContext?: InboxProjectContext[];
   memorySummary?: string | null;
   evidence?: string[];
+  webEvidence?: unknown;
   decisionMemory?: string[];
   apiKey?: string;
   model?: string;
   baseUrl?: string;
+  timeoutMs?: number;
 }): Promise<ContentAgentResult> {
+  const timeoutMs = Math.max(2_000, Math.min(input.timeoutMs ?? 20_000, 20_000));
   const text = await callModel(
     CONTENT_GENERATION_SYSTEM_PROMPT,
     JSON.stringify({
@@ -52,6 +55,7 @@ export async function runContentAgent(input: {
       projectContext: input.projectContext ?? [],
       memorySummary: input.memorySummary ?? null,
       contextEvidence: input.evidence ?? [],
+      webEvidence: input.webEvidence ?? null,
       decisionMemory: input.decisionMemory ?? [],
       currentDate: toDateInputValue(new Date()),
     }),
@@ -61,8 +65,8 @@ export async function runContentAgent(input: {
     0.55,
     {
       maxTokens: 2200,
-      timeoutMs: 20_000,
-      totalBudgetMs: 20_000,
+      timeoutMs,
+      totalBudgetMs: timeoutMs,
       maxAttempts: 1,
       reasoningEffort: "none",
       qualityRules: "",

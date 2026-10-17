@@ -225,3 +225,9 @@
 - 推翻原因：抽屉（tools）早已退役、网页侧也撤销了这条引导（见 `_open-questions.md`），这些文案指向的入口根本不存在；三页结构现在是首页 / 文件 / 个人。
 - 现在：复盘页改用全局 `bottom-nav`、标题是「复盘」、顶部图标是返回（无上一页时回文件页）；新手引导去掉「抽屉复盘」变成 3 步；`pages/tools` 降级成纯兜底跳转（进页面即回文件页），与网页 `/tools` → `/files` 的 302 一致。
 - 门禁：小程序静态检查（每个页面的 bind 事件都有实现、`<view>` 标签成对）。
+
+## 2026-10-16 · DeepSeek Search / Fetch 接入（推翻“不联网”红线）
+
+- 原规则：`AGENTS.md` 写“系统不实际联网、不接 Tool / MCP”，方案链只保留 `tool-router` 的 kind 标签；需要实时信息时让用户自行核实。
+- 推翻原因：这段描述把“当时没有接入搜索”写成了永久红线，但 DeepSeek 官方 API 已提供 Search / Fetch 接口，且与现有 `DEEPSEEK_API_KEY` 同一鉴权。继续假装“不会联网”会让价格、政策、版本、库存类计划只能靠模型记忆猜。
+- 现在：`src/lib/web-search.ts` 调用 `POST https://api.deepseek.com/v1/tools/search` 和 `/v1/tools/fetch`；方案链在需要外部事实时把结果放入 `webEvidence`，模型必须采用可核验事实并保留来源。搜索失败、无结果、超时或 HTTP 错误都只降级，不阻断主计划；`WEB_SEARCH_ENABLED=false` 可关闭。

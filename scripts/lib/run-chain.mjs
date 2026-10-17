@@ -16,11 +16,14 @@ import {
   buildClarificationTranslationUserPayload,
   buildModeJudgmentUserPayload,
 } from "../../src/lib/ai-prompts.ts";
-import { PLAN_AGENT_SYSTEM_PROMPT } from "../../src/lib/agent-plan/prompts.ts";
+import {
+  PLAN_AGENT_PROMPT_BUNDLE,
+  buildPlanAgentSystemPrompt,
+} from "../../src/lib/agent-plan/prompts.ts";
 
 export const CHAIN_PROMPTS = [
   CLARIFICATION_TRANSLATION_SYSTEM_PROMPT,
-  PLAN_AGENT_SYSTEM_PROMPT,
+  PLAN_AGENT_PROMPT_BUNDLE,
   OUTPUT_QUALITY_RULES,
 ].join("\n\n----\n\n");
 
@@ -160,11 +163,16 @@ export function createChainRunner({ baseUrl, apiKey, model, debug = false }) {
       0.1,
     );
     const modeParsed = JSON.parse(extractJson(modeRaw) ?? "[]");
+    const parsedJudgment = Array.isArray(modeParsed) ? modeParsed[0] : modeParsed;
     const workMode =
-      Array.isArray(modeParsed) &&
-      ["normal", "longterm", "explore"].includes(modeParsed[0]?.mode)
-        ? modeParsed[0].mode
+      parsedJudgment &&
+      ["normal", "longterm", "explore"].includes(parsedJudgment.mode)
+        ? parsedJudgment.mode
         : "normal";
+    const modeJudgment =
+      parsedJudgment && typeof parsedJudgment === "object"
+        ? { ...parsedJudgment, mode: workMode, source: "model" }
+        : null;
 
     const planPayload = {
       translation: {
@@ -179,6 +187,7 @@ export function createChainRunner({ baseUrl, apiKey, model, debug = false }) {
         ifWrongThen: translation.ifWrongThen || summary?.ifWrongThen || "",
       },
       workMode,
+      modeJudgment,
       currentDate,
       maxTasks,
       originalIdea: input,
@@ -191,7 +200,7 @@ export function createChainRunner({ baseUrl, apiKey, model, debug = false }) {
       brief,
     };
     let planRaw = await requestChat(
-      PLAN_AGENT_SYSTEM_PROMPT,
+      buildPlanAgentSystemPrompt(workMode),
       JSON.stringify(planPayload),
       2600,
       0.2,
@@ -203,7 +212,7 @@ export function createChainRunner({ baseUrl, apiKey, model, debug = false }) {
     const auditIssues = checkPlanQuality(plan, { maxTasks });
     if (auditIssues.length) {
       planRaw = await requestChat(
-        PLAN_AGENT_SYSTEM_PROMPT,
+        buildPlanAgentSystemPrompt(workMode),
         JSON.stringify({ ...planPayload, previousAuditIssues: auditIssues }),
         2600,
         0.15,

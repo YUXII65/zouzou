@@ -35,12 +35,10 @@
     <view class="sticky-section" wx:if="{{showSticky}}">
       <view class="sticky-card" wx:for="{{stickyNotes}}" wx:key="id">
         <view class="sticky-head">
-          <text class="sticky-title">{{item.title}}</text>
+          <text class="sticky-card-label">便利贴 {{index + 1}}</text>
           <text class="sticky-delete" data-id="{{item.id}}" bindtap="onDeleteSticky">删除</text>
         </view>
-        <text class="sticky-copy">{{item.encouragement}}</text>
-        <view class="sticky-step" wx:for="{{item.steps}}" wx:key="*this" wx:for-item="step">• {{step}}</view>
-        <view class="sticky-next">现在可以做：{{item.nextStep}}</view>
+        <view class="sticky-step" wx:for="{{item.steps}}" wx:key="*this" wx:for-item="step">{{step}}</view>
       </view>
       <view class="sticky-empty" wx:if="{{stickyNotes.length === 0}}">还没有便利贴。写下你的想法后，AI 会生成详细执行步骤。</view>
       <input class="input" placeholder="你有什么想法补充" value="{{stickyMessage}}" bindinput="onStickyInput" />

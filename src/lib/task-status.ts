@@ -42,9 +42,18 @@ function taskSnapshot(task: {
 function scheduleLongtermStagePreview(input: {
   userId: string;
   projectId: string | null;
-  gate: { state: string } | null;
+  gate: { state: string; total: number } | null;
 }) {
-  if (!input.projectId || input.gate?.state !== "ready") return;
+  // active：当前阶段进行中就预生成下一阶段，用户完成当前阶段时不必再等模型。
+  // ready：syncProjectStageGate 已清掉旧预览，这里按最终结果重新生成。
+  if (
+    !input.projectId ||
+    !input.gate ||
+    input.gate.total === 0 ||
+    (input.gate.state !== "active" && input.gate.state !== "ready")
+  ) {
+    return;
+  }
   const projectId = input.projectId;
   after(async () => {
     try {

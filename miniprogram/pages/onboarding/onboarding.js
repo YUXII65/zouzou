@@ -1,3 +1,5 @@
+const { openTab } = require("../../utils/tab-bar");
+
 Page({
   data: {
     stepIndex: 0,
@@ -34,7 +36,7 @@ Page({
     getOnboarding()
       .then((state) => {
         if (!state.isFirstRun || state.tourStep === "done") {
-          wx.reLaunch({ url: "/pages/today/today" });
+          openTab("today");
           return;
         }
         const index = Math.max(this.data.steps.findIndex((item) => item.step === state.tourStep), 0);
@@ -63,6 +65,6 @@ Page({
     const { setOnboardingStep } = require("../../utils/api");
     setOnboardingStep("done")
       .catch(() => {})
-      .then(() => wx.reLaunch({ url: "/pages/today/today" }));
+      .then(() => openTab("today"));
   }
 });

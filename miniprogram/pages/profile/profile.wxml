@@ -1,7 +1,7 @@
 <view class="page theme-{{theme}}">
   <canvas type="2d" id="avatar-canvas" class="avatar-canvas"></canvas>
 
-  <view class="content">
+  <view class="content" style="padding-top: {{contentTop}}px;">
     <view class="name-card">
       <view class="card-head">
         <view class="avatar" bindtap="onChooseAvatar">
@@ -76,5 +76,4 @@
     </view>
   </view>
 
-  <bottom-nav active="profile" theme="{{theme}}"></bottom-nav>
 </view>
