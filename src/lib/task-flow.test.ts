@@ -47,6 +47,16 @@ test("复盘的下一步最多只解析一条", () => {
   ]);
 });
 
+test("复盘下一步里的占位词不会落成任务", () => {
+  const actions = parseReviewNextActions([
+    "任务标题",
+    "具体说明",
+    "整理照片",
+    "具体说明",
+  ].join("\n"));
+  assert.deepEqual(actions, [{ shortTitle: "整理照片", title: "整理照片" }]);
+});
+
 test("复盘下一步文本相同就视为同一批，不重复生成任务", () => {
   const existing = "写开头\n先写三个不同开头并选一个继续";
   const same = " 写开头 \n先写三个不同开头并选一个继续 ";

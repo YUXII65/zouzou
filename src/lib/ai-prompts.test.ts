@@ -70,6 +70,16 @@ test("全局质量约束保留关键约束维度", () => {
     "缺少产出可验证约束",
   );
   assert.ok(OUTPUT_QUALITY_RULES.includes("像人说话"), "缺少自然语气约束");
+  assert.ok(
+    OUTPUT_QUALITY_RULES.includes("占位词"),
+    "缺少字段占位词约束",
+  );
+});
+
+test("方案 Agent 包含独立的标题生成协议", () => {
+  assert.ok(PLAN_AGENT_PROMPT_BUNDLE.includes("标题生成协议"));
+  assert.ok(PLAN_AGENT_PROMPT_BUNDLE.includes("不能照抄整句"));
+  assert.ok(PLAN_AGENT_PROMPT_BUNDLE.includes("用户不看原对话"));
 });
 
 test("user 消息带齐字段并为可选值填默认", () => {

@@ -1,14 +1,14 @@
 <view class="bottom-nav theme-{{theme}}">
   <view class="nav-item {{active === 'today' ? 'nav-item-active' : ''}}" data-key="today" bindtap="onTabTap">
-    <text class="nav-icon">▦</text>
+    <image class="nav-icon" src="/assets/icons/nav-home{{active === 'today' ? (theme === 'dark' ? '-active-dark' : '-active') : ''}}.svg"></image>
     <text>首页</text>
   </view>
   <view class="nav-item {{active === 'desk' ? 'nav-item-active' : ''}}" data-key="desk" bindtap="onTabTap">
-    <text class="nav-icon">▤</text>
+    <image class="nav-icon" src="/assets/icons/nav-files{{active === 'desk' ? (theme === 'dark' ? '-active-dark' : '-active') : ''}}.svg"></image>
     <text>文件</text>
   </view>
   <view class="nav-item {{active === 'profile' ? 'nav-item-active' : ''}}" data-key="profile" bindtap="onTabTap">
-    <text class="nav-icon">◉</text>
+    <image class="nav-icon" src="/assets/icons/nav-profile{{active === 'profile' ? (theme === 'dark' ? '-active-dark' : '-active') : ''}}.svg"></image>
     <text>个人</text>
   </view>
 </view>

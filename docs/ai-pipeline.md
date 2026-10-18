@@ -12,6 +12,7 @@
 - 旧的三段链（`CONTENT_GENERATION_SYSTEM_PROMPT` + `NORMAL_COMPOSE_SYSTEM_PROMPT_V1`）只作为失败回退保留；`TWO_STAGE_AGENT_PLAN=false` 才显式切回。
 - `NORMAL_AGENT_PLAN=false` 关闭 Agent 链、回退旧 `planInbox`；`CONTENT_AGENT_PLAN=false` 只影响旧链回退。
 - 用户最终只看到一张行动卡（理解 / 先做 / 怎么做 / 完成标准），看不到候选方案、评分、A/B 或「看情况自己决定」。
+- **标题生成在方案 Agent 内完成，不恢复第三段收敛 Agent**：方案 Agent 必须先提炼「对象/领域 + 动作或结果」，再输出 `projectName` 和每条任务的 `shortTitle`；标题要能脱离原对话独立成立，不能是泛词、字段名或用户原话的截取。运行时用 `isWeakGeneratedTitle` 再校验，真实模型评测也检查标题质量。
 - `InboxPlan.source` 区分 `model` / `heuristic_fallback` / `agent_failed`；后两者不得自动确认落库，必须让用户能重试。
 - 方案审计只做重试和警告。不能因为审计未通过就直接给用户 `agent_failed`。
 - 主要代码在 `src/lib/agent-plan/`，生产接入点是 `src/lib/inbox-ai.ts` 的 `createInboxPlan`。
@@ -93,7 +94,7 @@
 
 - 普通：不需要阶段、不要求截止，一条完成路径，完成即结束。
 - 长期：**必须有阶段切分 + 必须有截止日期**（阶段按截止倒推）；每阶段有可交付结果，交付后归档。
-- 探索：**必须有路径（台阶）+ 节奏**；不设截止；**项目层不结束，但任务层照常「完成」**——任务完成时按进度再吐出下一条。
+- 探索：**必须有路径（台阶）+ 节奏**；不设截止；**项目层不结束，但任务层照常「完成」**——计划确认后预生成下一条任务，完成当前任务时优先消费缓存；没有缓存才在响应后补模型。
 - 不要给模式设任务条数上限来「卡」行为（普通 ≤2 / 长期 ≤3 / 探索 ≤2 这类硬卡点用户明确不接受）。tasks 数量由完成当前里程碑真正需要几个独立结果决定，不设固定 1 条或 2 条。
 - 不要再说「告一段落」：那是把「没有终点」错误压到任务层的产物。模式是**项目**的属性，不是任务的属性；任务三种模式都一样：待办 → 进行 → 完成。
 - 三种模式都计数：探索只要用户启动（有任务并开始做）就算。
@@ -116,14 +117,14 @@
 - 任何时候主线只有一条。主次不是创建时定死的，由反馈调整：支线连续拿到有效反馈、或主线连续卡住 → 支线上位，原主线降为 side。
 - 多线不等于一次给多个任务：每条线同时只保留一条开放任务，一个探索项目开放任务上限 3 条。任务事件（完成 / 取消 / 卡住）是唯一触发源，**禁止按 cadence、星期几或间隔天数排期**。
 - 推进是**任务事件驱动**：触发源只能是任务完成、卡住、取消、编辑、补充结果等事件；`cadence` 只作节奏描述，不能成为触发器或硬排期。
-- 每次任务事件后，Agent 读取当前任务与项目的真实值（status / notes / doneWhen / methodHint / completedAt / currentMilestone / 历史反馈 / 便利贴执行信息），判断这次探索是否产生变化，再决定是否续接下一条任务。
+- Agent 读取当前任务与项目的真实值（status / notes / doneWhen / methodHint / completedAt / currentMilestone / 历史反馈 / 便利贴执行信息），判断这次探索是否产生变化。计划确认后先用 `planningMode=prefetch` 预生成下一条并写入 `Task.nextTaskJson`；任务完成时优先消费这份缓存，确保下一任务当场出现，只有缓存缺失才在响应后用真实完成结果补生成。
 - 「复盘」在探索模式里不是独立页面或用户填写流程，而是系统内部的推进判断：看当前值 → 判断走到哪 → 推进任务继续 → 更新探索过程。**不要重新挂载 Review 页面，也不要让新链路依赖 `Review` / `ReviewNextAction`。**
 - 实现落点：`project_tracks` 表 + `Task.trackId`（迁移 `20261014000000_add_project_tracks`）、`src/lib/project-track.ts`、方案 Agent 产 tracks 并给任务打 trackName（`src/lib/agent-plan/prompts.ts`、`normal.ts`）、续接 Agent（`src/lib/project-progress-agent.ts`）、文件页线路图（`src/components/file-browser.tsx`）。
 - 门禁：`src/lib/project-track.test.ts`、`scripts/verify-explore-tracks.mjs`（需本地服务）。
 
 ### 长期：阶段推进
 
-- 长期项目在当前阶段进行中就先预生成简短的「下一阶段预览」：阶段总结、目标、交付物、第一条任务、预计窗口。阶段真正收口时按最终结果重算；用户点「进入下一阶段」后只做事务落库，不再等待模型。
+- 长期项目在计划确认后、当前阶段进行中就预生成「下一阶段预览」：阶段总结、目标、交付物、任务与预计窗口。任务状态变化只补缺失，不主动清空；阶段真正收口时直接复用已有预览。用户点「进入下一阶段」后只做事务落库，不再等待模型。
 - 必须过「阶段完成门」：当前阶段的交付物 / 完成条件真正达成后，才生成下一阶段预览。仅任务清空、全部关闭、取消或延期不算阶段完成；交付物没达成只能继续补齐当前阶段。
 - `confirmStagePreviewAction` 必须用条件 `updateMany` 原子抢占 ready 阶段；同一个阶段只能生成一个下一阶段，不能先读 status 再无条件创建。
 - 长期项目最多 `MAX_LONGTERM_STAGES = 5` 个阶段；每阶段默认 2-4 条任务，超过 4 条必须合并。

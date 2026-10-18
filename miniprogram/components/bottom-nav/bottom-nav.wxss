@@ -43,6 +43,7 @@
 }
 
 .nav-icon {
-  font-size: 34rpx;
-  line-height: 1;
+  display: block;
+  width: 40rpx;
+  height: 40rpx;
 }

@@ -1,16 +1,11 @@
 <template name="file-task">
   <view class="file-task">
     <view class="file-task-main">
-      <view class="task-tags">
-        <text class="task-tag task-tag-focus" wx:if="{{task.isFocused}}">重点</text>
-        <text class="task-tag task-tag-overdue" wx:if="{{task.isOverdue}}">逾期</text>
-        <text class="task-tag task-tag-plan" wx:if="{{task.isScheduled}}">计划</text>
+      <view class="file-task-heading" data-id="{{task.id}}" bindtap="onTaskExpandTap">
+        <text class="file-task-title">{{task.displayTitle}}</text>
+        <view class="task-chevron {{expandedTaskId === task.id ? 'task-chevron-open' : ''}}"></view>
       </view>
-      <view class="file-task-title" data-id="{{task.id}}" bindtap="onTaskExpandTap">{{task.displayTitle}}</view>
-      <view class="file-task-meta">
-        <text class="task-priority">{{task.priorityLabel}}</text>
-        <text wx:if="{{task.dueDateText}}">建议 {{task.dueDateText}}前完成</text>
-      </view>
+      <text class="file-task-due" wx:if="{{task.dueDateText}}">建议 {{task.dueDateText}}前完成</text>
       <view class="task-detail" wx:if="{{expandedTaskId === task.id}}">
         <task-sticky
           id="task-sticky-{{task.id}}"
@@ -32,7 +27,8 @@
         data-status="{{task.nextStatus}}"
         catchtap="onTaskStatusTap"
       >
-        <text class="task-action-icon">{{submittingTaskId === task.id ? '◌' : task.statusIcon}}</text>
+        <text wx:if="{{submittingTaskId === task.id}}" class="task-action-icon">◌</text>
+        <image wx:else class="task-action-icon" src="{{task.statusIconSrc}}"></image>
         <text>{{submittingTaskId === task.id ? '同步中' : task.actionLabel}}</text>
       </view>
     </view>
@@ -42,13 +38,13 @@
 <template name="folder">
   <view class="folder-card {{openId === project.id ? 'folder-card-open' : ''}} folder-card-{{project.modeKey}}">
     <view class="folder-tab folder-tab-{{project.modeKey}}"></view>
-    <view class="folder-head" data-id="{{project.id}}" bindtap="onFolderTap">
-      <view class="folder-icon folder-icon-{{project.modeKey}}">{{openId === project.id ? '▣' : '▤'}}</view>
+    <view class="folder-head folder-head-{{project.modeKey}}" data-id="{{project.id}}" bindtap="onFolderTap">
+      <image class="folder-icon" src="/assets/icons/folder-{{project.modeKey}}{{openId === project.id ? '-open' : ''}}.svg"></image>
       <view class="folder-copy">
         <text class="folder-name">{{project.name}}</text>
         <text class="folder-meta">{{project.modeLabel ? project.modeLabel + ' · ' : ''}}{{project.openCount ? project.openCount + ' 件推进中' : '暂无推进中的任务'}}</text>
       </view>
-      <text class="folder-chevron">{{openId === project.id ? '⌃' : '⌄'}}</text>
+      <view class="folder-chevron {{openId === project.id ? 'folder-chevron-open' : ''}}"></view>
     </view>
 
     <view class="folder-body" wx:if="{{openId === project.id}}">
@@ -86,24 +82,27 @@
         </view>
       </view>
 
-      <view class="review-block" wx:if="{{project.modeKey === 'explore'}}">
+      <view class="folder-toolbar">
+        <view class="task-switch">
+          <view
+            class="task-switch-item {{taskView === 'open' ? 'task-switch-item-active' : ''}}"
+            data-view="open"
+            bindtap="onTaskViewTap"
+          >推进中 {{project.openCount}}</view>
+          <view
+            class="task-switch-item {{taskView === 'done' ? 'task-switch-item-done' : ''}}"
+            data-view="done"
+            bindtap="onTaskViewTap"
+          >已完成 {{project.doneCount}}</view>
+        </view>
+        <view class="review-toggle" wx:if="{{project.modeKey === 'explore'}}" data-id="{{project.id}}" bindtap="onToggleReview">复盘</view>
+      </view>
+
+      <view class="review-block" wx:if="{{project.modeKey === 'explore' && reviewOpenId === project.id}}">
         <view class="review-head">复盘记录</view>
         <view class="review-empty" wx:if="{{!project.reviews.length}}">还没有复盘记录</view>
         <view class="review-item" wx:for="{{project.reviews}}" wx:key="id" wx:for-item="review" data-date="{{review.dateValue}}" bindtap="onOpenReview">{{review.dateText}}</view>
-        <view class="review-generate" bindtap="onOpenReview">生成复盘</view>
-      </view>
-
-      <view class="task-switch">
-        <view
-          class="task-switch-item {{taskView === 'open' ? 'task-switch-item-active' : ''}}"
-          data-view="open"
-          bindtap="onTaskViewTap"
-        >推进中 {{project.openCount}}</view>
-        <view
-          class="task-switch-item {{taskView === 'done' ? 'task-switch-item-done' : ''}}"
-          data-view="done"
-          bindtap="onTaskViewTap"
-        >已完成 {{project.doneCount}}</view>
+        <view class="review-generate" data-date="{{reviewDate}}" bindtap="onGenerateReview">生成复盘</view>
       </view>
 
       <view class="file-task-list" wx:if="{{taskView === 'open' && project.openTasks.length}}">
@@ -126,7 +125,16 @@
 </template>
 
 <view class="page theme-{{theme}}">
+  <app-header theme="{{theme}}"></app-header>
   <view class="content" style="padding-top: {{contentTop}}px;">
+    <view class="panel review-summary-panel" wx:if="{{activeReview}}">
+      <view class="panel-header">
+        <view class="panel-heading"><image class="panel-title-icon" src="/assets/icons/list.svg"></image><text class="panel-title">复盘</text></view>
+        <view class="review-close" bindtap="onCloseReview">关闭</view>
+      </view>
+      <view class="review-summary">{{activeReview.summary}}</view>
+    </view>
+
     <view class="list-toolbar" wx:if="{{projectsByTime.length}}">
       <view class="sort-toggle" bindtap="onToggleListMode">
         <text class="sort-icon">⇅</text>
@@ -142,15 +150,15 @@
             <text class="mode-label">{{group.label}}</text>
             <text class="mode-count">{{group.projects.length}}</text>
           </view>
-          <template is="folder" wx:for="{{group.projects}}" wx:key="id" wx:for-item="project" data="{{project: project, openId: openId, taskView: taskView, expandedTaskId: expandedTaskId, submittingTaskId: submittingTaskId}}"></template>
+          <template is="folder" wx:for="{{group.projects}}" wx:key="id" wx:for-item="project" data="{{project: project, openId: openId, taskView: taskView, expandedTaskId: expandedTaskId, submittingTaskId: submittingTaskId, submittingStageId: submittingStageId, reviewOpenId: reviewOpenId, reviewDate: reviewDate}}"></template>
         </view>
       </block>
 
       <block wx:else>
-        <template is="folder" wx:for="{{projectsByTime}}" wx:key="id" wx:for-item="project" data="{{project: project, openId: openId, taskView: taskView, expandedTaskId: expandedTaskId, submittingTaskId: submittingTaskId}}"></template>
+        <template is="folder" wx:for="{{projectsByTime}}" wx:key="id" wx:for-item="project" data="{{project: project, openId: openId, taskView: taskView, expandedTaskId: expandedTaskId, submittingTaskId: submittingTaskId, submittingStageId: submittingStageId, reviewOpenId: reviewOpenId, reviewDate: reviewDate}}"></template>
       </block>
 
-      <template wx:if="{{unassociated}}" is="folder" data="{{project: unassociated, openId: openId, taskView: taskView, expandedTaskId: expandedTaskId, submittingTaskId: submittingTaskId}}"></template>
+      <template wx:if="{{unassociated}}" is="folder" data="{{project: unassociated, openId: openId, taskView: taskView, expandedTaskId: expandedTaskId, submittingTaskId: submittingTaskId, submittingStageId: submittingStageId, reviewOpenId: reviewOpenId, reviewDate: reviewDate}}"></template>
     </view>
 
     <view class="empty-state empty-page" wx:else>
@@ -158,6 +166,6 @@
       <view class="empty-title">还没有文件夹</view>
       <view class="empty-hint">写下第一个想法，AI 会把它收成一个文件夹。</view>
     </view>
+    <site-footer theme="{{theme}}"></site-footer>
   </view>
-
 </view>

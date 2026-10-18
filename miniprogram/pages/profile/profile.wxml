@@ -1,4 +1,5 @@
 <view class="page theme-{{theme}}">
+  <app-header theme="{{theme}}"></app-header>
   <canvas type="2d" id="avatar-canvas" class="avatar-canvas"></canvas>
 
   <view class="content" style="padding-top: {{contentTop}}px;">
@@ -62,18 +63,32 @@
 
     <view class="action-grid">
       <view class="action-button" bindtap="onThemeTap">
-        <text class="action-icon">{{theme === 'dark' ? '☾' : '☀'}}</text>
-        <text>{{theme === 'dark' ? '夜间模式' : '日间模式'}}</text>
+        <view class="action-main">
+          <image class="action-icon" src="/assets/icons/moon.svg"></image>
+          <text>夜间模式</text>
+        </view>
+        <view class="action-state {{theme === 'dark' ? 'action-state-on' : ''}}">
+          <image wx:if="{{theme === 'dark'}}" class="action-state-icon" src="/assets/icons/check.svg"></image>
+          <view wx:else class="action-state-circle"></view>
+        </view>
       </view>
       <view class="action-button" bindtap="onApiSettings">
-        <text class="action-icon">◇</text>
-        <text>API 连接</text>
+        <view class="action-main">
+          <image class="action-icon" src="/assets/icons/key.svg"></image>
+          <text>API 连接</text>
+        </view>
+        <view class="action-state {{serverConnected ? 'action-state-on' : 'action-state-warning'}}">
+          <image wx:if="{{serverConnected}}" class="action-state-icon" src="/assets/icons/check.svg"></image>
+          <view wx:else class="action-state-circle"></view>
+        </view>
       </view>
       <view class="action-button" bindtap="onLogout">
-        <text class="action-icon">↪</text>
-        <text>退出登录</text>
+        <view class="action-main">
+          <image class="action-icon" src="/assets/icons/logout.svg"></image>
+          <text>退出登录</text>
+        </view>
       </view>
     </view>
+    <site-footer theme="{{theme}}"></site-footer>
   </view>
-
 </view>

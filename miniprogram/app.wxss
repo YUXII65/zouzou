@@ -135,3 +135,82 @@ button::after {
   background: #24344e;
   color: #b4c1d0;
 }
+
+.page.theme-dark .planner-card {
+  border-color: #2d3a49;
+  background: linear-gradient(145deg, #17273b, #18212b 52%, #12313a);
+  box-shadow: 0 24rpx 60rpx rgba(0, 0, 0, 0.28);
+}
+
+.page.theme-dark .task-tag-focus {
+  background: #24344e;
+  color: #a8c2ff;
+}
+
+.page.theme-dark .task-tag-overdue {
+  background: rgba(239, 112, 108, 0.14);
+  color: #ef706c;
+}
+
+.page.theme-dark .task-tag-plan {
+  background: #202b38;
+  color: #8291a3;
+}
+
+.page.theme-dark .priority-low {
+  background: #202b38;
+  color: #8291a3;
+}
+
+.page.theme-dark .priority-medium {
+  background: #24344e;
+  color: #a8c2ff;
+}
+
+.page.theme-dark .priority-high {
+  background: rgba(236, 166, 75, 0.14);
+  color: #eca64b;
+}
+
+.page.theme-dark .priority-urgent {
+  background: rgba(239, 112, 108, 0.14);
+  color: #ef706c;
+}
+
+.page.theme-dark .avatar {
+  background: #24344e;
+  color: #a8c2ff;
+}
+
+.page.theme-dark .review-summary-panel {
+  border-color: #2d3a49;
+  background: #18212b;
+  box-shadow: 0 24rpx 60rpx rgba(0, 0, 0, 0.28);
+}
+
+.page.theme-dark .review-summary {
+  border-color: #2d3a49;
+  background: #202b38;
+  color: #b4c1d0;
+}
+
+.page.theme-dark .tour-hint {
+  border-color: #2d3a49;
+  background: #18212b;
+  box-shadow: 0 24rpx 70rpx rgba(0, 0, 0, 0.34);
+}
+
+.page.theme-dark .tour-hint-title {
+  color: #f2f5f9;
+}
+
+.page.theme-dark .tour-hint-body,
+.page.theme-dark .tour-hint-footer {
+  color: #b4c1d0;
+}
+
+.page.theme-dark .tour-hint-action {
+  border-color: #2d3a49;
+  background: #202b38;
+  color: #b4c1d0;
+}

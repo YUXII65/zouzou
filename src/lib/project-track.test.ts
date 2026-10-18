@@ -19,6 +19,15 @@ test("explore 线路图：去重、限数、修掉多余的 main", () => {
   assert.equal(tracks.filter((track) => track.name === "基础手型").length, 1);
 });
 
+test("explore 线路图：占位词不会成为线路", () => {
+  const tracks = readPlanTracks([
+    { name: "线路名", intent: "这条线在验证什么", role: "main" },
+    { name: "选题表达", intent: "验证表达是否清楚", role: "side" },
+  ]);
+  assert.deepEqual(tracks.map((track) => track.name), ["选题表达"]);
+  assert.equal(tracks[0].role, "main");
+});
+
 test("explore 线路图：没有 main 时把第一条提为 main", () => {
   const tracks = readPlanTracks([
     { name: "手型", intent: "基础", role: "side" },

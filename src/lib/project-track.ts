@@ -1,4 +1,5 @@
 import type { InboxPlanTrack } from "@/lib/ai";
+import { isPlaceholderText } from "@/lib/ai-quality";
 
 export type ProjectTrackRole = "main" | "side";
 export type ProjectTrackStatus = "active" | "paused" | "archived";
@@ -31,12 +32,13 @@ export function readPlanTracks(value: unknown): InboxPlanTrack[] {
     const raw = item as Record<string, unknown>;
     const name =
       typeof raw.name === "string" ? raw.name.trim().slice(0, 30) : "";
-    if (!name || seen.has(name)) continue;
+    if (!name || isPlaceholderText(name) || seen.has(name)) continue;
     seen.add(name);
-    const intent =
+    const rawIntent =
       typeof raw.intent === "string" && raw.intent.trim()
         ? raw.intent.trim().slice(0, 200)
-        : name;
+        : "";
+    const intent = rawIntent && !isPlaceholderText(rawIntent) ? rawIntent : name;
     tracks.push({ name, intent, role: normalizeTrackRole(raw.role) });
     if (tracks.length >= MAX_EXPLORE_TRACKS) break;
   }

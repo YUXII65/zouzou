@@ -10,6 +10,23 @@
  * 但检查逻辑本身必须每次 CI 都跑得到。
  */
 
+/** 模型把字段名、示例标签或“待补充”原样当成内容时，不能让它们落库。 */
+export const PLACEHOLDER_FIELD_VALUES =
+  /^(?:项目标题|项目名称|项目名|标题|名称|任务标题|任务名称|目标|项目目标|里程碑|项目里程碑|完成标准|方法提示|具体做法|具体说明|详细说明|任务说明|推荐|推荐建议|执行步骤|下一步|线路名|方向名|这条线在验证什么|验证什么|理解|第一步|怎么做|用户最终行动卡|待填写|待补充|待整理|待定|未知|未命名(?:项目)?|新项目|第一个项目|暂无|无|n\/a|na|none|null|todo|tbd)$/iu;
+
+export const DEFERRED_DECISION_LANGUAGE =
+  /(?:挑出\s*\d*\s*种组合|拍[^\n]{0,20}(?:挑|选)|再(?:去)?决定|回头再(?:挑|选|决定)|到时候再(?:挑|选|决定))/u;
+
+export function isPlaceholderText(value: unknown) {
+  if (typeof value !== "string") return false;
+  const normalized = value
+    .trim()
+    .replace(/^[\s「『“\"\']+|[\s」』”\"\']+$/g, "")
+    .replace(/[：:]\s*$/u, "")
+    .trim();
+  return PLACEHOLDER_FIELD_VALUES.test(normalized);
+}
+
 /** 目标和里程碑里禁止出现的空泛说法 */
 export const VAGUE_PHRASES = [
   "初版",
@@ -137,9 +154,38 @@ const MAX_TURNS_BY_MODE: Record<string, number> = {
   project: 3,
 };
 
+const GENERIC_TITLE_VALUES =
+  /^(?:项目|计划|任务|方向|想法|思考|整理|推进|总结|记录|讨论|方案|事项|目标|推进任务|项目计划)$/u;
+
+function normalizeTitleForCompare(value: string) {
+  return value
+    .replace(/[\s，,。；;：:！？!?、]/g, "")
+    .replace(/^(?:关于|如何|怎么|我想|我要|希望|打算|准备)/u, "")
+    .trim();
+}
+
+/** 标题不是“短原文”，而应按对象和动作/结果重新概括。 */
+export function isWeakGeneratedTitle(value: unknown, source?: string | null) {
+  if (typeof value !== "string") return true;
+  const title = value.trim();
+  if (!title || isPlaceholderText(title) || GENERIC_TITLE_VALUES.test(title)) {
+    return true;
+  }
+  if (title.length > 24) return true;
+  if (!source) return false;
+  const normalizedTitle = normalizeTitleForCompare(title);
+  const normalizedSource = normalizeTitleForCompare(source);
+  if (!normalizedTitle) return true;
+  if (normalizedTitle === normalizedSource) return true;
+  // 长标题只是原话的子串，说明模型在截取，而不是重新概括。
+  return normalizedTitle.length >= 8 && normalizedSource.includes(normalizedTitle);
+}
+
 export type QualityCheckContext = {
   /** 用例允许的最大任务数 */
   maxTasks?: number;
+  /** 原始想法；用于判断标题是否只是复制/截取原话。 */
+  sourceText?: string;
 };
 
 type AnyPlan = Record<string, unknown>;
@@ -208,8 +254,30 @@ export function checkPlanQuality(
   const typed = plan as AnyPlan;
   const tasks = asTasks(typed);
 
+  if (
+    typeof typed.projectName === "string" &&
+    isWeakGeneratedTitle(typed.projectName, context.sourceText)
+  ) {
+    issues.push("projectName 不是重新概括的语义标题");
+  }
+
   if (typeof typed.reason !== "string" || !typed.reason.trim()) {
     issues.push("缺少 reason，没有说明为什么这样安排");
+  }
+
+  for (const key of ["projectName", "projectObjective", "projectMilestone"]) {
+    if (isPlaceholderText(typed[key])) {
+      issues.push(key + " 是占位词，不是实际内容");
+    }
+  }
+
+  if (Array.isArray(typed.tracks)) {
+    typed.tracks.forEach((track, index) => {
+      if (!track || typeof track !== "object") return;
+      if (isPlaceholderText((track as AnyPlan).name)) {
+        issues.push("第 " + (index + 1) + " 条线路名是占位词");
+      }
+    });
   }
 
   if (
@@ -240,6 +308,8 @@ export function checkPlanQuality(
     const title = typeof task.title === "string" ? task.title.trim() : "";
     if (!title) {
       issues.push(`${label}缺标题`);
+    } else if (isPlaceholderText(title)) {
+      issues.push(`${label}的标题是占位词`);
     }
 
     const doneWhenForThinking =
@@ -274,12 +344,16 @@ export function checkPlanQuality(
 
     if (typeof task.doneWhen !== "string" || !task.doneWhen.trim()) {
       issues.push(`${label}缺少 doneWhen，没写清什么算完成`);
+    } else if (isPlaceholderText(task.doneWhen)) {
+      issues.push(`${label}的 doneWhen 是占位词`);
     }
 
     const methodHint =
       typeof task.methodHint === "string" ? task.methodHint.trim() : "";
     if (!methodHint) {
       issues.push(`${label}缺少 methodHint，没有给出具体做法`);
+    } else if (isPlaceholderText(methodHint)) {
+      issues.push(`${label}的 methodHint 是占位词`);
     } else if (methodHint.length < 8) {
       issues.push(`${label}的 methodHint 太短，不足以指导执行`);
     } else {
@@ -294,6 +368,8 @@ export function checkPlanQuality(
       typeof task.recommendation === "string" ? task.recommendation.trim() : "";
     if (!recommendation) {
       issues.push(`${label}缺少 recommendation，没有替用户做出默认决定`);
+    } else if (isPlaceholderText(recommendation)) {
+      issues.push(`${label}的 recommendation 是占位词`);
     }
     const executionSteps = Array.isArray(task.executionSteps)
       ? task.executionSteps.filter(
@@ -302,8 +378,14 @@ export function checkPlanQuality(
       : [];
     if (!executionSteps.length) {
       issues.push(`${label}缺少 executionSteps，没有现实执行路径`);
+    } else if (executionSteps.some(isPlaceholderText)) {
+      issues.push(`${label}的 executionSteps 含占位词`);
     }
     const fallback = typeof task.fallback === "string" ? task.fallback.trim() : "";
+    const deferredText = [recommendation, ...executionSteps, fallback].join("\n");
+    if (DEFERRED_DECISION_LANGUAGE.test(deferredText)) {
+      issues.push(label + "把决定推迟给用户，而不是直接给出答案");
+    }
     if (mode && mode !== "quick" && !fallback) {
       issues.push(`${label}缺少 fallback，主方案失效时没有替代路径`);
     }
@@ -312,9 +394,13 @@ export function checkPlanQuality(
       typeof task.shortTitle === "string" ? task.shortTitle.trim() : "";
     if (!shortTitle) {
       issues.push(`${label}缺少 shortTitle`);
+    } else if (isPlaceholderText(shortTitle)) {
+      issues.push(`${label}的 shortTitle 是占位词`);
     } else if (title) {
       if (shortTitle === title) {
         issues.push(`${label}的 shortTitle 与标题完全相同`);
+      } else if (isWeakGeneratedTitle(shortTitle, title)) {
+        issues.push(`${label}的 shortTitle 不是重新概括的语义标题`);
       } else if (shortTitle.length >= 4 && title.startsWith(shortTitle)) {
         issues.push(`${label}的 shortTitle 是标题开头的截断：「${shortTitle}」`);
       }

@@ -64,6 +64,7 @@ function decorateTask(task) {
     canChangeStatus: status !== "done",
     statusClass,
     statusIcon: status === "done" ? "✓" : status === "in_progress" ? "▶" : "○",
+    statusIconSrc: status === "done" ? "/assets/icons/task-done.svg" : status === "in_progress" ? "/assets/icons/task-progress.svg" : "/assets/icons/task-todo.svg",
     actionLabel: status === "todo" ? "待办" : status === "in_progress" ? "进行" : "完成",
     nextStatus
   };
@@ -185,12 +186,16 @@ Page({
     openId: "",
     taskView: "open",
     expandedTaskId: "",
+    reviewOpenId: "",
     submittingTaskId: "",
-    submittingStageId: ""
+    submittingStageId: "",
+    reviewLoading: false,
+    activeReview: null,
+    reviewDate: ""
   },
 
   onLoad() {
-    this.setData({ contentTop: getContentTop() });
+    this.setData({ contentTop: getContentTop(), reviewDate: formatDateKey(new Date()) });
     this._lastLoadAt = 0;
     this._loadingWorkspace = null;
   },
@@ -285,8 +290,15 @@ Page({
     this.setData({
       openId: this.data.openId === id ? "" : id,
       taskView: "open",
-      expandedTaskId: ""
+      expandedTaskId: "",
+      reviewOpenId: ""
     });
+  },
+
+  onToggleReview(event) {
+    const id = event.currentTarget.dataset.id;
+    if (!id) return;
+    this.setData({ reviewOpenId: this.data.reviewOpenId === id ? "" : id });
   },
 
   onTaskViewTap(event) {
@@ -333,13 +345,51 @@ Page({
     });
   },
 
-  // 复盘目前是独立页面：文件页只负责给入口（与网页探索项目的「复盘」一致）。
   onOpenReview(event) {
-    const date = event.currentTarget.dataset.date;
-    const url = date
-      ? `/pages/review/review?date=${date}`
-      : "/pages/review/review";
-    wx.navigateTo({ url });
+    const date = event.currentTarget.dataset.date || this.data.reviewDate;
+    if (!date || this.data.reviewLoading) return;
+    const { getReview } = require("../../utils/api");
+    this.setData({ reviewLoading: true });
+    getReview(date)
+      .then((result) => {
+        if (!result.review) {
+          wx.showToast({ title: "这一天还没有复盘", icon: "none" });
+          return;
+        }
+        this.setData({
+          activeReview: {
+            id: result.review.id,
+            date,
+            summary: result.review.summary || ""
+          }
+        });
+      })
+      .catch(() => wx.showToast({ title: "复盘没加载出来", icon: "none" }))
+      .then(() => this.setData({ reviewLoading: false }));
+  },
+
+  onGenerateReview(event) {
+    const date = event.currentTarget.dataset.date || this.data.reviewDate;
+    if (!date || this.data.reviewLoading) return;
+    const { generateReviewDraft } = require("../../utils/api");
+    this.setData({ reviewLoading: true });
+    wx.showLoading({ title: "正在回看" });
+    generateReviewDraft(date)
+      .then(() => {
+        markDataChanged(["workspace"]);
+        wx.hideLoading();
+        this.setData({ reviewLoading: false });
+        this.onOpenReview({ currentTarget: { dataset: { date } } });
+      })
+      .catch(() => {
+        wx.hideLoading();
+        this.setData({ reviewLoading: false });
+        wx.showToast({ title: "这次没整理出来", icon: "none" });
+      });
+  },
+
+  onCloseReview() {
+    this.setData({ activeReview: null });
   },
 
   onAdvanceStage(event) {

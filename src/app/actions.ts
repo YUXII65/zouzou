@@ -16,16 +16,13 @@ import {
   isGuestUser,
   requireUser,
 } from "@/lib/auth";
-import { startOfDay, toDateInputValue } from "@/lib/date";
+import { toDateInputValue } from "@/lib/date";
 import { buildAiContext, invalidateAiContext } from "@/lib/ai-context";
 import { recordAiFeedback } from "@/lib/feedback";
 import { recordUsageEvent } from "@/lib/usage";
 import { guestEntryPath } from "@/lib/entry-policy";
 import { withAiQuota } from "@/lib/ai-quota";
-import {
-  isOnboardingCompleted,
-  setOnboardingCompleted,
-} from "@/lib/onboarding";
+import { setOnboardingCompleted } from "@/lib/onboarding";
 import { setFirstRunTourStep as persistFirstRunTourStep } from "@/lib/first-run";
 import {
   serializeTaskStickyNote,
@@ -35,6 +32,12 @@ import { generateTodayFocus } from "@/lib/today-focus-generate";
 import { priority, taskContractData } from "@/lib/task-contract-fields";
 import { applyTaskStatus } from "@/lib/task-status";
 import { buildTaskEditSuggestion } from "@/lib/ai-edit-suggestions";
+import {
+  clarifyOnboardingForUser,
+  completeFirstRunForUser,
+  planOnboardingForUser,
+  skipOnboardingForUser,
+} from "@/lib/onboarding-flow";
 import { advanceProjectStage } from "@/lib/project-stage-advance";
 import {
   decisionCardFromAdvice,
@@ -48,17 +51,16 @@ import {
   ensureCurrentProjectStage,
   syncProjectStageGate,
 } from "@/lib/project-stage";
+import { generateLongtermStagePreview } from "@/lib/project-progress-agent";
 import {
-  advanceExploreAfterTask,
-  generateLongtermStagePreview,
-} from "@/lib/project-progress-agent";
+  scheduleExploreContinuationAfterTask,
+  scheduleProjectContinuationPreparation,
+} from "@/lib/project-continuation";
 import {
   appendTaskContinuation,
   OPEN_TASK_STATUSES,
 } from "@/lib/task-flow";
 import {
-  generateFirstRunPlan,
-  generateSocraticClarification,
   generateTaskCoachAdvice,
   generateTaskShortTitle,
   type FirstRunPlanResult,
@@ -232,97 +234,23 @@ export async function claimGuestAccount(formData: FormData) {
 
 export async function completeFirstRun(formData: FormData) {
   const user = await requireUser();
-  const projectName = text(formData, "projectName");
-  const objective = text(formData, "objective");
-  const milestone = text(formData, "milestone");
-  const taskTitle = text(formData, "taskTitle");
-  const taskShortTitle = text(formData, "taskShortTitle");
-  const taskRecommendation = text(formData, "taskRecommendation");
-  const taskFallback = text(formData, "taskFallback");
-
-  if (!projectName || !objective || !taskTitle) return;
-
-  const taskContract = taskContractData({
-    title: taskTitle,
-    notes: objective,
-    executionMode: formData.get("taskExecutionMode"),
-    doneWhen: formData.get("taskDoneWhen"),
-    methodHint: formData.get("taskMethodHint"),
-    maxTurns: formData.get("taskMaxTurns"),
-    toolPolicy: formData.get("taskToolPolicy"),
+  const result = await completeFirstRunForUser(user.id, {
+    projectName: text(formData, "projectName") ?? "",
+    objective: text(formData, "objective") ?? "",
+    milestone: text(formData, "milestone"),
+    taskTitle: text(formData, "taskTitle") ?? "",
+    taskShortTitle: text(formData, "taskShortTitle"),
+    sourceIdea: text(formData, "sourceIdea"),
+    taskExecutionMode: String(formData.get("taskExecutionMode") ?? ""),
+    taskDoneWhen: String(formData.get("taskDoneWhen") ?? ""),
+    taskMethodHint: String(formData.get("taskMethodHint") ?? ""),
+    taskMaxTurns: String(formData.get("taskMaxTurns") ?? ""),
+    taskToolPolicy: String(formData.get("taskToolPolicy") ?? ""),
+    taskRecommendation: text(formData, "taskRecommendation"),
+    taskExecutionSteps: lines(text(formData, "taskExecutionSteps")),
+    taskFallback: text(formData, "taskFallback"),
   });
-  if (await isOnboardingCompleted(user.id)) {
-    redirect("/");
-  }
-
-  const existingProject = await prisma.project.findFirst({
-    where: { userId: user.id },
-    select: { id: true },
-  });
-  if (existingProject) {
-    await setOnboardingCompleted(user.id, true);
-    await persistFirstRunTourStep(user.id, "2");
-    redirect("/workspace");
-  }
-
-  const project = await prisma.project.create({
-    data: {
-      userId: user.id,
-      name: projectName,
-      objective,
-      currentMilestone: milestone,
-      status: "active",
-      notes: text(formData, "sourceIdea"),
-    },
-    select: { id: true },
-  });
-
-  const createdTask = await prisma.task.create({
-    data: {
-      userId: user.id,
-      title: taskTitle,
-      shortTitle: taskShortTitle,
-      projectId: project.id,
-      status: "todo",
-      priority: "medium",
-      scheduledDate: startOfDay(),
-      planOrder: 0,
-      ...taskContract,
-    },
-    select: { id: true },
-  });
-
-  const sticky = stickyPayloadFromDecisionCard(
-    decisionCardFromTask({
-      title: taskTitle,
-      shortTitle: taskShortTitle ?? taskTitle,
-      recommendation: taskRecommendation,
-      executionSteps: lines(text(formData, "taskExecutionSteps")),
-      fallback: taskFallback,
-      methodHint: taskContract.methodHint,
-      doneWhen: taskContract.doneWhen,
-    }),
-  );
-  await prisma.taskStickyNote.create({
-    data: {
-      userId: user.id,
-      taskId: createdTask.id,
-      sourceMessage: text(formData, "sourceIdea") ?? objective,
-      title: sticky.title,
-      encouragement: sticky.encouragement,
-      stepsJson: JSON.stringify(sticky.steps),
-      nextStep: sticky.nextStep,
-    },
-  });
-
-  await recordUsageEvent({
-    userId: user.id,
-    event: "task_created",
-    detail: "onboarding",
-  });
-  await setOnboardingCompleted(user.id, true);
-  await persistFirstRunTourStep(user.id, "2");
-  await recordUsageEvent({ userId: user.id, event: "onboarding_complete" });
+  if (!result.ok) return;
   revalidatePath("/");
   revalidatePath("/workspace");
   redirect("/workspace");
@@ -402,65 +330,21 @@ export async function setFirstRunTourStep(step: string) {
 export async function skipOnboarding(_formData?: FormData) {
   void _formData;
   const user = await requireUser();
-  await setOnboardingCompleted(user.id, true);
-  await persistFirstRunTourStep(user.id, "1");
-  await recordUsageEvent({ userId: user.id, event: "onboarding_skipped" });
+  await skipOnboardingForUser(user.id);
   revalidatePath("/");
   redirect("/");
 }
 
 export async function planOnboarding(idea: string): Promise<FirstRunPlanResult> {
   const user = await requireUser();
-  const content = idea.trim();
-  if (!content) {
-    return {
-      projectName: "第一个项目",
-      objective: "把第一个想法变成可推进的个人项目",
-      milestone: "开始推进",
-      taskTitle: "写下今天可以推进的一个具体动作",
-      taskShortTitle: "写下具体动作",
-      taskExecutionMode: "quick",
-      taskDoneWhen: "写下今天能马上开始的一个具体动作",
-      taskMethodHint: "先写成一个 30 分钟内能完成的具体动作，再判断它是否真的能推进。",
-      taskRecommendation: "先写成一个 30 分钟内能完成的具体动作，再判断它是否真的能推进。",
-      taskExecutionSteps: ["写下今天能马上开始的那个具体动作"],
-      taskFallback: "",
-      taskMaxTurns: 1,
-      taskToolPolicy: "none",
-      usedFallback: true,
-    };
-  }
-
-  return withAiQuota("onboarding_plan", () => generateFirstRunPlan(content), user.id);
+  return planOnboardingForUser(user.id, idea);
 }
 
 export async function clarifyOnboarding(
   idea: string,
 ): Promise<InboxClarification> {
   const user = await requireUser();
-  const content = idea.trim();
-  if (!content) {
-    return { dimensions: [], supplementPlaceholder: "" };
-  }
-
-  const aiContext = await buildAiContext({
-    kind: "inbox_plan",
-    userId: user.id,
-  });
-
-  return withAiQuota("onboarding_clarify", () =>
-    generateSocraticClarification({
-      content,
-      history: [],
-      projectContext: aiContext.projectFacts,
-      memorySummary: aiContext.summary,
-      evidence: aiContext.evidence,
-      decisionMemory: aiContext.decisionMemory,
-      maxQuestions: 4,
-      minQuestions: 2,
-    }),
-    user.id
-  );
+  return clarifyOnboardingForUser(user.id, idea);
 }
 
 export async function recordPageView(page: string) {
@@ -1000,6 +884,10 @@ export async function confirmInboxPlan(formData: FormData) {
   revalidatePath("/");
   revalidatePath("/files");
   revalidatePath("/workspace");
+  scheduleProjectContinuationPreparation({
+    userId: user.id,
+    projectId: confirmedProjectId,
+  });
 
   return {
     ok: true as const,
@@ -1139,6 +1027,7 @@ function scheduleLongtermStagePreview(input: {
   gate: { state: string } | null;
 }) {
   if (!input.projectId || input.gate?.state !== "ready") return;
+  // ready 时优先复用提前生成的预览；这里只负责补缺失，不再清空重算。
   const projectId = input.projectId;
   after(async () => {
     try {
@@ -1176,6 +1065,7 @@ export async function updateTask(formData: FormData) {
     select: {
       title: true,
       shortTitle: true,
+      notes: true,
       status: true,
       priority: true,
       scheduledDate: true,
@@ -1211,6 +1101,9 @@ export async function updateTask(formData: FormData) {
       title,
       shortTitle,
       notes,
+      ...(title !== existing.title || (notes ?? null) !== existing.notes
+        ? { nextTaskJson: null, nextTaskUpdatedAt: null }
+        : {}),
       projectId,
       status,
       priority: priorityValue,
@@ -1297,13 +1190,20 @@ export async function updateTask(formData: FormData) {
       projectId,
       gate: stageGate,
     });
+    scheduleProjectContinuationPreparation({
+      userId: user.id,
+      projectId,
+    });
   }
 
   if (
     (status === "done" || status === "cancelled") &&
     existing.status !== status
   ) {
-    after(() => advanceExploreAfterTask({ userId: user.id, taskId: id }));
+    await scheduleExploreContinuationAfterTask({
+      userId: user.id,
+      taskId: id,
+    });
   }
 
   if (existing.reviewNextAction?.id) {

@@ -16,6 +16,7 @@ import {
   syncProjectStageGate,
 } from "@/lib/project-stage";
 import { ensureProjectTracks } from "@/lib/inbox-project";
+import { scheduleProjectContinuationPreparation } from "@/lib/project-continuation";
 
 export const dynamic = "force-dynamic";
 
@@ -407,6 +408,10 @@ export async function POST(request: Request) {
   revalidatePath("/");
   revalidatePath("/files");
   revalidatePath("/workspace");
+  scheduleProjectContinuationPreparation({
+    userId: user.id,
+    projectId: confirmedProjectId,
+  });
 
   return NextResponse.json({
     projectId: confirmedProjectId,

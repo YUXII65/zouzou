@@ -12,6 +12,7 @@ import {
 } from "@/lib/work-mode";
 import { after } from "next/server";
 import { buildTaskContract } from "@/lib/task-contract";
+import { isPlaceholderText } from "@/lib/ai-quality";
 import { assessIdeaReadiness, type IdeaReadiness } from "@/lib/idea-readiness";
 import { extractJsonObject as extractJson } from "@/lib/json-extract";
 import {
@@ -396,7 +397,10 @@ export function safePlanTask(value: unknown): InboxPlanTask {
 
   return {
     title,
-    shortTitle: normalizeShortTitle(raw.shortTitle, title),
+    shortTitle: (() => {
+      const shortTitle = normalizeShortTitle(raw.shortTitle, title);
+      return isPlaceholderText(shortTitle) ? normalizeShortTitle(null, title) : shortTitle;
+    })(),
     executionMode,
     doneWhen:
       typeof raw.doneWhen === "string" && raw.doneWhen.trim()
@@ -680,7 +684,10 @@ function heuristicPlan(
       .replace(/^(?:今天|明天|这周|本周|先|请|帮我|需要|想要?|把)\s*/u, "")
       .replace(/[，,。；;！？!?]/g, " ")
       .trim()
-      .slice(0, 20) || "第一个项目";
+      .slice(0, 20) || "个人推进项目";
+  const safeGeneratedProjectName = isPlaceholderText(generatedProjectName)
+    ? "个人推进项目"
+    : generatedProjectName;
   const taskTitle = /卡|难|累|焦虑|压力|害怕|不确定|迷茫|拖延|没时间/.test(
     lower,
   )
@@ -700,7 +707,7 @@ function heuristicPlan(
       workMode,
       heuristicProjectMode(content, Boolean(projectName)),
     ),
-    projectName: projectName ?? generatedProjectName,
+    projectName: projectName ?? safeGeneratedProjectName,
     projectObjective: first,
     projectMilestone: `围绕「${short}」产出一个能被别人直接看到的结果`,
     tasks: [
@@ -840,7 +847,7 @@ function heuristicFirstRun(content: string): FirstRunPlan {
             : "选出一个今天能动手、也看得出结果的方向";
 
   return {
-    projectName: topic.slice(0, 10),
+    projectName: isPlaceholderText(topic) ? "个人推进项目" : topic.slice(0, 10),
     objective,
     milestone,
     taskTitle,

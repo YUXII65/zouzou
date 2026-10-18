@@ -3,8 +3,10 @@ import { getMiniProgramUser } from "@/lib/miniprogram-auth";
 import { prisma } from "@/lib/prisma";
 import { taskContractData } from "@/lib/task-contract-fields";
 import { syncProjectStageGate } from "@/lib/project-stage";
-import { advanceExploreAfterTask } from "@/lib/project-progress-agent";
-import { after } from "next/server";
+import {
+  scheduleExploreContinuationAfterTask,
+  scheduleProjectContinuationPreparation,
+} from "@/lib/project-continuation";
 
 export const dynamic = "force-dynamic";
 
@@ -60,7 +62,7 @@ export async function POST(request: Request) {
 
   const existing = await prisma.task.findFirst({
     where: { id: taskId, userId: user.id },
-    select: { id: true, title: true, status: true, completedAt: true },
+    select: { id: true, title: true, notes: true, status: true, completedAt: true },
   });
   if (!existing) {
     return NextResponse.json({ error: "not_found" }, { status: 404 });
@@ -107,6 +109,9 @@ export async function POST(request: Request) {
       title: title.slice(0, 200),
       shortTitle: body.shortTitle?.trim().slice(0, 40) || title.slice(0, 40),
       notes,
+      ...(title !== existing.title || notes !== existing.notes
+        ? { nextTaskJson: null, nextTaskUpdatedAt: null }
+        : {}),
       projectId,
       status,
       priority,
@@ -130,9 +135,16 @@ export async function POST(request: Request) {
 
   if (projectId) {
     await syncProjectStageGate(prisma, { userId: user.id, projectId });
+    scheduleProjectContinuationPreparation({
+      userId: user.id,
+      projectId,
+    });
   }
   if (status === "done" || status === "cancelled") {
-    after(() => advanceExploreAfterTask({ userId: user.id, taskId: existing.id }));
+    await scheduleExploreContinuationAfterTask({
+      userId: user.id,
+      taskId: existing.id,
+    });
   }
 
   return NextResponse.json({ ok: true });

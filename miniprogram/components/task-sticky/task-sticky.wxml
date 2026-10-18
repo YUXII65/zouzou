@@ -1,7 +1,7 @@
 <view class="sticky-inline">
   <view class="sticky-loading" wx:if="{{loading}}">
     <text class="sticky-spinner">◌</text>
-    <text>正在写成能直接开始的步骤…</text>
+    <text>{{waitingText}}</text>
   </view>
 
   <block wx:elif="{{displayNotes.length}}">
@@ -35,7 +35,6 @@
         bindinput="onMessageInput"
         bindconfirm="onSubmitSupplement"
       />
-      <view class="sticky-send {{message ? '' : 'sticky-send-disabled'}}" bindtap="onSubmitSupplement">发送</view>
     </view>
     <view class="sticky-generate" wx:else bindtap="onGenerate">生成便利贴</view>
   </view>

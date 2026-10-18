@@ -47,6 +47,7 @@ Page({
     }
 
     const { loginOrRegister, setToken, setCachedUser, getOnboarding } = require("../../utils/api");
+    const { onboardingFlowEnabled } = require("../../config");
     wx.showLoading({ title: "正在登录..." });
     loginOrRegister(this.data.username.trim(), this.data.password)
       .then((result) => {
@@ -55,7 +56,7 @@ Page({
         wx.hideLoading();
         getOnboarding()
           .then((state) => {
-            if (state.isFirstRun && state.tourStep !== "done") {
+            if (onboardingFlowEnabled && state.isFirstRun && state.tourStep !== "done") {
               wx.reLaunch({ url: "/pages/onboarding/onboarding" });
               return;
             }

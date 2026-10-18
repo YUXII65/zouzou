@@ -1,4 +1,8 @@
 {
   "navigationStyle": "custom",
-  "enablePullDownRefresh": false
+  "enablePullDownRefresh": false,
+  "usingComponents": {
+    "app-header": "/components/app-header/app-header",
+    "site-footer": "/components/site-footer/site-footer"
+  }
 }

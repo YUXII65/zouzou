@@ -4,6 +4,8 @@ import {
   checkClarificationQuality,
   checkPlanQuality,
   compareAgainstBaseline,
+  isPlaceholderText,
+  isWeakGeneratedTitle,
 } from "@/lib/ai-quality";
 
 type Task = Record<string, unknown>;
@@ -36,6 +38,19 @@ function plan(overrides: Record<string, unknown> = {}) {
     ...overrides,
   };
 }
+
+test("标题必须重新概括，不能是泛词或原话截取", () => {
+  const source = "我想把个人网站尽快做出来，先上线一个能展示的版本";
+  assert.equal(isWeakGeneratedTitle("项目", source), true);
+  assert.equal(isWeakGeneratedTitle("把个人网站尽快做出来", source), true);
+  assert.equal(isWeakGeneratedTitle("作品集上线", source), false);
+});
+
+test("占位词识别支持标点和引号", () => {
+  assert.equal(isPlaceholderText("「项目标题」"), true);
+  assert.equal(isPlaceholderText("完成标准："), true);
+  assert.equal(isPlaceholderText("整理用户访谈记录"), false);
+});
 
 test("合格的计划不报问题", () => {
   assert.deepEqual(checkPlanQuality(plan(), { maxTasks: 3 }), []);
@@ -97,6 +112,21 @@ test("缺少 methodHint 会被抓出来", () => {
   assert.ok(issues.some((issue) => issue.includes("缺少 methodHint")));
 });
 
+test("把决定推迟给用户会被抓出来", () => {
+  const issues = checkPlanQuality(
+    plan({
+      tasks: [
+        task({
+          recommendation: "先看一眼项目情况，再决定从哪开始",
+          executionSteps: ["打开项目", "看情况再决定下一步"],
+          fallback: "如果找不到入口，回头再决定",
+        }),
+      ],
+    }),
+  );
+  assert.ok(issues.some((issue) => issue.includes("推迟")));
+});
+
 test("空泛的 methodHint 会被抓出来", () => {
   const issues = checkPlanQuality(
     plan({ tasks: [task({ methodHint: "按计划推进，根据情况调整" })] }),
@@ -119,6 +149,30 @@ test("缺少默认推荐和执行路径会被抓出来", () => {
   assert.ok(issues.some((issue) => issue.includes("recommendation")));
   assert.ok(issues.some((issue) => issue.includes("executionSteps")));
   assert.ok(issues.some((issue) => issue.includes("fallback")));
+});
+
+test("占位式项目标题和任务字段会被抓出来", () => {
+  const issues = checkPlanQuality(
+    plan({
+      projectName: "项目标题",
+      projectObjective: "项目目标",
+      tasks: [
+        task({
+          title: "任务标题",
+          shortTitle: "任务名称",
+          doneWhen: "完成标准",
+          methodHint: "方法提示",
+          recommendation: "推荐建议",
+          executionSteps: ["执行步骤"],
+        }),
+      ],
+    }),
+  );
+  assert.ok(issues.some((issue) => issue.includes("projectName") && issue.includes("占位")));
+  assert.ok(issues.some((issue) => issue.includes("任务标题") || issue.includes("标题是占位")));
+  assert.ok(issues.some((issue) => issue.includes("doneWhen") && issue.includes("占位")));
+  assert.ok(issues.some((issue) => issue.includes("methodHint") && issue.includes("占位")));
+  assert.ok(issues.some((issue) => issue.includes("recommendation") && issue.includes("占位")));
 });
 
 test("shortTitle 直接截断标题会被抓出来", () => {

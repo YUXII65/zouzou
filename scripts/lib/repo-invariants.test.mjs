@@ -113,9 +113,9 @@ test("公开路由的数量被显式限制在最小集合内", () => {
  * 新人看到的第一条任务因此缺了主执行界面，决策链在第一步就断了。
  * ------------------------------------------------------------------ */
 test("首启计划落库时同时生成第一张便利贴，并走统一决策结构", () => {
-  const file = path.join(root, "src", "app", "actions.ts");
+  const file = path.join(root, "src", "lib", "onboarding-flow.ts");
   const text = fs.readFileSync(file, "utf8");
-  const start = text.indexOf("export async function completeFirstRun");
+  const start = text.indexOf("export async function completeFirstRunForUser");
   assert.ok(start >= 0, "找不到 completeFirstRun");
   const next = text.indexOf("export async function", start + 10);
   const body = text.slice(start, next === -1 ? undefined : next);
@@ -158,4 +158,50 @@ test("首次澄清只能有一个 InboxClarification 实例", () => {
     !text.includes("<InboxClarification"),
     "QuickCapture 不能再渲染本地 InboxClarification；首次点击会被 router.refresh 卸载吞掉",
   );
+});
+
+/* ------------------------------------------------------------------ *
+ * 坑：长期 / 探索不能等用户完成任务后才临时生成下一步。
+ * 计划确认后要预热；长期阶段 ready 时不能把已经准备好的预览清空重算；
+ * 探索完成时若有预生成下一条，必须同步消费。
+ * ------------------------------------------------------------------ */
+test("长期和探索计划确认后都调度下一步预热", () => {
+  for (const file of [
+    "src/app/actions.ts",
+    "src/app/api/miniprogram/inbox/confirm/route.ts",
+  ]) {
+    const text = fs.readFileSync(path.join(root, file), "utf8");
+    assert.match(
+      text,
+      /scheduleProjectContinuationPreparation\s*\(/,
+      `${file} 没有在计划确认后预热下一步`,
+    );
+  }
+});
+
+test("长期阶段 ready 时不丢弃已预生成的下一阶段", () => {
+  const file = path.join(root, "src", "lib", "project-stage.ts");
+  const text = fs.readFileSync(file, "utf8");
+  const start = text.indexOf("export async function syncProjectStageGate");
+  assert.ok(start >= 0, "找不到 syncProjectStageGate");
+  const next = text.indexOf("export async function", start + 10);
+  const body = text.slice(start, next === -1 ? undefined : next);
+  assert.ok(
+    !body.includes("nextStageJson: null"),
+    "阶段 ready 时不能清空 nextStageJson，否则用户点进入下一阶段又要等模型",
+  );
+});
+
+test("探索任务完成时先消费预生成下一条", () => {
+  const status = fs.readFileSync(
+    path.join(root, "src", "lib", "task-status.ts"),
+    "utf8",
+  );
+  const agent = fs.readFileSync(
+    path.join(root, "src", "lib", "project-progress-agent.ts"),
+    "utf8",
+  );
+  assert.match(status, /scheduleExploreContinuationAfterTask\s*\(/);
+  assert.match(agent, /preparedOnly/);
+  assert.match(agent, /parseExploreContinuation\(task\.nextTaskJson\)/);
 });

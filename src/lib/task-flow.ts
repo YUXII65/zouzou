@@ -1,3 +1,5 @@
+import { isPlaceholderText } from "@/lib/ai-quality";
+
 export const OPEN_TASK_STATUSES = ["todo", "in_progress"] as const;
 
 /** 仅作为 JSON 安全上限，不表示模型应生成这么多，也不作为产品目标。 */
@@ -70,8 +72,10 @@ export function parseReviewNextActions(raw: string): ReviewNextActionInput[] {
     index += 2
   ) {
     const shortTitle = lines[index].trim().slice(0, 80);
-    const detail = (lines[index + 1] ?? shortTitle).trim().slice(0, 200);
-    if (shortTitle) actions.push({ title: detail, shortTitle });
+    if (!shortTitle || isPlaceholderText(shortTitle)) continue;
+    const rawDetail = (lines[index + 1] ?? shortTitle).trim().slice(0, 200);
+    const detail = rawDetail && !isPlaceholderText(rawDetail) ? rawDetail : shortTitle;
+    actions.push({ title: detail, shortTitle });
   }
   return actions;
 }

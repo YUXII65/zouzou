@@ -1,5 +1,6 @@
 const DEMO_SCENARIOS = require("./demo-data");
 const { openTab } = require("../../utils/tab-bar");
+const { getContentTop } = require("../../utils/layout");
 
 const STEP_MS = 4600;
 const STEP_COUNT = 3;

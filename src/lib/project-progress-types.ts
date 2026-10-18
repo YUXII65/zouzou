@@ -27,6 +27,30 @@ export type ExploreContinuation = {
   source: "model" | "fallback";
 };
 
+export function parseExploreContinuation(
+  value: string | null | undefined,
+): ExploreContinuation | null {
+  if (!value) return null;
+  try {
+    const parsed = JSON.parse(value) as ExploreContinuation;
+    if (!parsed || typeof parsed !== "object") return null;
+    if (!["continue", "adjust", "switch", "pause"].includes(parsed.decision)) {
+      return null;
+    }
+    if (typeof parsed.currentMilestone !== "string") return null;
+    if (parsed.task !== null && (!parsed.task || typeof parsed.task.title !== "string")) {
+      return null;
+    }
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+export function hasPreparedExploreContinuation(value: string | null | undefined) {
+  return Boolean(parseExploreContinuation(value));
+}
+
 export function parseStagePreview(value: string | null | undefined): StagePreview | null {
   if (!value) return null;
   try {

@@ -1,4 +1,8 @@
 {
   "navigationBarTitleText": "走走",
-  "enablePullDownRefresh": false
+  "enablePullDownRefresh": false,
+  "navigationStyle": "custom",
+  "usingComponents": {
+    "app-header": "/components/app-header/app-header"
+  }
 }

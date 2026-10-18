@@ -1,0 +1,4 @@
+<view class="site-footer theme-{{theme}}">
+  <view class="site-footer-line"></view>
+  <text>走走 v3.5 · Coded by 氵</text>
+</view>

@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Loader2 } from "lucide-react";
 import { ChatClarify } from "@/components/chat-clarify";
+import { useRotatingText } from "@/components/rotating-text";
 import { ignoreInboxItem } from "@/app/actions";
 import { consumeAiStream } from "@/lib/ai-stream-client";
 import type {
@@ -14,6 +15,8 @@ import type {
   InboxClarificationHistoryItem,
   InboxPlan,
 } from "@/lib/ai";
+
+const FINALIZING_WAITING_LABELS = ["正在确认情况", "正在整理信息"];
 
 type ConfirmResult = {
   ok: true;
@@ -54,10 +57,14 @@ export function InboxClarification({
   const [error, setError] = useState("");
   const completionStartedRef = useRef(false);
   const router = useRouter();
+  const finalizingLabel = useRotatingText(
+    finalizing,
+    FINALIZING_WAITING_LABELS,
+  );
   // 这里不能 router.refresh()：确认成功后这条 inbox item 已经不是 pending，
-  // refresh 会把整个 InboxClarification 卸载掉，完成态（已放进文件 / 查看 /
+  // refresh 会把整个 InboxClarification 卸载掉，完成态（已放进文件 / 去看看 /
   // 直接答案 / 先收着）就永远没机会渲染出来。完成态留在卡片里，
-  // 用户点「查看」去文件页时自然会重新取一遍服务端数据。
+  // 用户点「去看看」去文件页时自然会重新取一遍服务端数据。
   const finish = useCallback(() => {
     onFinished?.();
   }, [onFinished]);
@@ -211,7 +218,7 @@ export function InboxClarification({
         submitLabel="去看看"
         onNext={mode === "socratic" ? next : undefined}
         busy={finalizing}
-        // 确认完成后收起「去看看」，否则会和「查看」两个按钮同时留在卡片里
+        // 确认完成后收起「去看看」，避免重复出现完成按钮
         hideSubmitAction={Boolean(confirmed) || Boolean(directAnswer)}
         onSubmit={finalize}
       />
@@ -219,7 +226,7 @@ export function InboxClarification({
       {finalizing ? (
         <div className="flex items-center gap-2 px-1 pt-1 text-sm text-ink-muted">
           <Loader2 className="size-4 shrink-0 animate-spin text-accent/70" />
-          <span>正在收成下一步…</span>
+          <span>{finalizingLabel}</span>
         </div>
       ) : null}
 
@@ -235,7 +242,7 @@ export function InboxClarification({
             href={fileHref}
             className="zouzou-primary-button inline-flex h-11 items-center rounded-lg bg-accent px-5 text-sm font-medium text-white transition-colors hover:bg-accent-strong"
           >
-            查看
+            去看看
           </Link>
         </div>
       ) : null}

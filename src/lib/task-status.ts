@@ -1,10 +1,8 @@
 import { after } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { currentProjectStageId, syncProjectStageGate } from "@/lib/project-stage";
-import {
-  advanceExploreAfterTask,
-  generateLongtermStagePreview,
-} from "@/lib/project-progress-agent";
+import { generateLongtermStagePreview } from "@/lib/project-progress-agent";
+import { scheduleExploreContinuationAfterTask } from "@/lib/project-continuation";
 import { recordAiFeedback } from "@/lib/feedback";
 import { recordUsageEvent } from "@/lib/usage";
 import { invalidateAiContext } from "@/lib/ai-context";
@@ -45,7 +43,7 @@ function scheduleLongtermStagePreview(input: {
   gate: { state: string; total: number } | null;
 }) {
   // active：当前阶段进行中就预生成下一阶段，用户完成当前阶段时不必再等模型。
-  // ready：syncProjectStageGate 已清掉旧预览，这里按最终结果重新生成。
+  // ready：正常情况下直接复用提前生成的预览；只有缺失时才在后台补生成。
   if (
     !input.projectId ||
     !input.gate ||
@@ -121,6 +119,13 @@ export async function applyTaskStatus(input: {
   }
 
   const status = input.status;
+  if ((status === "done" || status === "cancelled") && updatedTask.projectId) {
+    // 探索项目若有预生成下一条，会在这里同步落库；没有缓存才转后台补模型。
+    await scheduleExploreContinuationAfterTask({
+      userId: input.userId,
+      taskId: input.taskId,
+    });
+  }
   const reviewNextStatus =
     status === "done"
       ? "done"
@@ -137,12 +142,6 @@ export async function applyTaskStatus(input: {
         data: { status: reviewNextStatus },
       }),
     ];
-
-    if (status === "done" || status === "cancelled") {
-      backgroundTasks.push(
-        advanceExploreAfterTask({ userId: input.userId, taskId: input.taskId }),
-      );
-    }
 
     if (status === "done") {
       backgroundTasks.push(

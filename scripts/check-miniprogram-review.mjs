@@ -104,7 +104,10 @@ head("【2】提审配置与包体");
 
 try {
   const src = fs.readFileSync(path.join(mpDir, "config.js"), "utf8");
-  const apiBase = src.match(/apiBase\s*=\s*"([^"]*)"/)?.[1] ?? "";
+  const apiBase =
+    src.match(/productionApiBase\s*=\s*"([^"]*)"/)?.[1] ??
+    src.match(/apiBase\s*=\s*"([^"]*)"/)?.[1] ??
+    "";
   const cloudEnv = src.match(/cloudEnv\s*=\s*"([^"]*)"/)?.[1] ?? "";
 
   if (!/^https:\/\//.test(apiBase) || /localhost|127\.0\.0\.1/.test(apiBase)) {

@@ -137,7 +137,13 @@ Page({
     completedTodayTasks: [],
     submittingPlanId: "",
     submittingClarifyId: "",
-    expandedTaskId: ""
+    submittingTaskId: "",
+    expandedTaskId: "",
+    tourVisible: false,
+    tourStep: "1",
+    tourTitle: "",
+    tourBody: "",
+    tourAction: ""
   },
 
   onLoad() {
@@ -219,15 +225,71 @@ Page({
   },
 
   ensureOnboarding() {
+    const { onboardingFlowEnabled } = require("../../config");
     const { getToken, getOnboarding } = require("../../utils/api");
     if (!getToken()) return;
     getOnboarding()
       .then((state) => {
-        if (state.isFirstRun && state.tourStep !== "done") {
-          wx.reLaunch({ url: "/pages/onboarding/onboarding" });
+        if (!state.isFirstRun || state.tourStep === "done") {
+          this.setData({ tourVisible: false });
+          return;
         }
+        if (onboardingFlowEnabled) {
+          wx.reLaunch({ url: "/pages/onboarding/onboarding" });
+          return;
+        }
+        this.applyTourStep(state.tourStep);
       })
       .catch(() => {});
+  },
+
+  applyTourStep(step) {
+    const tours = {
+      "1": {
+        title: "从真实的想法开始",
+        body: "不必在意写的好不好，走走会帮你理解并规划",
+        action: "去试试"
+      },
+      "2": {
+        title: "挑选最符合情况的选项",
+        body: "为了更好的了解你，建议手动输入",
+        action: "明白了"
+      },
+      "3": {
+        title: "使用便利贴",
+        body: "点击任务，便利贴会尽可能辅助你执行",
+        action: "知道了"
+      }
+    };
+    const hint = tours[step] || tours["1"];
+    this.setData({
+      tourVisible: true,
+      tourStep: tours[step] ? step : "1",
+      tourTitle: hint.title,
+      tourBody: hint.body,
+      tourAction: hint.action
+    });
+  },
+
+  onTourNext() {
+    const { setOnboardingStep } = require("../../utils/api");
+    if (this.data.tourStep === "1") {
+      setOnboardingStep("2").catch(() => {});
+      this.applyTourStep("2");
+      return;
+    }
+    if (this.data.tourStep === "2") {
+      setOnboardingStep("3").catch(() => {});
+      this.applyTourStep("3");
+      return;
+    }
+    this.onTourDone();
+  },
+
+  onTourDone() {
+    const { setOnboardingStep } = require("../../utils/api");
+    setOnboardingStep("done").catch(() => {});
+    this.setData({ tourVisible: false });
   },
 
   restoreTodayCache() {
@@ -327,6 +389,7 @@ Page({
             canChangeStatus: !isDone,
             statusClass: status,
             statusIcon: isDone ? "✓" : task.status === "in_progress" ? "▶" : "○",
+            statusIconSrc: isDone ? "/assets/icons/task-done.svg" : task.status === "in_progress" ? "/assets/icons/task-progress.svg" : "/assets/icons/task-todo.svg",
             actionLabel: isDone ? "完成" : task.status === "todo" ? "待办" : task.status === "in_progress" ? "进行" : "完成",
             nextStatus: isDone ? "" : task.status === "todo" ? "in_progress" : task.status === "in_progress" ? "done" : ""
           };
@@ -718,15 +781,15 @@ Page({
     if (!taskId || !status) return;
 
     const { setTaskStatus } = require("../../utils/api");
-    wx.showLoading({ title: "正在同步" });
+    this.setData({ submittingTaskId: taskId });
     setTaskStatus(taskId, status)
       .then(() => {
         markDataChanged(["today", "workspace", "profile"]);
-        wx.hideLoading();
+        this.setData({ submittingTaskId: "" });
         this.loadToday();
       })
       .catch((error) => {
-        wx.hideLoading();
+        this.setData({ submittingTaskId: "" });
         if (error.statusCode === 401) {
           wx.reLaunch({ url: "/pages/login/login" });
           return;

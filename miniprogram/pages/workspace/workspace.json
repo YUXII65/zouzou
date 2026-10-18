@@ -2,6 +2,8 @@
   "navigationStyle": "custom",
   "enablePullDownRefresh": false,
   "usingComponents": {
-    "task-sticky": "/components/task-sticky/task-sticky"
+    "task-sticky": "/components/task-sticky/task-sticky",
+    "app-header": "/components/app-header/app-header",
+    "site-footer": "/components/site-footer/site-footer"
   }
 }

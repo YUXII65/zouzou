@@ -1,0 +1,6 @@
+<view class="app-header theme-{{theme}}" style="padding-top: {{statusBarHeight}}px;">
+  <view class="app-header-inner">
+    <view class="app-brand-mark"><view class="app-brand-arrow"></view></view>
+    <text class="app-brand-title">走走</text>
+  </view>
+</view>

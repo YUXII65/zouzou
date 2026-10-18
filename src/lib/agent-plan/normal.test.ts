@@ -68,6 +68,19 @@ test("普通模式方案通过一致性检查", () => {
   assert.deepEqual(auditNormalAgentPlan(validPlan(), brief), []);
 });
 
+test("用户行动卡里的占位词会被拦住", () => {
+  const plan = validPlan({
+    userCard: {
+      understanding: "理解",
+      firstAction: "第一步",
+      how: "怎么做",
+      doneWhen: "完成标准",
+    },
+  });
+  const issues = auditNormalAgentPlan(plan, brief);
+  assert.ok(issues.some((issue) => issue.includes("用户行动卡") && issue.includes("占位")));
+});
+
 test("用户结果里出现二选一会被拦住", () => {
   const plan = validPlan({
     userCard: {
@@ -120,6 +133,25 @@ test("项目名不会把元描述当成标题", () => {
     normalizeProjectName("公开写作分享", "想从写作这一类开始"),
     "公开写作分享",
   );
+});
+
+test("占位式项目标题不能落成文件夹名", () => {
+  const name = normalizeProjectName(
+    "项目标题",
+    "整理自己的个人网站，先把作品集首页做出来",
+  );
+  assert.notEqual(name, "项目标题");
+  assert.match(name, /网站|作品集|整理/);
+  assert.equal(normalizeProjectName("项目标题", "项目标题"), "个人推进项目");
+});
+
+test("原话式项目名会被重新概括", () => {
+  const name = normalizeProjectName(
+    "把个人网站尽快做出来",
+    "我想把个人网站尽快做出来，先上线一个能展示的版本",
+  );
+  assert.notEqual(name, "把个人网站尽快做出来");
+  assert.ok(name.length <= 12);
 });
 
 test("项目名只写设备条件时不能直接落成文件夹名", () => {

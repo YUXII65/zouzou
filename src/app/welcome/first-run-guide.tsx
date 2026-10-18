@@ -40,9 +40,8 @@ const steps = [
 const inputClass =
   "zouzou-input w-full rounded-lg px-3.5 py-3 text-[15px] leading-7 text-ink";
 const UNDERSTANDING_LABELS = [
-  "我在听，先别急着整理…",
-  "正在找最关键的那一点…",
-  "正在把选项写得更好选…",
+  "正在读你的话",
+  "正在理解你",
 ];
 
 export function FirstRunGuide({
@@ -139,7 +138,7 @@ export function FirstRunGuide({
     } catch {
       setAiFallback(true);
       setPlanSourceIdea(ideaValue);
-      setProjectName(ideaValue.slice(0, 12) || "第一个项目");
+      setProjectName(ideaValue.slice(0, 12) || "个人推进项目");
       setObjective(`把“${ideaValue}”推进到真正做起来。`);
       setMilestone("做出第一个可见结果");
       setTaskTitle(`把「${ideaValue}」做出第一个可见结果`);

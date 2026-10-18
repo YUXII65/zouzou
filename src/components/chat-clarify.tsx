@@ -47,12 +47,8 @@ type Turn = {
 };
 
 const TYPING_MS = 600;
-const CLARIFY_WAITING_LABELS = ["正在想下一个问题…", "再确认一点就够…"];
-const PLAN_WAITING_LABELS = [
-  "正在收成能开始的第一步…",
-  "正在排先后顺序…",
-  "快整理好了…",
-];
+const CLARIFY_WAITING_LABELS = ["正在思考中", "正在补充信息"];
+const PLAN_WAITING_LABELS = ["正在确认情况", "正在整理信息"];
 
 function initialAnswers(history: InboxClarificationHistoryItem[]) {
   return history
@@ -197,7 +193,7 @@ export function ChatClarify({
             ...current,
             {
               role: "ai",
-              text: "明白了，已整理完成",
+              text: "已整理到文件，可以去看看。",
             },
           ]);
         } else if (result.question) {

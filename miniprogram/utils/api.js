@@ -142,6 +142,34 @@ function setOnboardingStep(step) {
   });
 }
 
+function clarifyOnboardingIdea(idea) {
+  return request("/api/miniprogram/onboarding/flow", {
+    method: "POST",
+    data: { action: "clarify", idea }
+  }).then((response) => response && response.clarification ? response.clarification : response);
+}
+
+function planOnboardingIdea(idea) {
+  return request("/api/miniprogram/onboarding/flow", {
+    method: "POST",
+    data: { action: "plan", idea }
+  }).then((response) => response && response.plan ? response.plan : response);
+}
+
+function completeOnboarding(data) {
+  return request("/api/miniprogram/onboarding/flow", {
+    method: "POST",
+    data: Object.assign({ action: "complete" }, data)
+  });
+}
+
+function skipOnboardingFlow() {
+  return request("/api/miniprogram/onboarding/flow", {
+    method: "POST",
+    data: { action: "skip" }
+  });
+}
+
 function getMe() {
   return request("/api/miniprogram/me");
 }
@@ -402,6 +430,10 @@ module.exports = {
   loginOrRegister,
   getOnboarding,
   setOnboardingStep,
+  clarifyOnboardingIdea,
+  planOnboardingIdea,
+  completeOnboarding,
+  skipOnboardingFlow,
   getMe,
   getToday,
   getTools,

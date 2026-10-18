@@ -209,7 +209,10 @@ export function createChainRunner({ baseUrl, apiKey, model, debug = false }) {
     let plan = scrubRecordToolMentions(
       JSON.parse(extractJson(planRaw) ?? "{}"),
     );
-    const auditIssues = checkPlanQuality(plan, { maxTasks });
+    const auditIssues = checkPlanQuality(plan, {
+      maxTasks,
+      sourceText: input,
+    });
     if (auditIssues.length) {
       planRaw = await requestChat(
         buildPlanAgentSystemPrompt(workMode),

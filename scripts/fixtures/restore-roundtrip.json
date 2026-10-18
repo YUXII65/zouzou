@@ -116,7 +116,9 @@
         "updatedAt": "2026-09-02T01:00:00.000Z",
         "methodHint": null,
         "stageId": "ps1",
-        "trackId": "pt1"
+        "trackId": "pt1",
+        "nextTaskJson": null,
+        "nextTaskUpdatedAt": null
       },
       {
         "id": "t2",
@@ -142,7 +144,9 @@
         "updatedAt": "2026-09-11T00:00:00.000Z",
         "methodHint": null,
         "stageId": null,
-        "trackId": null
+        "trackId": null,
+        "nextTaskJson": null,
+        "nextTaskUpdatedAt": null
       }
     ],
     "TaskStickyNote": [

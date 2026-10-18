@@ -1,67 +1,79 @@
 # 小程序 ↔ 网页 对齐验收清单
 
-> 2026-10-16。目标：小程序不再是自己抄一份的实现，而是消费网页同一份数据契约和业务规则；差异只保留"平台范式"层面。
-> 每次改动如果新增页面 / 接口 / 联动逻辑，先回到这份清单确认有没有制造新的第二实现。
+> 2026-10-17。基准：手机视口下的当前网页。目标不是“看起来差不多”，而是页面结构、信息层级、文案、状态和交互逐项一致；仅保留微信平台必须存在的差异。
+> 每次新增页面或改动组件，先回到这份清单确认，不能从旧小程序结构反向作为基准。
 
-## 一、数据契约（同一份服务端视图）
+## 一、唯一视觉基准
 
-| 页面 | 契约 | 网页 | 小程序 |
-| --- | --- | --- | --- |
-| 今天 | `src/lib/today-view.ts` `buildTodayView` | `src/app/page.tsx` | `GET /api/miniprogram/today`、`/api/miniprogram/prefetch` |
-| 文件 | `src/lib/files-view.ts` `buildFilesView` | `src/app/files/page.tsx` | `GET /api/miniprogram/workspace` |
-| 个人 | `src/lib/profile-view.ts` `buildProfileView` | `src/app/profile/page.tsx` | `GET /api/miniprogram/me` |
+- 网页组件和手机视口截图是唯一视觉真源。
+- 小程序改动前必须先列出：网页组件 → 小程序节点 → 文案 → 状态 → 交互 → 平台差异。
+- 页面截图统一使用 `390 × 844`，重点状态包括：空态、有数据、展开、加载、完成、深色模式。
+- 数据契约仍由 `today-view.ts`、`files-view.ts`、`profile-view.ts` 提供，小程序不另写聚合。
 
-已删除的私有聚合：`src/lib/miniprogram-today.ts`（小程序的旧今日视图）。
+## 二、视觉组件映射
 
-小程序端只做渲染与局部交互，不再判 `answer`、不拼 `dimensions`、不自己排序取任务。
+| 网页 | 小程序 | 对齐内容 |
+| --- | --- | --- |
+| `Sidebar` 手机头部 | `components/app-header` | 品牌块、白色玻璃底、固定顶部、状态栏避让 |
+| `Sidebar` 底部导航 | `custom-tab-bar` | 三页、选中色、Lucide 同款图标、56px 高度 |
+| `SiteFooter` | `components/site-footer` | 分隔线、`走走 v3.5 · Coded by 氵` |
+| `QuickCapture` | `pages/today` 快速记录卡 | 大输入框、通栏下一步、三条示例、换一批 |
+| `PanelHeader` | 今日建议头部 | 列表图标、标题、右侧数量 |
+| `TaskRowDisclosure` | 今日 / 文件任务标题行 | 短标题、展开箭头、点击展开 |
+| `TodayTaskActions` | 任务状态按钮 | 待办 → 进行 → 完成，完成终态 |
+| `TaskStickyInline` | `components/task-sticky` | 步骤卡、历史便利贴、补充输入、等待文案 |
+| `InboxClarification` | 今日澄清对话 | 回答即时显示、选项、多选、自己说、完成态 |
+| `FirstRunTour` | 今日 `tour-hint` | 三步提示、文案、步骤计数、关闭与推进 |
+| `FileBrowser` | `pages/workspace` | 模式排序、模式分组、文件夹标签、就地展开 |
+| `StagePreviewPanel` | 文件页长期项目 | 当前阶段、下一阶段、进入下一阶段 |
+| 探索线路图 | 文件页探索项目 | 主线 / 支线、当前推进任务 |
+| 文件页内嵌复盘 | 文件页顶部复盘面板 | 标题、关闭、摘要样式 |
+| `ProfileNameCard` | 个人页名片 | 头像、昵称、编辑、三模式计数 |
+| `ThemeToggle` / `AiSettings` / `LogoutButton` | 个人页功能区 | 夜间模式状态、API 连接状态、退出登录 |
+| 网页登录页 | `pages/login` | 品牌、加入我们、输入框、确认、返回看看 |
+| 网页欢迎流程 | `pages/onboarding` | 四步结构、字段、按钮、AI 澄清和完成落库 |
 
-## 二、跨端行为（同一份实现）
+## 三、跨端行为（同一份实现）
 
 | 行为 | 共享实现 | 小程序入口 |
 | --- | --- | --- |
 | 长期项目进入下一阶段 | `src/lib/project-stage-advance.ts` | `POST /api/miniprogram/projects/stage/advance` |
 | 今天要做的 AI 取舍 | `src/lib/today-focus-generate.ts` | `POST /api/miniprogram/today/focus` |
 | 任务执行合同字段 | `src/lib/task-contract-fields.ts` | 任务更新 / 阶段推进共用 |
-| 任务状态变更（含阶段预览、反馈统计） | `src/lib/task-status.ts` `applyTaskStatus` | `POST /api/miniprogram/tasks/status` |
-| 复盘保存（含 decisionJson） | `src/lib/review-save.ts` `saveReviewData` | `POST /api/miniprogram/review/save` |
-| 项目编辑（含 ensureCurrentProjectStage） | `src/lib/project-update.ts` `updateProjectData` | `POST /api/miniprogram/projects/update` |
-| 任务/项目 AI 辅助编辑（含 decisionMemory） | `src/lib/ai-edit-suggestions.ts` | `POST /api/miniprogram/ai/{task,project}/edit` |
+| 任务状态变更 | `src/lib/task-status.ts` | `POST /api/miniprogram/tasks/status` |
+| 复盘保存 | `src/lib/review-save.ts` | `POST /api/miniprogram/review/save` |
+| 项目编辑 | `src/lib/project-update.ts` | `POST /api/miniprogram/projects/update` |
+| AI 辅助编辑 | `src/lib/ai-edit-suggestions.ts` | `POST /api/miniprogram/ai/{task,project}/edit` |
 | 澄清与计划 | `src/lib/inbox-ai.ts`、`src/lib/agent-plan/` | `POST /api/miniprogram/ai/inbox/*` |
+| 首启四步流程 | `src/lib/onboarding-flow.ts` | `POST /api/miniprogram/onboarding/flow` |
 
-已删除：`answer` 直答出口（`generateDirectAnswer` / `DIRECT_ANSWER_SYSTEM_PROMPT` / `createDirectAnswerPlan`）。
-
-## 三、清掉的旧概念
-
-- 小程序独立「直接回答」面板、`directAnswers` 状态；
-- 问卷式澄清卡（`dimensions` 选项 + 确定方向）；
-- 复盘页旧底部导航「日历 / 书桌 / 抽屉」、标题「抽屉」；
-- 新手引导第 4 步「点抽屉复盘」；
-- `pages/tools` 完整工具页（降级为跳文件页的兜底）；
-- 落地页价值主张里的「每晚轻量复盘，AI 自动生成明天计划」；
-- actions 里重复的 `projectStatus`、任务合同字段、任务状态、复盘保存、项目编辑、AI 建议上下文。
-
-## 三点五、过渡期兼容（发布期间）
-
-- 线上小程序是旧包时，`/api/miniprogram/today` 与 `/api/miniprogram/prefetch` 会通过 `withLegacyTodayFields`（`src/lib/today-view.ts`）同时返回旧字段名（`pendingItems` / `tasks` / `completedToday` / `totalToday` / `openTasks` / `streak` / `weekDone` / `reviewCount`，以及每个任务的 `dueDateText` / `sticky`），保证旧包不空列表。
-- 新包全量发布并观察一段时间后，删掉 `withLegacyTodayFields` 和两个调用点即可。
-## 四、刻意的平台差异（不算漂移）
+## 四、刻意保留的平台差异
 
 | 项 | 网页 | 小程序 | 原因 |
 | --- | --- | --- | --- |
-| 主题按钮文案 | 显示点一下会切到的模式 | 显示当前模式 | 2026-10-16 明确要求 |
-| 任务展开收起 | 点外部 / Esc 收起 | 点标题切换 | 触屏范式 |
-| 复盘 | 文件页内嵌面板 | 独立页 `pages/review` + 文件页入口 | 小程序页面粒度 |
-| 导出 | `/api/export` 带下载头 | `/api/miniprogram/export` 返回 JSON | 平台下载方式不同；查询与 payload 结构一致 |
-| 错误提示 | 卡片内文案 | `wx.showToast` | 平台交互 |
-| 示例池载体 | `src/lib/sample-ideas.ts` | `miniprogram/utils/sample-ideas.js`（生成产物） | 小程序不能直接 require TS；`scripts/sample-ideas-sync.test.mjs` 防漂移 |
+| 系统外壳 | 浏览器地址栏 | 微信胶囊、状态栏、安全区 | 微信宿主固定存在 |
+| 主头部 | 普通 sticky 头部 | 状态栏下方的固定玻璃头部 | 不能覆盖微信胶囊 |
+| 删除 / 下载 | 浏览器下载 | 微信文件能力或服务端导出 | 平台 API 不同 |
+| 输入提交 | Enter / 点击 | 键盘 confirm / 点击 | 触屏范式 |
+| 外部收起 | 点空白 / Esc | 点标题 / 关闭按钮 | 触屏没有键盘 Esc |
+| 桌面导航 | 左侧栏 | 不渲染 | 小程序只复刻手机网页 |
+| 管理后台 | 网页后台 | 不渲染 | 非用户主流程 |
+| 欢迎流程 | 当前总开关关闭 | 同步关闭 | 两端必须同开关 |
 
 ## 五、门禁
 
-- `pnpm typecheck`、`pnpm test`（181 条，含示例池同步门禁与 API 鉴权不变量）、`pnpm build`；
-- `pnpm check:online`（8/8，含小程序主包体积）；
-- `pnpm verify:miniprogram`：扫描 `miniprogram/pages/**`，检查 WXML 绑定的事件在 JS 里有实现、`<view>` 标签成对（当前 9 个页面全过）。
+- `pnpm typecheck`
+- `pnpm lint`
+- `pnpm test`（包含双端文案、主页面头部、欢迎开关不变量）
+- `pnpm verify:miniprogram`
+- 人工核对手机视口截图：今日、文件、个人、登录、落地页、深色模式、任务展开态。
 
-## 六、未完成
+## 六、发布前人工检查
 
-- 小程序 `onboarding` 仍是独立 3 屏介绍页（网页是锚定气泡），只对齐了步数与内容；
-- 发布：需推 `codex/edgeone-deploy` + `main`，并在微信开发者工具上传新版本。
+- 微信开发者工具中重新编译并清理缓存。
+- 用同一测试账号比较网页与小程序三页首屏。
+- 检查深色模式。
+- 检查任务展开后的便利贴。
+- 检查文件页文件夹展开、长期阶段、探索线路图和复盘面板。
+- 检查登录页文案和错误提示。
+- 上述通过后，才进入“上传开发版本 → 提交审核”。上传和提审均不由自动任务执行。

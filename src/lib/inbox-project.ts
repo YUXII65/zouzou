@@ -46,7 +46,7 @@ export function deriveInboxProjectName(input: {
     .replace(/^(?:今天|明天|这周|本周|先|请|帮我|需要|想要?|把)\s*/u, "")
     .replace(/[「」“”]/g, "")
     .trim();
-  return compact(cleaned, 20) || "第一个项目";
+  return compact(cleaned, 20) || "个人推进项目";
 }
 
 export async function ensureInboxProject(

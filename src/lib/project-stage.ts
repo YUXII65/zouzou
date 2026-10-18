@@ -138,11 +138,8 @@ export async function syncProjectStageGate(
     data: {
       status: gate.state,
       completedAt: null,
-      // active 阶段可以提前看到一份"下一阶段预览"；阶段真正收尾时要重算，
-      // 否则 ready 时展示的还是几周前基于旧进度做的推断。
-      ...(gate.state === "ready" && stage.status === "active"
-        ? { nextStageJson: null, nextStageUpdatedAt: null }
-        : {}),
+      // active / ready 都复用已经提前生成的预览；阶段收尾时不再清空等待重算。
+      // 用户点「进入下一阶段」必须立即可用，不能为了最终一致性重新制造等待。
     },
   });
 

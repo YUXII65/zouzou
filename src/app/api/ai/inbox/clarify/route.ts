@@ -82,7 +82,7 @@ export async function POST(request: Request) {
   }
 
   return createNdjsonResponse(async (send) => {
-    send({ type: "preview", text: "我在听，先别急着整理…" });
+    send({ type: "preview", text: "正在读你的话" });
     let raw = "";
     let lastPreview = "";
     const onDelta = (delta: string) => {

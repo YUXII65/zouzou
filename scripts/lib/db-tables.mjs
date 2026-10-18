@@ -54,6 +54,7 @@ export const TABLES = [
       "dueDate",
       "focusDate",
       "completedAt",
+      "nextTaskUpdatedAt",
       "createdAt",
       "updatedAt",
     ],

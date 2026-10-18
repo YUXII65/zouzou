@@ -16,7 +16,11 @@ import fs from "node:fs";
 import path from "node:path";
 import "dotenv/config";
 import { createChainRunner } from "./lib/run-chain.mjs";
-import { BANNED_OUTPUT_PHRASES } from "../src/lib/ai-quality.ts";
+import {
+  BANNED_OUTPUT_PHRASES,
+  DEFERRED_DECISION_LANGUAGE,
+  isWeakGeneratedTitle,
+} from "../src/lib/ai-quality.ts";
 
 const root = path.resolve(import.meta.dirname, "..");
 const apiKey = process.env.DEEPSEEK_API_KEY || process.env.OPENAI_API_KEY;
@@ -75,9 +79,6 @@ const BANNED = new RegExp(
 );
 // 只在「推荐 / 步骤 / 替代方案」的文本里查，并且用 \n 分隔每一条，
 // 避免正则跨过 JSON 引号，在相邻步骤之间拼出一个假匹配。
-const DEFERRED =
-  /挑出\s*\d*\s*种组合|拍[^\n]{0,20}(挑|选)|再(去)?决定|回头再(挑|选|决定)|到时候再(挑|选|决定)/;
-
 /** 首次引导和主链共用同一套两段 Agent，这里把 plans[0] 映射成首启字段。 */
 async function callPlan(idea) {
   const { plan } = await chain.runChain(idea, { maxTasks: 3 });
@@ -114,7 +115,7 @@ function runChecks(aiCase, plan) {
   if (BANNED.test(whole)) {
     issues.push("出现了把决定推回给用户的表达");
   }
-  if (DEFERRED.test(answerText)) {
+  if (DEFERRED_DECISION_LANGUAGE.test(answerText)) {
     issues.push("推荐把决定推迟给用户，而不是直接给出答案");
   }
 
@@ -140,6 +141,12 @@ function runChecks(aiCase, plan) {
     "taskShortTitle",
   ]) {
     if (!String(plan?.[field] ?? "").trim()) issues.push(`${field} 为空`);
+  }
+  if (isWeakGeneratedTitle(plan?.projectName, aiCase.input)) {
+    issues.push("projectName 不是重新概括的语义标题");
+  }
+  if (isWeakGeneratedTitle(plan?.taskShortTitle, plan?.taskTitle)) {
+    issues.push("taskShortTitle 不是重新概括的语义标题");
   }
   if (plan?.taskTitle && String(plan.taskTitle).includes(aiCase.input)) {
     issues.push("taskTitle 直接复用了用户原话");

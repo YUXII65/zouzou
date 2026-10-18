@@ -1,0 +1,21 @@
+.site-footer {
+  margin-top: 64rpx;
+  padding-top: 24rpx;
+  color: #7e93ae;
+  font-size: 22rpx;
+  line-height: 1.5;
+}
+
+.site-footer-line {
+  height: 1rpx;
+  margin-bottom: 20rpx;
+  background: rgba(255, 255, 255, 0.7);
+}
+
+.site-footer.theme-dark {
+  color: #8291a3;
+}
+
+.site-footer.theme-dark .site-footer-line {
+  background: #2d3a49;
+}

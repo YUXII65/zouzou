@@ -178,39 +178,42 @@ model ProjectTrack {
 }
 
 model Task {
-  id               String            @id @default(cuid())
-  userId           String
-  user             User              @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: Cascade)
-  title            String
-  shortTitle       String?
-  notes            String?
-  projectId        String?
-  project          Project?          @relation(fields: [projectId], references: [id], onDelete: SetNull)
-  stageId          String?
-  stage            ProjectStage?     @relation(fields: [stageId], references: [id], onDelete: SetNull)
-  trackId          String?
-  track            ProjectTrack?     @relation(fields: [trackId], references: [id], onDelete: SetNull)
-  status           TaskStatus        @default(todo)
-  priority         Priority          @default(medium)
-  scheduledDate    DateTime?
-  dueDate          DateTime?
-  focusDate        DateTime?
-  completedAt      DateTime?
-  executionMode    String?
-  doneWhen         String?
-  methodHint       String?
-  completedBy      String?
-  maxTurns         Int?
-  toolPolicy       String?
-  planOrder        Int?
-  inboxItemId      String?
-  inboxItem        InboxItem?        @relation(fields: [inboxItemId], references: [id], onDelete: SetNull)
-  createdAt        DateTime          @default(now())
-  updatedAt        DateTime          @updatedAt
-  reviewTasks      ReviewTask[]
-  reviewNextAction ReviewNextAction?
-  aiFeedbackEvents AiFeedbackEvent[]
-  stickyNotes      TaskStickyNote[]
+  id                String            @id @default(cuid())
+  userId            String
+  user              User              @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  title             String
+  shortTitle        String?
+  notes             String?
+  projectId         String?
+  project           Project?          @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  stageId           String?
+  stage             ProjectStage?     @relation(fields: [stageId], references: [id], onDelete: SetNull)
+  trackId           String?
+  track             ProjectTrack?     @relation(fields: [trackId], references: [id], onDelete: SetNull)
+  status            TaskStatus        @default(todo)
+  priority          Priority          @default(medium)
+  scheduledDate     DateTime?
+  dueDate           DateTime?
+  focusDate         DateTime?
+  completedAt       DateTime?
+  executionMode     String?
+  doneWhen          String?
+  methodHint        String?
+  /// 探索模式预生成的下一条任务；完成当前任务后直接落库，不再临时等模型
+  nextTaskJson      String?
+  nextTaskUpdatedAt DateTime?
+  completedBy       String?
+  maxTurns          Int?
+  toolPolicy        String?
+  planOrder         Int?
+  inboxItemId       String?
+  inboxItem         InboxItem?        @relation(fields: [inboxItemId], references: [id], onDelete: SetNull)
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+  reviewTasks       ReviewTask[]
+  reviewNextAction  ReviewNextAction?
+  aiFeedbackEvents  AiFeedbackEvent[]
+  stickyNotes       TaskStickyNote[]
 
   @@index([userId])
   @@index([userId, status])

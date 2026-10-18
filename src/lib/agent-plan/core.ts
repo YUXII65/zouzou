@@ -9,7 +9,11 @@ import type {
   InboxProjectContext,
 } from "@/lib/ai";
 import { readPlanTracks } from "@/lib/project-track";
-import { checkPlanQuality } from "@/lib/ai-quality";
+import {
+  checkPlanQuality,
+  isPlaceholderText,
+  isWeakGeneratedTitle,
+} from "@/lib/ai-quality";
 import { MAX_AI_TASKS_PER_PLAN } from "@/lib/task-flow";
 import { extractJsonObject as extractJson } from "@/lib/json-extract";
 import type { WorkModeJudgment } from "@/lib/mode-judgment";
@@ -140,6 +144,8 @@ export function readPlan(raw: unknown): NormalAgentPlan | null {
 
 const PROJECT_NAME_META =
   /用户想|想从|这一类|这类|开始|做这件事|相关/;
+const PROJECT_NAME_PLACEHOLDER =
+  /^(?:项目标题|项目名称|项目名|标题|名称|未命名(?:项目)?|新项目|第一个项目|待定)$/u;
 const PROJECT_NAME_SIGNAL =
   /进阶|提升|练习|学习|训练|整理|搭建|建立|完成|做出|做成|制作|发布|写作|分享|管理|复盘|改进|优化|养成|探索|规划|做饭|烹饪|焖饭|煮饭|求职|转行|备考|设计|开发|运营|创作|拍摄|剪辑|维护|健身|减脂|读书|阅读|输出|记录|沟通|谈判|面试|申请|推进|落地|交付|经营|启动|系统|平台|作品集|账号|计划|闭环|方案|流程|手册|指南|课程|网站|应用|工具|项目|系列/;
 
@@ -155,6 +161,8 @@ function projectNameFromGoal(goal: string) {
   let cleaned = actionClause
     .replace(/^(?:用户|我)?(?:想|想要|希望|打算|准备|需要)?(?:从)?\s*/u, "")
     .replace(/^(?:让|把|将|用|对|给)\s*/u, "")
+    .replace(/^(?:整理|清理|制作|搭建|建立|创建|写出|发布|上线|完成|推进|开始|练习|学习|规划|准备|改善|提升|解决|处理)\s*/u, "")
+    .replace(/^(?:我的|自己的|一个|一套|这次|最近)\s*/u, "")
     .replace(/(?:这一类|这类|这样的)?(?:开始|进行|相关).*$/u, "")
     .replace(/(?:日常的|现在的|当前的|原来的|那一个|这一个)\s*/gu, "")
     .replace(/(?:做出|做成|做到|完成|得到|形成|变成|实现|提升|改进|优化).*$/u, "")
@@ -163,20 +171,37 @@ function projectNameFromGoal(goal: string) {
   if (cleaned.length < 6 && /进阶|提升|更好|明显更好|改善|升级/.test(goal)) {
     cleaned += "进阶";
   }
-  return cleaned.slice(0, 14) || "新项目";
+  return cleaned.slice(0, 14) || "个人推进项目";
 }
 
 /** 项目名是文件夹名，不是对用户想法的转述。 */
 export function normalizeProjectName(rawName: unknown, goal: string) {
   const name =
     typeof rawName === "string"
-      ? rawName.replace(/[（(][^）)]*[）)]/g, "").trim().replace(/\s+/g, " ")
+      ? rawName
+          .replace(/[（(][^）)]*[）)]/g, "")
+          .replace(/^[\s「『“"']+|[\s」』”"']+$/g, "")
+          .replace(/[：:]\s*$/u, "")
+          .trim()
+          .replace(/\s+/g, " ")
       : "";
-  if (name && !PROJECT_NAME_META.test(name) && PROJECT_NAME_SIGNAL.test(name)) {
+  if (
+    name &&
+    !PROJECT_NAME_PLACEHOLDER.test(name) &&
+    !PROJECT_NAME_META.test(name) &&
+    !isWeakGeneratedTitle(name, goal) &&
+    PROJECT_NAME_SIGNAL.test(name)
+  ) {
     return name.slice(0, 14);
   }
   const fallback = projectNameFromGoal(goal);
-  return PROJECT_NAME_META.test(fallback) ? "新项目" : fallback;
+  return (
+    PROJECT_NAME_PLACEHOLDER.test(fallback) ||
+    PROJECT_NAME_META.test(fallback) ||
+    isWeakGeneratedTitle(fallback, goal)
+  )
+    ? "个人推进项目"
+    : fallback;
 }
 export function readUserCard(raw: unknown): InboxPlanUserCard | null {
   if (!raw || typeof raw !== "object") return null;
@@ -197,13 +222,21 @@ export function auditNormalAgentPlan(
   plan: InboxPlan,
   brief: NormalAgentBrief,
 ) {
-  const issues = checkPlanQuality(plan, { maxTasks: MAX_CHAIN_TASKS });
+  const issues = checkPlanQuality(plan, {
+    maxTasks: MAX_CHAIN_TASKS,
+    sourceText: brief.goal,
+  });
   if ((plan.reason ?? "").length < 12) {
     issues.push("reason 太短，无法说明为什么这样安排");
   }
   if (!plan.userCard) {
     issues.push("缺少用户最终行动卡");
   } else {
+    for (const key of ["understanding", "firstAction", "how", "doneWhen", "ifWrongThen"]) {
+      if (isPlaceholderText((plan.userCard as Record<string, unknown>)[key])) {
+        issues.push("用户行动卡的 " + key + " 是占位词");
+      }
+    }
     if (CHOICE_LANGUAGE.test(JSON.stringify(plan.userCard))) {
       issues.push("用户结果里出现了候选或二选一表达");
     }

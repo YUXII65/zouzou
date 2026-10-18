@@ -1,14 +1,71 @@
 <view class="page">
-  <view class="skip" bindtap="onSkip">跳过</view>
-  <view class="card">
-    <view class="brand-mark"><view class="brand-arrow"></view></view>
-    <view class="kicker">新手引导</view>
-    <view class="title">{{steps[stepIndex].title}}</view>
-    <view class="body">{{steps[stepIndex].body}}</view>
-    <view class="dots">
-      <view class="dot {{index === stepIndex ? 'dot-active' : ''}}" wx:for="{{steps}}" wx:key="step"></view>
+  <view class="content" style="padding-top: {{contentTop}}px;">
+    <view class="topbar">
+      <view class="brand-block">
+        <view class="brand-mark"><view class="brand-arrow"></view></view>
+        <view>
+          <text class="brand-title">走走</text>
+          <text class="brand-subtitle">让想法，走成下一步</text>
+        </view>
+      </view>
+      <view class="skip" bindtap="onSkip">跳过</view>
     </view>
-    <view class="next" bindtap="onNext">{{steps[stepIndex].button}}</view>
-    <view class="counter">{{stepIndex + 1}} / {{steps.length}}</view>
+
+    <view class="step-tabs">
+      <view class="step-tab {{stepIndex >= index ? 'step-tab-active' : ''}}" wx:for="{{steps}}" wx:key="label" wx:for-item="item" wx:for-index="index">
+        <text class="step-dot">{{stepIndex > index ? '✓' : index + 1}}</text>
+        <text class="step-label">{{item.label}}</text>
+      </view>
+    </view>
+
+    <view class="guide-card">
+      <block wx:if="{{stepIndex === 0}}">
+        <view class="step-title">写想法</view>
+        <textarea class="guide-textarea" value="{{idea}}" maxlength="500" placeholder="比如：整理自己的个人网站" bindinput="onIdeaInput"></textarea>
+        <view class="sample-list">
+          <view class="sample-chip" wx:for="{{samples}}" wx:key="title" data-content="{{item.content}}" bindtap="onSampleTap">{{item.title}}</view>
+        </view>
+        <view class="refresh-row"><view class="refresh-button" bindtap="onRefreshSamples">↻ 换一批</view></view>
+        <view class="action-row"><view class="primary-action {{idea ? '' : 'action-disabled'}}" bindtap="startClarify">{{generating ? generatingText : '下一步 →'}}</view></view>
+      </block>
+
+      <block wx:elif="{{stepIndex === 1}}">
+        <view class="step-title">谈感受</view>
+        <view class="chat-list">
+          <view class="chat-turn chat-turn-{{turn.role}}" wx:for="{{turns}}" wx:key="index" wx:for-item="turn">
+            <view class="chat-avatar" wx:if="{{turn.role === 'ai'}}">✦</view>
+            <view class="chat-bubble chat-bubble-{{turn.role}}">{{turn.text}}</view>
+          </view>
+        </view>
+        <view class="chat-options" wx:if="{{options.length && !thinking && !clarifyDone}}">
+          <view class="chat-option {{option.selected ? 'chat-option-selected' : ''}}" wx:for="{{options}}" wx:key="label" wx:for-item="option" data-label="{{option.label}}" bindtap="onOptionTap">{{option.label}}</view>
+          <view class="chat-option chat-direct-toggle {{directInput ? 'chat-option-selected' : ''}}" bindtap="onToggleDirectInput">↩ 想自己说</view>
+        </view>
+        <view class="multi-row" wx:if="{{multi && !thinking && !clarifyDone}}"><text>可多选</text><view class="multi-confirm" bindtap="onMultiConfirm">确定</view></view>
+        <view class="direct-row" wx:if="{{directInput && !thinking && !clarifyDone}}">
+          <input class="direct-input" value="{{typed}}" placeholder="输入你想说的话" bindinput="onTypedInput" bindconfirm="onDirectSend" />
+          <view class="direct-send" bindtap="onDirectSend">发送</view>
+        </view>
+        <view class="thinking" wx:if="{{thinking}}"><text class="spinner">◌</text><text>{{generatingText}}</text></view>
+        <view class="chat-done" wx:if="{{clarifyDone}}">信息够了，我按刚才确认的边界往下整理。</view>
+        <view class="action-row"><view class="primary-action {{clarifyDone ? '' : 'action-disabled'}}" bindtap="submitClarify">{{generating ? generatingText : '下一步'}}</view></view>
+      </block>
+
+      <block wx:elif="{{stepIndex === 2}}">
+        <view class="step-title">建项目</view>
+        <view class="warning-note" wx:if="{{aiFallback}}">暂时连不上，先用本地整理，结果可继续修改。</view>
+        <view class="source-card">你最初说：{{idea}}</view>
+        <view class="field"><text class="field-label">项目名</text><input class="field-input" value="{{projectName}}" maxlength="40" bindinput="onProjectNameInput" /></view>
+        <view class="field"><text class="field-label">目标</text><textarea class="field-textarea" value="{{objective}}" maxlength="200" bindinput="onObjectiveInput"></textarea></view>
+        <view class="field"><text class="field-label">里程碑</text><input class="field-input" value="{{milestone}}" maxlength="80" bindinput="onMilestoneInput" /></view>
+        <view class="action-row"><view class="primary-action {{projectName && objective ? '' : 'action-disabled'}}" bindtap="goTaskStep">下一步</view></view>
+      </block>
+
+      <block wx:else>
+        <view class="step-title">定今日</view>
+        <view class="field"><text class="field-label">今日任务</text><textarea class="field-textarea" value="{{taskTitle}}" maxlength="200" bindinput="onTaskTitleInput"></textarea></view>
+        <view class="action-row"><view class="primary-action {{taskTitle ? '' : 'action-disabled'}}" bindtap="onComplete">{{completing ? '正在创建...' : '完成，去书桌查看'}}</view></view>
+      </block>
+    </view>
   </view>
 </view>

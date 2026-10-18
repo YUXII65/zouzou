@@ -8,6 +8,7 @@ import { invalidateAiContext } from "@/lib/ai-context";
 import { prisma, withTransactionRetry } from "@/lib/prisma";
 import {
   MAX_LONGTERM_STAGES,
+  parseExploreContinuation,
   type ExploreContinuation,
   type StagePreview,
 } from "@/lib/project-progress-types";
@@ -117,7 +118,8 @@ const EXPLORE_AGENT_SYSTEM_PROMPT = `
 
 硬规则：
 - 任务事件是唯一触发源：完成、卡住、取消、编辑、补充结果。不要按星期几、间隔天数或 cadence 决定什么时候推进。
-- 每条线同时只保留一条开放任务：事件任务所属的线如果已经有开放任务，就返回 task:null，不要重复堆任务。项目里其他线还有开放任务，不影响这条线继续推进。
+- 输入 planningMode=prefetch 表示当前任务还没完成，但系统要提前准备它完成后的下一条任务；按“当前任务会正常完成”预判，不要因此返回 task:null。planningMode=after_completion 才按真实完成结果判断。
+- 每条线同时只保留一条开放任务：after_completion 时，事件任务所属的线如果已经有别的开放任务，就返回 task:null；prefetch 时事件任务本身即将结束，不算阻塞。项目里其他线还有开放任务，不影响这条线继续推进。
 - 只生成 1 条任务，最多 1 条；没有足够信息时 task 可以为 null。
 - trackName 默认沿着事件任务所属的线继续；只有出现明确的新方向才换线或开新线，换线时 decision 用 "switch"。
 - 主线只有一条：如果某条支线最近连续拿到有效反馈、或者主线连续卡住，可以把这条支线提为 main、原主线降为 side，用 trackRole 表达调整后的角色。
@@ -127,7 +129,7 @@ const EXPLORE_AGENT_SYSTEM_PROMPT = `
 - 卡住：优先换方法、拆小动作，不重复原任务。
 - 取消：判断是方向不对还是做法不对，下一轮不要原样再推。
 - 不设截止日期，不提“项目完成”，不写完成度百分比。
-- 不重复已完成、已取消或当前开放中的任务。
+- 不重复已完成、已取消、事件任务本身或其他当前开放中的任务。
 `.trim();
 
 function asString(value: unknown, limit = 500) {
@@ -332,6 +334,10 @@ export async function generateLongtermStagePreview(input: {
 export async function advanceExploreAfterTask(input: {
   userId: string;
   taskId: string;
+  /** 只提前生成并缓存下一条，不创建任务。 */
+  prepareOnly?: boolean;
+  /** 只使用已经缓存的下一条，不再调用模型。 */
+  preparedOnly?: boolean;
 }): Promise<string | null> {
   const task = await prisma.task.findFirst({
     where: { id: input.taskId, userId: input.userId },
@@ -343,6 +349,7 @@ export async function advanceExploreAfterTask(input: {
       completedAt: true,
       projectId: true,
       trackId: true,
+      nextTaskJson: true,
       track: { select: { id: true, name: true, role: true } },
       project: {
         select: { id: true, name: true, objective: true, currentMilestone: true },
@@ -351,6 +358,20 @@ export async function advanceExploreAfterTask(input: {
     },
   });
   if (!task?.project) return null;
+  if (
+    input.prepareOnly &&
+    task.status !== "todo" &&
+    task.status !== "in_progress"
+  ) {
+    return null;
+  }
+  if (
+    input.preparedOnly &&
+    task.status !== "done" &&
+    task.status !== "cancelled"
+  ) {
+    return null;
+  }
 
   const project = await prisma.project.findFirst({
     where: { id: task.project.id, userId: input.userId },
@@ -358,18 +379,22 @@ export async function advanceExploreAfterTask(input: {
   });
   if (project?.mode !== "explore") return null;
 
+  const preparedContinuation = parseExploreContinuation(task.nextTaskJson);
+  if (input.preparedOnly && !preparedContinuation) return null;
+  if (input.prepareOnly && preparedContinuation) return null;
+
   const openTasks = await prisma.task.findMany({
     where: {
       userId: input.userId,
       projectId: task.project.id,
       status: { in: ["todo", "in_progress"] },
+      ...(input.prepareOnly ? { id: { not: task.id } } : {}),
     },
     select: { id: true, title: true, trackId: true },
   });
   // 每条线同时只保留一条开放任务：这条线已经有下一步，就不重复生成。
-  // 项目里其他线还有开放任务，不影响这条线继续推进。
-  // 旧数据（没有 trackId）沿用老规则——整个项目清空才续接。
-  if (openTasks.length > 0) {
+  // 预生成时排除当前任务本身；其他线仍有开放任务不影响这条线续接。
+  if (!input.prepareOnly && openTasks.length > 0) {
     if (!task.trackId) return null;
     if (openTasks.some((item) => item.trackId === task.trackId)) return null;
     if (openTasks.length >= MAX_EXPLORE_OPEN_TASKS) return null;
@@ -411,6 +436,7 @@ export async function advanceExploreAfterTask(input: {
 
   const payload = {
     today: toDateInputValue(startOfDay()),
+    planningMode: input.prepareOnly ? "prefetch" : "after_completion",
     project: task.project,
     eventTask: {
       title: task.title,
@@ -439,93 +465,117 @@ export async function advanceExploreAfterTask(input: {
     })),
   };
 
-  const text = await withAiQuota(
-    "explore_advance",
-    () =>
-      callModel(
-        EXPLORE_AGENT_SYSTEM_PROMPT,
-        JSON.stringify(payload),
-        undefined,
-        undefined,
-        undefined,
-        0.45,
-        {
-          maxTokens: 1400,
-          timeoutMs: 20_000,
-          totalBudgetMs: 26_000,
-          maxAttempts: 2,
-          reasoningEffort: "none",
-        },
-      ),
-    input.userId,
-  );
+  const text = preparedContinuation
+    ? null
+    : await withAiQuota(
+        "explore_advance",
+        () =>
+          callModel(
+            EXPLORE_AGENT_SYSTEM_PROMPT,
+            JSON.stringify(payload),
+            undefined,
+            undefined,
+            undefined,
+            0.45,
+            {
+              maxTokens: 1400,
+              timeoutMs: 20_000,
+              totalBudgetMs: 26_000,
+              maxAttempts: 2,
+              reasoningEffort: "none",
+            },
+          ),
+        input.userId,
+      );
 
-  const parsed = parseJsonObject(text);
-  const decision = asString(parsed?.decision, 20);
-  const normalizedDecision: ExploreContinuation["decision"] =
-    decision === "adjust" ||
-    decision === "switch" ||
-    decision === "pause" ||
-    decision === "continue"
-      ? decision
-      : "continue";
-  const nextTask =
-    normalizedDecision === "pause"
-      ? null
-      : normalizeTask(parsed?.task, `继续「${task.project.name}」的下一步`);
-  // 这次推进哪条线：优先用模型给的名字，其次沿用事件任务所属的线，最后回主线。
-  const trackName =
-    asString(parsed?.trackName, 40) ||
-    task.track?.name ||
-    activeTracks.find((track) => track.role === "main")?.name ||
-    null;
-  const continuation: ExploreContinuation = {
-    decision: normalizedDecision,
-    trackName,
-    trackRole: normalizeTrackRole(parsed?.trackRole ?? task.track?.role),
-    newTrackIntent: asString(parsed?.newTrackIntent, 200) || null,
-    currentMilestone:
-      asString(parsed?.currentMilestone, 300) ||
-      task.project.currentMilestone ||
-      `继续探索「${task.project.name}」`,
-    reason:
-      asString(parsed?.reason, 500) ||
-      `上一轮任务「${task.title}」已经结束，需要根据这次结果继续推进探索。`,
-    task:
-      nextTask ??
-      (normalizedDecision === "pause"
+  let continuation: ExploreContinuation;
+  if (preparedContinuation) {
+    continuation = preparedContinuation;
+  } else {
+    const parsed = parseJsonObject(text);
+    const decision = asString(parsed?.decision, 20);
+    const normalizedDecision: ExploreContinuation["decision"] =
+      decision === "adjust" ||
+      decision === "switch" ||
+      decision === "pause" ||
+      decision === "continue"
+        ? decision
+        : "continue";
+    const nextTask =
+      normalizedDecision === "pause"
         ? null
-        : safePlanTask({
-            title: `继续「${task.project.name}」的下一步`,
-            shortTitle: "继续下一步",
-            executionMode: "explore",
-            doneWhen: "拿到一条能改变下一步判断的新反馈",
-            methodHint: "沿用最近一次有效做法，只改变一个变量，观察结果变化",
-            recommendation: "不要重新规划整个方向，先做一个小变化再观察结果",
-            executionSteps: ["沿用最近一次做法", "只改变一个变量并记录结果"],
-            fallback: "如果还是没有反馈，换一个更小的动作或换一种入口",
-            maxTurns: 3,
-            toolPolicy: "none",
-            priority: "medium",
-            scheduledDate: null,
-            dueDate: null,
-          })),
-    source: text ? "model" : "fallback",
-  };
+        : normalizeTask(parsed?.task, `继续「${task.project.name}」的下一步`);
+    const trackName =
+      asString(parsed?.trackName, 40) ||
+      task.track?.name ||
+      activeTracks.find((track) => track.role === "main")?.name ||
+      null;
+    continuation = {
+      decision: normalizedDecision,
+      trackName,
+      trackRole: normalizeTrackRole(parsed?.trackRole ?? task.track?.role),
+      newTrackIntent: asString(parsed?.newTrackIntent, 200) || null,
+      currentMilestone:
+        asString(parsed?.currentMilestone, 300) ||
+        task.project.currentMilestone ||
+        `继续探索「${task.project.name}」`,
+      reason:
+        asString(parsed?.reason, 500) ||
+        `上一轮任务「${task.title}」已经结束，需要根据这次结果继续推进探索。`,
+      task:
+        nextTask ??
+        (normalizedDecision === "pause"
+          ? null
+          : safePlanTask({
+              title: `继续「${task.project.name}」的下一步`,
+              shortTitle: "继续下一步",
+              executionMode: "explore",
+              doneWhen: "拿到一条能改变下一步判断的新反馈",
+              methodHint: "沿用最近一次有效做法，只改变一个变量，观察结果变化",
+              recommendation: "不要重新规划整个方向，先做一个小变化再观察结果",
+              executionSteps: ["沿用最近一次做法", "只改变一个变量并记录结果"],
+              fallback: "如果还是没有反馈，换一个更小的动作或换一种入口",
+              maxTurns: 3,
+              toolPolicy: "none",
+              priority: "medium",
+              scheduledDate: null,
+              dueDate: null,
+            })),
+      source: text ? "model" : "fallback",
+    };
+
+    if (input.prepareOnly) {
+      await prisma.task.update({
+        where: { id: task.id, userId: input.userId },
+        data: {
+          nextTaskJson: JSON.stringify(continuation),
+          nextTaskUpdatedAt: new Date(),
+        },
+      });
+      return null;
+    }
+  }
 
   if (!continuation.task) {
-    // 暂停这条线：标成暂缓，避免下一轮原样再推。
-    if (normalizedDecision === "pause" && task.trackId) {
+    if (continuation.decision === "pause" && task.trackId) {
       await prisma.projectTrack.updateMany({
         where: { id: task.trackId, userId: input.userId },
         data: { status: "paused", lastEventAt: new Date() },
       });
     }
+    await prisma.task.updateMany({
+      where: { id: task.id, userId: input.userId },
+      data: { nextTaskJson: null, nextTaskUpdatedAt: null },
+    });
     return null;
   }
 
   const createdTaskId = await withTransactionRetry(async (tx) => {
     await tx.$queryRaw`SELECT id FROM projects WHERE id = ${task.project!.id} FOR UPDATE`;
+    await tx.task.updateMany({
+      where: { id: task.id, userId: input.userId },
+      data: { nextTaskJson: null, nextTaskUpdatedAt: null },
+    });
     const openNow = await tx.task.findMany({
       where: {
         userId: input.userId,
@@ -677,4 +727,75 @@ export async function advanceExploreAfterTask(input: {
 
   if (createdTaskId) invalidateAiContext(input.userId);
   return createdTaskId;
+}
+
+export async function prepareExploreContinuationForTask(input: {
+  userId: string;
+  taskId: string;
+}) {
+  await advanceExploreAfterTask({
+    userId: input.userId,
+    taskId: input.taskId,
+    prepareOnly: true,
+  });
+}
+
+/**
+ * 计划确认后立刻为长期/探索项目备好下一步。
+ * 只做后台预生成，不阻塞确认响应。
+ */
+export async function prepareProjectContinuationAfterPlan(input: {
+  userId: string;
+  projectId: string;
+}) {
+  const project = await prisma.project.findFirst({
+    where: { id: input.projectId, userId: input.userId },
+    select: {
+      mode: true,
+      stages: {
+        where: { status: { in: ["active", "ready"] } },
+        orderBy: [{ order: "desc" }, { id: "asc" }],
+        take: 1,
+        select: { id: true, nextStageJson: true },
+      },
+      tracks: {
+        where: { status: { not: "archived" } },
+        orderBy: [{ order: "asc" }, { id: "asc" }],
+        select: { id: true, role: true },
+      },
+    },
+  });
+  if (!project) return;
+
+  if (project.mode === "longterm") {
+    const stage = project.stages[0];
+    if (stage && !stage.nextStageJson) {
+      await generateLongtermStagePreview({
+        userId: input.userId,
+        stageId: stage.id,
+      });
+    }
+    return;
+  }
+
+  if (project.mode !== "explore") return;
+
+  const tasks = await prisma.task.findMany({
+    where: {
+      userId: input.userId,
+      projectId: input.projectId,
+      status: { in: ["todo", "in_progress"] },
+    },
+    orderBy: [{ planOrder: "asc" }, { createdAt: "asc" }, { id: "asc" }],
+    select: { id: true, trackId: true },
+  });
+  if (!tasks.length) return;
+
+  const mainTrackId = project.tracks.find((track) => track.role === "main")?.id;
+  const task = tasks.find((item) => item.trackId === mainTrackId) ?? tasks[0];
+  if (!task) return;
+  await prepareExploreContinuationForTask({
+    userId: input.userId,
+    taskId: task.id,
+  });
 }

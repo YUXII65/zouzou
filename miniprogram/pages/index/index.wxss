@@ -697,10 +697,14 @@
   box-shadow: 0 16rpx 38rpx rgba(52, 92, 160, 0.16);
 }
 .primary-button-plain {
-  display: flex !important;
+  display: inline-flex !important;
+  width: 252rpx !important;
+  max-width: 100% !important;
   align-items: center !important;
   justify-content: center !important;
   height: 88rpx !important;
+  margin-top: 48rpx !important;
+  padding: 0 40rpx !important;
   box-sizing: border-box !important;
   text-align: center !important;
 }
