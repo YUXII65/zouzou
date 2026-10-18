@@ -7,7 +7,6 @@ import {
   ChevronLeft,
   ChevronRight,
   ListTodo,
-  NotebookPen,
   RefreshCw,
   Sparkles,
   Target,
@@ -16,8 +15,11 @@ import { cx } from "@/lib/utils";
 
 type DemoTask = {
   title: string;
+  shortTitle: string;
   time: string;
   note: string;
+  doneWhen: string;
+  steps: string[];
 };
 
 type DemoScenario = {
@@ -41,11 +43,6 @@ type DemoScenario = {
     boundary: string;
     tasks: DemoTask[];
     nextStep: string;
-  };
-  review: {
-    progress: string;
-    insight: string;
-    nextAction: string;
   };
 };
 
@@ -89,16 +86,32 @@ const DEMO_SCENARIOS: DemoScenario[] = [
       milestone: "完成一次真实资料整理，并写出保留与淘汰清单",
       boundary: "这次先不比较所有工具，也不研究新功能",
       tasks: [
-        { title: "选一份这周必须处理的资料", time: "10 分钟", note: "用真实任务，不用收藏夹里的示例" },
-        { title: "用现在的方法和另一个工具各处理一次", time: "30 分钟", note: "只记录耗时、卡点和最后能不能用" },
-        { title: "留下 2 个工具，写下淘汰理由", time: "10 分钟", note: "标准不是功能多，而是下次你还会不会打开" },
+        {
+          title: "从这周必须处理的资料里选一份",
+          shortTitle: "选一份真实资料",
+          time: "10 分钟",
+          note: "不用收藏夹里的示例，直接拿真实工作试",
+          doneWhen: "选定一份今天能打开并处理的资料",
+          steps: ["打开这周待处理的资料列表", "选一份今天能完成的，不继续比较", "关掉其余资料，只留这一份"],
+        },
+        {
+          title: "用现在的方法和另一个工具各处理一次",
+          shortTitle: "对比两条处理流程",
+          time: "30 分钟",
+          note: "只记录耗时、卡点和最后能不能用",
+          doneWhen: "两条流程各产出一次可用结果，并记下差异",
+          steps: ["用现在的方法完整处理一次", "换成另一个候选工具再处理一次", "只记耗时、卡点和最终结果"],
+        },
+        {
+          title: "留下 2 个工具并写下淘汰理由",
+          shortTitle: "留下最少流程",
+          time: "10 分钟",
+          note: "标准不是功能多，而是下次你还会不会打开",
+          doneWhen: "写下保留清单、淘汰清单和下一次使用场景",
+          steps: ["按“下次还会不会打开”筛选", "最多保留两个工具", "给被淘汰的工具写一句原因"],
+        },
       ],
       nextStep: "选一份这周必须处理的资料",
-    },
-    review: {
-      progress: "今天真正推进的是把工具焦虑收回到一个真实资料任务，卡在比较时容易又被新功能带走。",
-      insight: "判断已经明确：保留的工具必须能减少一次复制粘贴或一次重复整理。",
-      nextAction: "按留下的流程再处理一份资料，连续验证两次。",
     },
   },
   {
@@ -121,16 +134,32 @@ const DEMO_SCENARIOS: DemoScenario[] = [
       milestone: "完成一次谈话，并确认一条双方都能做到的分工",
       boundary: "这次先不谈过去所有旧账，也不要求一次解决所有摩擦",
       tasks: [
-        { title: "写下最近三次具体事实，不写评价词", time: "10 分钟", note: "例如哪天、哪些东西、放了多久" },
-        { title: "准备一句影响和一句具体请求", time: "10 分钟", note: "先说影响，再提出一周内能执行的做法" },
-        { title: "约 10 分钟聊完，只确认一条分工", time: "15 分钟", note: "结尾复述一次双方同意的内容" },
+        {
+          title: "写下最近三次具体事实，不写评价词",
+          shortTitle: "写下三次事实",
+          time: "10 分钟",
+          note: "例如哪天、哪些东西、放了多久",
+          doneWhen: "写出三条只含时间、物品和持续时长的事实",
+          steps: ["回忆最近三次最具体的情况", "只写时间和现场，不写“总是”“故意”", "逐条检查有没有评价词"],
+        },
+        {
+          title: "准备一句影响和一句具体请求",
+          shortTitle: "准备影响和请求",
+          time: "10 分钟",
+          note: "先说影响，再提出一周内能执行的做法",
+          doneWhen: "写好一句影响描述和一句可执行请求",
+          steps: ["写这件事具体影响到你的什么地方", "把请求缩到一周内能执行", "读一遍，确认没有指责语气"],
+        },
+        {
+          title: "约 10 分钟聊完，只确认一条分工",
+          shortTitle: "确认一条分工",
+          time: "15 分钟",
+          note: "结尾复述一次双方同意的内容",
+          doneWhen: "双方明确同一条分工，并知道例外时怎么提醒",
+          steps: ["约一个双方都不赶时间的 10 分钟", "按事实、影响、请求的顺序说", "结尾复述双方同意的内容"],
+        },
       ],
       nextStep: "写下最近三次具体事实",
-    },
-    review: {
-      progress: "今天真正推进的是把“感觉很烦”整理成可沟通的事实，卡在担心一开口就像指责。",
-      insight: "谈话的目标不是赢，而是让一条新规则真正落地。",
-      nextAction: "找一个双方都不赶时间的 10 分钟，只谈这一条规则。",
     },
   },
   {
@@ -153,16 +182,32 @@ const DEMO_SCENARIOS: DemoScenario[] = [
       milestone: "形成一组有统一情绪和构图限制的 12 张初选",
       boundary: "这次先不做完整展览，也不追求覆盖所有夜晚场景",
       tasks: [
-        { title: "写一句系列主题，不超过 20 个字", time: "10 分钟", note: "先确定情绪，不先写摄影术语" },
-        { title: "按一个限制筛出 12 张照片", time: "30 分钟", note: "不修图，只看是否符合同一个主题" },
-        { title: "把 12 张排成一条顺序并写选择理由", time: "10 分钟", note: "找出第一张和最后一张的关系" },
+        {
+          title: "写一句系列主题，不超过 20 个字",
+          shortTitle: "写一句系列主题",
+          time: "10 分钟",
+          note: "先确定情绪，不先写摄影术语",
+          doneWhen: "得到一句能独立说明系列方向的 20 字以内主题",
+          steps: ["看 6 张最有感觉的照片", "写下它们共同在说什么", "删到 20 字以内，不写摄影术语"],
+        },
+        {
+          title: "按一个限制筛出 12 张照片",
+          shortTitle: "按限制筛 12 张",
+          time: "30 分钟",
+          note: "不修图，只看是否符合同一个主题",
+          doneWhen: "选出 12 张都符合同一个限制的照片",
+          steps: ["先定唯一限制：色调和构图", "快速过一遍，只做保留或跳过", "数到 12 张就停，不临时放宽标准"],
+        },
+        {
+          title: "把 12 张排成一条顺序并写选择理由",
+          shortTitle: "排顺序写理由",
+          time: "10 分钟",
+          note: "找出第一张和最后一张的关系",
+          doneWhen: "12 张有明确顺序，并写出第一张和最后一张的关系",
+          steps: ["先选出最有力量的一张作为开头", "按情绪或视线方向排出顺序", "写一句开头和结尾如何呼应"],
+        },
       ],
       nextStep: "写一句系列主题，不超过 20 个字",
-    },
-    review: {
-      progress: "今天真正推进的是从无止境收藏变成一句主题和一个筛选限制，卡在舍不得删掉部分好照片。",
-      insight: "系列感不来自每张都最好，而来自它们能共同说明一件事。",
-      nextAction: "只拍或补拍 3 张符合限制的新照片，再决定是否替换。",
     },
   },
   {
@@ -185,16 +230,32 @@ const DEMO_SCENARIOS: DemoScenario[] = [
       milestone: "得到三天时间标签，并确认一个最值得处理的模式",
       boundary: "这次先不优化全部日程，也不要求每天精确记录到分钟",
       tasks: [
-        { title: "设定 3 个最常出现的时间标签", time: "10 分钟", note: "例如开会、回消息、临时救火、被动等待" },
-        { title: "今天遇到就从通知栏快速打标签", time: "5 分钟", note: "不补录、不解释，只记录事实" },
-        { title: "睡前看一次分布，只圈一个异常点", time: "10 分钟", note: "找重复模式，不看单次波动" },
+        {
+          title: "设定 3 个最常出现的时间标签",
+          shortTitle: "先定三个标签",
+          time: "10 分钟",
+          note: "例如开会、回消息、临时救火、被动等待",
+          doneWhen: "确定三个能覆盖大多数工作场景的标签",
+          steps: ["回想最近三天最常出现的状态", "只保留三个标签，不追求分类完整", "把标签放到手机通知栏或快捷入口"],
+        },
+        {
+          title: "今天遇到就从通知栏快速打标签",
+          shortTitle: "今天随手打标签",
+          time: "5 分钟",
+          note: "不补录、不解释，只记录事实",
+          doneWhen: "当天留下至少五次真实时间标签",
+          steps: ["开始一件事时点一下对应标签", "不写原因，不回头补录", "当天结束时确认已有五次记录"],
+        },
+        {
+          title: "睡前看一次分布，只圈一个异常点",
+          shortTitle: "只圈一个异常点",
+          time: "10 分钟",
+          note: "找重复模式，不看单次波动",
+          doneWhen: "从三天记录里圈出一个重复出现的时间漏洞",
+          steps: ["看三天的标签分布", "只找重复出现两次以上的模式", "圈出一个最值得先处理的时间漏洞"],
+        },
       ],
       nextStep: "设定 3 个最常出现的时间标签",
-    },
-    review: {
-      progress: "今天真正推进的是开始留下时间证据，而不是继续凭感觉判断自己不够自律。",
-      insight: "第一天不需要得出结论，只要让一个常被忽略的时间漏洞变得可见。",
-      nextAction: "继续同一套标签，重点观察下午是否重复出现同一个漏洞。",
     },
   },
   {
@@ -217,28 +278,49 @@ const DEMO_SCENARIOS: DemoScenario[] = [
       milestone: "确定一版默认路线和预算，并锁定具体日期",
       boundary: "这次先不照顾所有人的偏好，也不做备选路线大全",
       tasks: [
-        { title: "发一个日期投票，只保留两个选项", time: "10 分钟", note: "默认票数最高的那天成行" },
-        { title: "给出人均预算上限和交通方案", time: "15 分钟", note: "先联系两个人确认可接受范围" },
-        { title: "列出三项必须确认的信息和负责人", time: "10 分钟", note: "路线、集合时间、应急联系人" },
+        {
+          title: "发一个日期投票，只保留两个选项",
+          shortTitle: "只投两个日期",
+          time: "10 分钟",
+          note: "默认票数最高的那天成行",
+          doneWhen: "群里发出两个日期，并说明票数高者成行",
+          steps: ["先排除明显不可行的日期", "只保留两个候选日期", "在群里说明默认按最高票执行"],
+        },
+        {
+          title: "给出人均预算上限和交通方案",
+          shortTitle: "定预算和交通",
+          time: "15 分钟",
+          note: "先联系两个人确认可接受范围",
+          doneWhen: "群里出现一个明确的人均上限和默认交通方式",
+          steps: ["先问两个人能接受的最高预算", "按较低值确定人均上限", "写出默认集合点和交通方式"],
+        },
+        {
+          title: "列出三项必须确认的信息和负责人",
+          shortTitle: "确认三项负责人",
+          time: "10 分钟",
+          note: "路线、集合时间、应急联系人",
+          doneWhen: "路线、集合时间和应急联系人都有明确负责人",
+          steps: ["列出路线、集合时间、应急联系人", "每项只指定一个负责人", "把三项发到群里请当事人确认"],
+        },
       ],
       nextStep: "发一个日期投票，只保留两个选项",
-    },
-    review: {
-      progress: "今天真正推进的是把群聊里的分散意见变成一个有截止时间的默认方案，卡在担心少数人不满意。",
-      insight: "活动能成行的关键不是所有人都满意，而是决策规则足够清楚。",
-      nextAction: "根据投票锁定日期，再发预算上限和默认交通方案。",
     },
   },
 ];
 
-const STEPS = ["先聊清楚", "拆出计划", "推进与复盘"];
+const STEPS = ["先聊清楚", "拆出计划", "持续推进"];
 const STEP_MS = 4600;
 
 export function LandingDemo() {
   const [scenarioIndex, setScenarioIndex] = useState(0);
   const [stage, setStage] = useState(0);
   const [playing, setPlaying] = useState(true);
+  const [expandedTaskIndex, setExpandedTaskIndex] = useState(1);
   const scenario = DEMO_SCENARIOS[scenarioIndex];
+  const expandedTask =
+    scenario.plan.tasks[expandedTaskIndex] ??
+    scenario.plan.tasks[1] ??
+    scenario.plan.tasks[0];
   const [hasInteracted, setHasInteracted] = useState(false);
   const swipeStartRef = useRef<{ x: number; y: number } | null>(null);
   const didSwipeRef = useRef(false);
@@ -246,6 +328,7 @@ export function LandingDemo() {
   useEffect(() => {
     setScenarioIndex(Math.floor(Math.random() * DEMO_SCENARIOS.length));
     setStage(0);
+    setExpandedTaskIndex(1);
   }, []);
 
   useEffect(() => {
@@ -264,6 +347,7 @@ export function LandingDemo() {
     }
     setScenarioIndex(next);
     setStage(0);
+    setExpandedTaskIndex(1);
     setPlaying(true);
     setHasInteracted(true);
   }
@@ -274,6 +358,7 @@ export function LandingDemo() {
         (current + direction + DEMO_SCENARIOS.length) % DEMO_SCENARIOS.length,
     );
     setStage(0);
+    setExpandedTaskIndex(1);
     setPlaying(true);
     setHasInteracted(true);
   }
@@ -451,7 +536,7 @@ export function LandingDemo() {
                     <Check className="size-4 shrink-0 text-success" />
                     <div className="min-w-0">
                       <p className="truncate text-sm font-medium text-ink">
-                        {index + 1}. {task.title}
+                        {index + 1}. {task.shortTitle}
                       </p>
                       <p className="mt-0.5 truncate text-[11px] text-ink-muted">{task.note}</p>
                     </div>
@@ -479,8 +564,25 @@ export function LandingDemo() {
             <div className="mt-2 space-y-2">
               {scenario.plan.tasks.map((task, index) => {
                 const status = index === 0 ? "done" : index === 1 ? "doing" : "todo";
+                const selected = expandedTaskIndex === index;
                 return (
-                  <div key={task.title} className="flex items-center justify-between gap-3 rounded-lg bg-surface px-3 py-2.5">
+                  <button
+                    key={task.title}
+                    type="button"
+                    aria-expanded={selected}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      setExpandedTaskIndex(index);
+                      setPlaying(false);
+                      setHasInteracted(true);
+                    }}
+                    className={cx(
+                      "flex w-full items-center justify-between gap-2 rounded-lg px-3 py-2.5 text-left transition-colors",
+                      selected
+                        ? "bg-accent-soft/75 ring-1 ring-accent/25"
+                        : "bg-surface hover:bg-surface-muted",
+                    )}
+                  >
                     <div className="flex min-w-0 items-center gap-2">
                       {status === "done" ? (
                         <Check className="size-4 shrink-0 text-success" />
@@ -489,32 +591,50 @@ export function LandingDemo() {
                       ) : (
                         <span className="size-2 shrink-0 rounded-full border border-ink-muted" />
                       )}
-                      <span className="truncate text-sm text-ink">{task.title}</span>
+                      <span className="truncate text-sm text-ink">{task.shortTitle}</span>
                     </div>
-                    <span className="shrink-0 text-xs text-ink-muted">
-                      {status === "done" ? "已完成" : status === "doing" ? "进行中" : "待办"}
-                    </span>
-                  </div>
+                    <div className="flex shrink-0 items-center gap-1.5">
+                      <span className="text-xs text-ink-muted">
+                        {status === "done" ? "已完成" : status === "doing" ? "进行中" : "待办"}
+                      </span>
+                      <ChevronRight
+                        className={cx(
+                          "size-3.5 text-ink-muted transition-transform",
+                          selected && "rotate-90",
+                        )}
+                      />
+                    </div>
+                  </button>
                 );
               })}
             </div>
 
-            <div className="mt-4 rounded-xl border border-border/70 bg-surface px-3 py-2.5">
-              <div className="flex items-center gap-2 text-xs font-medium text-ink-secondary">
-                <NotebookPen className="size-3.5 text-accent" />
-                今晚复盘
+            {expandedTask ? (
+              <div className="mt-3 rounded-xl border border-accent/20 bg-accent-soft/35 p-3">
+                <div className="flex items-center justify-between gap-3">
+                  <span className="text-xs font-medium text-accent-strong">便利贴</span>
+                  <span className="truncate text-[11px] text-ink-muted">
+                    {expandedTask.shortTitle}
+                  </span>
+                </div>
+                <div className="mt-2 space-y-2">
+                  {expandedTask.steps.map((step, index) => (
+                    <div
+                      key={step}
+                      className="flex items-start gap-2 rounded-lg border border-border/60 bg-surface/90 px-3 py-2"
+                    >
+                      <span className="mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-full bg-accent-soft text-[10px] font-semibold text-accent-strong">
+                        {index + 1}
+                      </span>
+                      <span className="text-xs leading-5 text-ink">{step}</span>
+                    </div>
+                  ))}
+                </div>
+                <p className="mt-2 text-[11px] leading-5 text-ink-secondary">
+                  完成标准：{expandedTask.doneWhen}
+                </p>
               </div>
-              <p className="mt-1 text-sm leading-6 text-ink">{scenario.review.progress}</p>
-              <p className="mt-2 border-l-2 border-accent/40 pl-2 text-xs leading-5 text-ink-secondary">
-                判断：{scenario.review.insight}
-              </p>
-              <p className="mt-2 text-xs text-success">明天可以做：{scenario.review.nextAction}</p>
-            </div>
-
-            <div className="mt-4 flex items-center justify-center gap-2 rounded-lg bg-accent-soft px-3 py-3 text-sm font-medium text-accent-strong">
-              <Target className="size-4" />
-              有想法，当然可以实现。
-            </div>
+            ) : null}
           </div>
         ) : null}
 
