@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import type { PointerEvent as ReactPointerEvent } from "react";
 import {
   Check,
+  ChevronDown,
   ChevronLeft,
   ChevronRight,
   ListTodo,
@@ -317,10 +318,6 @@ export function LandingDemo() {
   const [playing, setPlaying] = useState(true);
   const [expandedTaskIndex, setExpandedTaskIndex] = useState(1);
   const scenario = DEMO_SCENARIOS[scenarioIndex];
-  const expandedTask =
-    scenario.plan.tasks[expandedTaskIndex] ??
-    scenario.plan.tasks[1] ??
-    scenario.plan.tasks[0];
   const [hasInteracted, setHasInteracted] = useState(false);
   const swipeStartRef = useRef<{ x: number; y: number } | null>(null);
   const didSwipeRef = useRef(false);
@@ -566,75 +563,67 @@ export function LandingDemo() {
                 const status = index === 0 ? "done" : index === 1 ? "doing" : "todo";
                 const selected = expandedTaskIndex === index;
                 return (
-                  <button
+                  <div
                     key={task.title}
-                    type="button"
-                    aria-expanded={selected}
-                    onClick={(event) => {
-                      event.stopPropagation();
-                      setExpandedTaskIndex(index);
-                      setPlaying(false);
-                      setHasInteracted(true);
-                    }}
-                    className={cx(
-                      "flex w-full items-center justify-between gap-2 rounded-lg px-3 py-2.5 text-left transition-colors",
-                      selected
-                        ? "bg-accent-soft/75 ring-1 ring-accent/25"
-                        : "bg-surface hover:bg-surface-muted",
-                    )}
+                    className="rounded-lg bg-surface px-3 py-2.5"
                   >
-                    <div className="flex min-w-0 items-center gap-2">
-                      {status === "done" ? (
-                        <Check className="size-4 shrink-0 text-success" />
-                      ) : status === "doing" ? (
-                        <span className="size-2 shrink-0 animate-[zouzou-soft-pulse_1s_ease-in-out_infinite] rounded-full bg-accent" />
-                      ) : (
-                        <span className="size-2 shrink-0 rounded-full border border-ink-muted" />
-                      )}
-                      <span className="truncate text-sm text-ink">{task.shortTitle}</span>
-                    </div>
-                    <div className="flex shrink-0 items-center gap-1.5">
-                      <span className="text-xs text-ink-muted">
-                        {status === "done" ? "已完成" : status === "doing" ? "进行中" : "待办"}
-                      </span>
-                      <ChevronRight
-                        className={cx(
-                          "size-3.5 text-ink-muted transition-transform",
-                          selected && "rotate-90",
+                    <button
+                      type="button"
+                      aria-expanded={selected}
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        setExpandedTaskIndex(index);
+                        setPlaying(false);
+                        setHasInteracted(true);
+                      }}
+                      className="grid w-full grid-cols-[minmax(0,1fr)_auto] items-start gap-x-2 text-left"
+                    >
+                      <span className="flex min-w-0 items-center gap-2">
+                        {status === "done" ? (
+                          <Check className="size-4 shrink-0 text-success" />
+                        ) : status === "doing" ? (
+                          <span className="size-2 shrink-0 animate-[zouzou-soft-pulse_1s_ease-in-out_infinite] rounded-full bg-accent" />
+                        ) : (
+                          <span className="size-2 shrink-0 rounded-full border border-ink-muted" />
                         )}
-                      />
-                    </div>
-                  </button>
+                        <span className="truncate text-sm text-ink">{task.shortTitle}</span>
+                      </span>
+                      <span className="flex shrink-0 items-center gap-1.5">
+                        <span className="text-xs text-ink-muted">
+                          {status === "done" ? "已完成" : status === "doing" ? "进行中" : "待办"}
+                        </span>
+                        <ChevronDown
+                          className={cx(
+                            "mt-0.5 size-3.5 text-ink-muted transition-transform",
+                            selected && "rotate-180",
+                          )}
+                        />
+                      </span>
+                    </button>
+
+                    {selected ? (
+                      <div className="mt-2 rounded-xl border border-warning/25 bg-warning/5 p-3">
+                        <div className="space-y-2">
+                          {task.steps.map((step) => (
+                            <div
+                              key={step}
+                              className="flex items-start gap-2.5 rounded-lg border border-warning/15 bg-surface/65 px-2.5 py-2 text-sm leading-6 text-ink"
+                            >
+                              <span className="min-w-0 flex-1 whitespace-pre-wrap">{step}</span>
+                            </div>
+                          ))}
+                        </div>
+                        <div className="mt-3 border-t border-warning/20 pt-3">
+                          <div className="zouzou-input w-full rounded-lg px-3 py-2 text-sm text-ink-muted">
+                            有卡顿？说说想法
+                          </div>
+                        </div>
+                      </div>
+                    ) : null}
+                  </div>
                 );
               })}
             </div>
-
-            {expandedTask ? (
-              <div className="mt-3 rounded-xl border border-accent/20 bg-accent-soft/35 p-3">
-                <div className="flex items-center justify-between gap-3">
-                  <span className="text-xs font-medium text-accent-strong">便利贴</span>
-                  <span className="truncate text-[11px] text-ink-muted">
-                    {expandedTask.shortTitle}
-                  </span>
-                </div>
-                <div className="mt-2 space-y-2">
-                  {expandedTask.steps.map((step, index) => (
-                    <div
-                      key={step}
-                      className="flex items-start gap-2 rounded-lg border border-border/60 bg-surface/90 px-3 py-2"
-                    >
-                      <span className="mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-full bg-accent-soft text-[10px] font-semibold text-accent-strong">
-                        {index + 1}
-                      </span>
-                      <span className="text-xs leading-5 text-ink">{step}</span>
-                    </div>
-                  ))}
-                </div>
-                <p className="mt-2 text-[11px] leading-5 text-ink-secondary">
-                  完成标准：{expandedTask.doneWhen}
-                </p>
-              </div>
-            ) : null}
           </div>
         ) : null}
 
