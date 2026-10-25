@@ -84,6 +84,7 @@ model User {
   reviews           Review[]
   reviewTasks       ReviewTask[]
   reviewNextActions ReviewNextAction[]
+  checkinCompletions TaskCheckinCompletion[]
   aiUsageLogs       AiUsageLog[]
   usageEvents       UsageEvent[]
 
@@ -97,8 +98,10 @@ model Project {
   name                   String
   objective              String
   status                 ProjectStatus     @default(active)
-  /// 推进模式：normal / longterm / explore（v3.3）
+  /// 推进模式：normal / longterm / explore；checkin 为个人页手动开启的每日打卡
   mode                   String            @default("normal")
+  /// 打卡项目唯一归属键。普通项目为 null，打卡项目固定写入 userId。
+  checkinOwnerId         String?           @unique
   currentMilestone       String?
   notes                  String?
   createdFromInboxItemId String?           @unique
@@ -214,12 +217,32 @@ model Task {
   reviewNextAction  ReviewNextAction?
   aiFeedbackEvents  AiFeedbackEvent[]
   stickyNotes       TaskStickyNote[]
+  checkinCompletions TaskCheckinCompletion[]
 
   @@index([userId])
   @@index([userId, status])
   @@index([stageId])
   @@index([trackId])
   @@map("tasks")
+}
+
+/**
+ * 每日打卡完成记录。
+ * checkinDate 使用 Asia/Shanghai 的 YYYY-MM-DD，跨过 0 点后查询自然切到新日期，
+ * 不复制任务，也不依赖定时清理。
+ */
+model TaskCheckinCompletion {
+  id          String   @id @default(cuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  taskId      String
+  task        Task     @relation(fields: [taskId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  checkinDate String
+  completedAt DateTime @default(now())
+
+  @@unique([taskId, checkinDate])
+  @@index([userId, checkinDate])
+  @@map("task_checkin_completions")
 }
 
 model TaskStickyNote {

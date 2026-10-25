@@ -2,11 +2,12 @@ const { openTab, syncTabBar } = require("../../utils/tab-bar");
 const { markDataChanged, shouldRefresh } = require("../../utils/data-refresh");
 
 const MODE_META = {
+  checkin: { label: "打卡" },
   normal: { label: "普通" },
   longterm: { label: "长期" },
   explore: { label: "探索" }
 };
-const MODE_ORDER = ["normal", "longterm", "explore"];
+const MODE_ORDER = ["checkin", "normal", "longterm", "explore"];
 const PRIORITY_LABELS = {
   low: "低",
   medium: "中",
@@ -134,6 +135,10 @@ function decorateProject(project) {
     doneTasks,
     openCount: openTasks.length,
     doneCount: doneTasks.length,
+    allTasks: tasks,
+    checkinProgressText: modeKey === "checkin"
+      ? "今日 " + doneTasks.length + "/" + tasks.length
+      : "",
     daysLeft,
     allDone: openTasks.length === 0 && doneTasks.length > 0,
     stage: decorateStage(project.stage),
@@ -188,6 +193,7 @@ Page({
     expandedTaskId: "",
     reviewOpenId: "",
     submittingTaskId: "",
+    submittingCheckinId: "",
     submittingStageId: "",
     reviewLoading: false,
     activeReview: null,
@@ -439,6 +445,26 @@ Page({
       });
   },
 
+  onCheckinToggle(event) {
+    const taskId = event.currentTarget.dataset.id;
+    if (!taskId || this.data.submittingCheckinId) return;
+    const { toggleCheckin } = require("../../utils/api");
+    this.setData({ submittingCheckinId: taskId });
+    toggleCheckin(taskId)
+      .then(() => {
+        markDataChanged(["today", "workspace", "profile"]);
+        this.setData({ submittingCheckinId: "" });
+        this.loadWorkspace();
+      })
+      .catch((error) => {
+        this.setData({ submittingCheckinId: "" });
+        if (error && error.statusCode === 401) {
+          wx.reLaunch({ url: "/pages/login/login" });
+          return;
+        }
+        wx.showToast({ title: "打卡状态没更新成功", icon: "none" });
+      });
+  },
 
   onProfileTap() {
     openTab("profile");

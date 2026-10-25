@@ -1,8 +1,6 @@
 import { NextResponse } from "next/server";
 import { getMiniProgramUser } from "@/lib/miniprogram-auth";
-import { prisma } from "@/lib/prisma";
-import { normalizeProjectMode, type ProjectMode } from "@/lib/work-mode";
-import { isOpenTaskStatus } from "@/lib/task-flow";
+import { buildProfileView } from "@/lib/profile-view";
 
 export const dynamic = "force-dynamic";
 
@@ -12,31 +10,16 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
 
-  const projects = await prisma.project.findMany({
-    where: { userId: user.id },
-    select: {
-      mode: true,
-      tasks: { select: { status: true } },
-    },
-  });
-
-  const counts: Record<ProjectMode, number> = {
-    normal: 0,
-    longterm: 0,
-    explore: 0,
-  };
-  for (const project of projects) {
-    const mode = normalizeProjectMode(project.mode);
-    if (project.tasks.some((task) => isOpenTaskStatus(task.status))) {
-      counts[mode] += 1;
-    }
+  // 与网页个人页共用同一份视图契约，避免两端计数和打卡入口状态不一致。
+  const view = await buildProfileView({ userId: user.id });
+  if (!view) {
+    return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
 
   return NextResponse.json({
-    user,
-    counts,
-    serverConnected: Boolean(
-      process.env.DEEPSEEK_API_KEY || process.env.OPENAI_API_KEY,
-    ),
+    user: view.user,
+    counts: view.counts,
+    checkin: view.checkin,
+    serverConnected: view.serverConnected,
   });
 }

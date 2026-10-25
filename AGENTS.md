@@ -16,7 +16,7 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 
 - 首页 `/`：快速记录（CTA「下一步」）→ 澄清 → 计划卡 →「今天要做」。首屏不放日期面板、时钟、用量看板。
 - 文件 `/files`：按模式分组的一列文件夹，就地展开；长期项目显示阶段总结，探索项目显示线路图 + 任务列表。
-- 个人 `/profile`：名片（头像 / 昵称 / 三模式推进中计数）+ 功能区（夜间模式 / 退出登录 / API 连接）。侧栏不放主题开关和头像。
+- 个人 `/profile`：名片（头像 / 昵称 / 普通、长期、探索三模式推进中计数）+ 功能区（打卡模式 / 夜间模式 / 退出登录 / API 连接，竖屏 2×2、横屏一排四个）。侧栏不放主题开关和头像。
 - `/tools`、`/workspace` 只是 302 到 `/files` 的旧链接兜底，不算页面。全局命令面板也只列这三页。
 - **新增整屏页面必须同时加进 `src/lib/routes.ts` 的 `FULLSCREEN_ROUTES`**，否则页面会透出侧栏和底部导航。
 
@@ -26,6 +26,7 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 - 第 2 段方案 Agent（`PLAN_AGENT_SYSTEM_PROMPT`）：澄清收口后直接产出唯一执行路径 + 任务，填 `executionMode` / `doneWhen` / `maxTurns` / `toolPolicy` / `methodHint` / `recommendation` / `executionSteps` / `fallback`，只承接已定好的 `workMode`，不自己判 mode。
 - 澄清**最少 2 轮、最多5 轮**（到上限强制收口）；任何输入都先澄清，再产出行动卡 / 任务。
 - 三种模式 normal / longterm / explore 按「有没有终点」分，**用户永远不选模式**；模式在澄清收口之后、生成之前判定。
+- 打卡模式 checkin 是个人页手动开启的独立文件夹，不经过澄清或 AI 判定；每账号最多一个，可删除后重开。条目按上海时区每日 0 点刷新，最多显示在文件页顶部和首页「今日建议」上方。
 - 生产链只有这一条，旧三段链只作失败回退。全部细节见 [`docs/ai-pipeline.md`](docs/ai-pipeline.md)。
 
 ## 小程序与网页共用一份数据契约

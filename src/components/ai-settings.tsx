@@ -48,10 +48,10 @@ export function AiSettings({
 
   return (
     <details className="zouzou-panel overflow-hidden rounded-lg bg-surface">
-      <summary className="flex h-10 min-w-0 cursor-pointer list-none items-center justify-between gap-2 px-2 text-xs font-medium text-ink-secondary transition-colors hover:bg-surface-hover hover:text-ink sm:gap-3 sm:px-4 sm:text-sm">
-        <span className="flex items-center gap-1.5">
-          <KeyRound className="size-3.5" />
-          API 连接
+      <summary className="flex h-10 min-w-0 cursor-pointer list-none items-center justify-between gap-2 px-2 text-xs font-medium text-ink-secondary transition-colors hover:bg-surface-hover hover:text-ink sm:px-3 sm:text-sm">
+        <span className="flex min-w-0 items-center gap-1.5">
+          <KeyRound className="size-3.5 shrink-0" />
+          <span className="truncate">API 连接</span>
         </span>
         <span
           className={
@@ -63,12 +63,12 @@ export function AiSettings({
           {connected ? (
             <>
               <CheckCircle2 className="size-3.5 shrink-0" />
-              <span className="hidden truncate sm:inline">{hasLocalKey ? "已连接" : "服务端已连接"}</span>
+              <span className="truncate sm:hidden">{hasLocalKey ? "已连接" : "服务端已连接"}</span>
             </>
           ) : (
             <>
               <Sparkles className="size-3.5 shrink-0" />
-              <span className="hidden truncate sm:inline">本地规则</span>
+              <span className="truncate sm:hidden">本地规则</span>
             </>
           )}
         </span>

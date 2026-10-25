@@ -25,7 +25,10 @@
   --z-shadow-pop:
     0 24px 70px rgba(52, 92, 160, 0.16);
 
-  /* v3.3 推进模式配色：普通=浅蓝 / 长期=深蓝 / 探索=紫 */
+  /* 推进模式配色：打卡=青 / 普通=浅蓝 / 长期=深蓝 / 探索=紫 */
+  --mode-checkin: #16a3a3;
+  --mode-checkin-soft: #dff8f5;
+  --mode-checkin-ink: #087b7b;
   --mode-normal: #4a9ae8;
   --mode-normal-soft: #e3f1fd;
   --mode-normal-ink: #1667b8;
@@ -63,6 +66,9 @@
   --z-shadow-pop:
     0 32px 80px rgba(0, 0, 0, 0.34);
 
+  --mode-checkin: #45d6cf;
+  --mode-checkin-soft: #123836;
+  --mode-checkin-ink: #82eee7;
   --mode-normal: #6fb6f5;
   --mode-normal-soft: #14324c;
   --mode-normal-ink: #9fd0fa;
@@ -93,6 +99,9 @@
   --color-warning: var(--warning);
   --color-danger: var(--danger);
   --color-overlay: var(--overlay);
+  --color-mode-checkin: var(--mode-checkin);
+  --color-mode-checkin-soft: var(--mode-checkin-soft);
+  --color-mode-checkin-ink: var(--mode-checkin-ink);
   --color-mode-normal: var(--mode-normal);
   --color-mode-normal-soft: var(--mode-normal-soft);
   --color-mode-normal-ink: var(--mode-normal-ink);

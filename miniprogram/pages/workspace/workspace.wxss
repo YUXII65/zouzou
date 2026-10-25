@@ -115,6 +115,7 @@
   border-radius: 50%;
 }
 
+.mode-dot-checkin { background: #16a3a3; }
 .mode-dot-normal { background: #4a9ae8; }
 .mode-dot-longterm { background: #1e3f9c; }
 .mode-dot-explore { background: #7b4fd6; }
@@ -160,6 +161,7 @@
   opacity: 0.74;
 }
 
+.folder-tab-checkin { background: #16a3a3; }
 .folder-tab-normal { background: #4a9ae8; }
 .folder-tab-longterm { background: #1e3f9c; }
 .folder-tab-explore { background: #7b4fd6; }
@@ -177,6 +179,7 @@
   padding-bottom: 24rpx;
 }
 
+.folder-card-open .folder-head-checkin { background: #dff8f5; }
 .folder-card-open .folder-head-normal { background: #e3f1fd; }
 .folder-card-open .folder-head-longterm { background: #dce6f9; }
 .folder-card-open .folder-head-explore { background: #ece4fc; }
@@ -190,6 +193,7 @@
   height: 36rpx;
 }
 
+.folder-icon-checkin { background: #dff8f5; color: #087b7b; }
 .folder-icon-normal { background: #e3f1fd; color: #1667b8; }
 .folder-icon-longterm { background: #dce6f9; color: #1a3480; }
 .folder-icon-explore { background: #ece4fc; color: #5f31b8; }
@@ -482,6 +486,71 @@
   color: #7e93ae;
   font-size: 21rpx;
   line-height: 1.6;
+}
+
+.checkin-list {
+  margin-top: 24rpx;
+}
+
+.checkin-item {
+  display: flex;
+  min-height: 72rpx;
+  align-items: center;
+  gap: 16rpx;
+  padding: 12rpx 16rpx;
+  box-sizing: border-box;
+  border: 1rpx solid rgba(22, 163, 163, 0.2);
+  border-radius: 14rpx;
+  background: rgba(255, 255, 255, 0.82);
+  color: #182238;
+  font-size: 26rpx;
+}
+
+.checkin-item + .checkin-item {
+  margin-top: 12rpx;
+}
+
+.checkin-item-done {
+  border-color: rgba(22, 163, 163, 0.22);
+  background: rgba(223, 248, 245, 0.72);
+  color: #087b7b;
+}
+
+.checkin-check {
+  display: flex;
+  width: 34rpx;
+  height: 34rpx;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  color: #16a3a3;
+  font-size: 26rpx;
+}
+
+.checkin-item-done .checkin-item-title {
+  text-decoration: line-through;
+  opacity: 0.72;
+}
+
+.checkin-item-title {
+  min-width: 0;
+  line-height: 1.5;
+}
+
+.checkin-complete-copy {
+  margin-top: 18rpx;
+  color: #087b7b;
+  font-size: 22rpx;
+  text-align: center;
+}
+
+.checkin-foot {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  margin-top: 20rpx;
+  color: #7e93ae;
+  font-size: 21rpx;
 }
 
 /* 长期项目：阶段预览与网页 StagePreviewPanel 对齐 */

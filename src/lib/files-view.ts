@@ -8,6 +8,7 @@ import {
   serializeTaskStickyNote,
   type TaskStickyNoteData,
 } from "@/lib/task-sticky";
+import { CHECKIN_MODE, checkinDateKey } from "@/lib/checkin";
 
 /**
  * 文件页的共享视图契约：网页 /files 和小程序文件页消费同一份。
@@ -30,9 +31,12 @@ export type FilesViewTask = {
   scheduledDate: Date | null;
   focusDate: Date | null;
   completedAt: Date | null;
+  planOrder: number | null;
   projectId: string | null;
   trackId: string | null;
   stickyNotes: TaskStickyNoteData[];
+  /** 打卡条目的完成状态按当天记录派生，不改 Task.status 的长期终态语义。 */
+  isCheckin?: boolean;
 };
 
 export type FilesViewTrack = {
@@ -87,7 +91,9 @@ function serializeStickyNotes(
 
 export async function buildFilesView(input: {
   userId: string;
+  now?: Date;
 }): Promise<FilesView> {
+  const todayCheckinDate = checkinDateKey(input.now);
   // 两端共用：确认计划时可能先生成任务，但项目创建失败或旧包没建项目。
   // 文件页展示前统一把带 inboxItemId 的未关联任务补进项目，避免只在小程序出现“散落任务”。
   await repairUnassignedInboxProjects(input.userId);
@@ -137,6 +143,11 @@ export async function buildFilesView(input: {
       include: {
         project: true,
         stickyNotes: { orderBy: { createdAt: "desc" } },
+        checkinCompletions: {
+          where: { checkinDate: todayCheckinDate },
+          select: { completedAt: true },
+          take: 1,
+        },
       },
       orderBy: { createdAt: "desc" },
     }),
@@ -181,24 +192,32 @@ export async function buildFilesView(input: {
 
   const serializeTask = (
     task: (typeof tasks)[number],
-  ): FilesViewTask => ({
-    id: task.id,
-    title: task.title,
-    shortTitle: task.shortTitle,
-    notes: task.notes,
-    status: task.status,
-    priority: task.priority,
-    executionMode: task.executionMode,
-    doneWhen: task.doneWhen,
-    methodHint: task.methodHint,
-    dueDate: task.dueDate,
-    scheduledDate: task.scheduledDate,
-    focusDate: task.focusDate,
-    completedAt: task.completedAt,
-    projectId: task.projectId,
-    trackId: task.trackId,
-    stickyNotes: serializeStickyNotes(task.stickyNotes),
-  });
+  ): FilesViewTask => {
+    const isCheckin = task.project?.mode === CHECKIN_MODE;
+    const checkinCompletedAt = isCheckin
+      ? task.checkinCompletions[0]?.completedAt ?? null
+      : null;
+    return {
+      id: task.id,
+      title: task.title,
+      shortTitle: task.shortTitle,
+      notes: task.notes,
+      status: checkinCompletedAt ? "done" : task.status,
+      priority: task.priority,
+      executionMode: task.executionMode,
+      doneWhen: task.doneWhen,
+      methodHint: task.methodHint,
+      dueDate: task.dueDate,
+      scheduledDate: task.scheduledDate,
+      focusDate: task.focusDate,
+      completedAt: checkinCompletedAt ?? task.completedAt,
+      planOrder: task.planOrder,
+      projectId: task.projectId,
+      trackId: task.trackId,
+      stickyNotes: serializeStickyNotes(task.stickyNotes),
+      isCheckin,
+    };
+  };
 
   const projectTasks = projects.map((project) => project.id);
   const taskById = new Map(tasks.map((task) => [task.id, task]));

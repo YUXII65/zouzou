@@ -173,10 +173,35 @@
   font-size: 22rpx;
 }
 
-.action-grid {
+.checkin-entry {
+  color: #4d6d94;
+}
+
+.checkin-entry-on {
+  border-color: rgba(22, 163, 163, 0.34);
+  background: rgba(223, 248, 245, 0.82);
+  color: #087b7b;
+}
+
+.checkin-entry-state {
   display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 6rpx;
+  font-size: 21rpx;
+}
+
+.action-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 16rpx;
-  margin-top: 40rpx;
+  margin-top: 20rpx;
+}
+
+@media (orientation: landscape) {
+  .action-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
 }
 
 .action-button {
@@ -246,4 +271,136 @@
   top: -9999px;
   width: 192px;
   height: 192px;
+}
+
+.checkin-mask {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 32rpx;
+  box-sizing: border-box;
+  background: rgba(24, 34, 56, 0.38);
+}
+
+.checkin-dialog {
+  width: 100%;
+  padding: 32rpx;
+  box-sizing: border-box;
+  border: 1rpx solid rgba(255, 255, 255, 0.9);
+  border-radius: 28rpx;
+  background: #ffffff;
+  box-shadow: 0 30rpx 90rpx rgba(32, 62, 105, 0.24);
+}
+
+.checkin-dialog-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20rpx;
+}
+
+.checkin-dialog-title,
+.checkin-dialog-copy {
+  display: block;
+}
+
+.checkin-dialog-title {
+  color: #182238;
+  font-size: 30rpx;
+  font-weight: 600;
+}
+
+.checkin-dialog-copy {
+  margin-top: 8rpx;
+  color: #7e93ae;
+  font-size: 21rpx;
+}
+
+.checkin-dialog-close {
+  color: #7e93ae;
+  font-size: 36rpx;
+  line-height: 1;
+}
+
+.checkin-field-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12rpx;
+  margin-top: 24rpx;
+}
+
+.checkin-item-input {
+  flex: 1;
+  min-width: 0;
+  height: 72rpx;
+  padding: 0 18rpx;
+  box-sizing: border-box;
+  border: 1rpx solid #dce8f7;
+  border-radius: 14rpx;
+  background: #f7faff;
+  color: #182238;
+  font-size: 24rpx;
+}
+
+.checkin-item-row {
+  display: flex;
+  align-items: center;
+  gap: 10rpx;
+}
+
+.checkin-item-cancel {
+  flex-shrink: 0;
+  padding: 10rpx 8rpx;
+  color: #7e93ae;
+  font-size: 22rpx;
+}
+
+.checkin-plus {
+  display: flex;
+  width: 60rpx;
+  height: 60rpx;
+  align-items: center;
+  align-self: flex-start;
+  justify-content: center;
+  border: 1rpx solid rgba(22, 163, 163, 0.2);
+  border-radius: 12rpx;
+  background: rgba(223, 248, 245, 0.55);
+  color: #087b7b;
+  font-size: 34rpx;
+  font-weight: 500;
+}
+
+.checkin-dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 16rpx;
+  margin-top: 24rpx;
+}
+
+.checkin-cancel,
+.checkin-confirm {
+  display: flex;
+  height: 68rpx;
+  align-items: center;
+  justify-content: center;
+  padding: 0 24rpx;
+  border-radius: 14rpx;
+  font-size: 24rpx;
+}
+
+.checkin-cancel {
+  color: #7e93ae;
+}
+
+.checkin-confirm {
+  background: #16a3a3;
+  color: #ffffff;
+  font-weight: 600;
+}
+
+.checkin-confirm-disabled {
+  opacity: 0.55;
 }

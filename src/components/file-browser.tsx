@@ -4,7 +4,14 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { formatDate } from "@/lib/date";
 import type { ProjectStatus } from "@prisma/client";
-import { ChevronDown, Folder, FolderOpen, History, ListTodo } from "lucide-react";
+import {
+  CheckCircle2,
+  ChevronDown,
+  Folder,
+  FolderOpen,
+  History,
+  ListTodo,
+} from "lucide-react";
 import { EmptyState } from "@/components/empty-state";
 import { TaskRow } from "@/components/task-row";
 import { ReviewDraftGenerator } from "@/components/review-draft-generator";
@@ -19,6 +26,7 @@ import { isOpenTaskStatus } from "@/lib/task-flow";
 import { isInsideFloatingLayer } from "@/lib/use-click-outside";
 import { REVIEW_ENABLED } from "@/lib/review-feature";
 import { StagePreviewPanel } from "@/components/stage-preview-panel";
+import { CheckinItemToggle } from "@/components/checkin-controls";
 import type { StagePreview } from "@/lib/project-progress-types";
 import { cx } from "@/lib/utils";
 
@@ -35,7 +43,9 @@ export type FileTaskData = {
   executionMode?: string | null;
   doneWhen?: string | null;
   completedAt?: Date | null;
+  planOrder?: number | null;
   stickyNotes?: TaskStickyNoteData[];
+  isCheckin?: boolean;
 };
 
 /** 探索线路：一条线是一个发展方向，主线只有一条。 */
@@ -405,9 +415,11 @@ function FolderBlock({
             </span>
             <span className="mt-0.5 block truncate text-[11px] text-ink-muted">
               {meta ? meta.label + " · " : ""}
-              {openTasks.length
-                ? openTasks.length + " 件推进中"
-                : "暂无推进中的任务"}
+              {mode === "checkin"
+                ? `今日 ${completedTasks.length}/${tasks.length}`
+                : openTasks.length
+                  ? openTasks.length + " 件推进中"
+                  : "暂无推进中的任务"}
             </span>
           </span>
           <ChevronDown
@@ -475,89 +487,124 @@ function FolderBlock({
             </div>
           ) : null}
 
-          <div className="mt-4 flex flex-wrap items-center gap-2">
-            <TaskViewSwitch
-              taskView={taskView}
-              setTaskView={setTaskView}
-              openCount={openTasks.length}
-              doneCount={completedTasks.length}
-            />
-            {REVIEW_ENABLED && mode === "explore" && projectId ? (
-              <button
-                type="button"
-                onClick={() => setReviewOpen((value) => !value)}
-                aria-expanded={reviewOpen}
-                className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border bg-surface px-3 text-xs font-medium text-ink-secondary transition-colors hover:border-accent/40 hover:text-accent-strong"
-              >
-                <History className="size-3.5" />
-                复盘
-              </button>
-            ) : null}
-
-          </div>
-
-          {REVIEW_ENABLED && reviewOpen && mode === "explore" && projectId ? (
-            <div className="mt-3 overflow-hidden rounded-xl border border-border/70 bg-surface-muted/40">
-              {reviews?.length ? (
-                <div className="border-b border-border/60 p-4">
-                  <p className="text-xs font-medium text-ink-secondary">
-                    复盘记录
-                  </p>
-                  <div className="mt-2 space-y-1">
-                    {reviews.map((review) => (
-                      <Link
-                        key={review.id}
-                        href={`/files?project=${projectId}&review=${review.id}`}
-                        className="flex h-8 items-center rounded-md px-2 text-sm text-ink-secondary transition-colors hover:bg-surface hover:text-accent-strong"
-                      >
-                        {formatDate(new Date(review.reviewDate))}
-                      </Link>
+          {mode === "checkin" && projectId ? (
+            <div className="mt-4">
+              {tasks.length ? (
+                <div className="space-y-2">
+                  {[...tasks]
+                    .sort(
+                      (a, b) =>
+                        (a.planOrder ?? Number.MAX_SAFE_INTEGER) -
+                        (b.planOrder ?? Number.MAX_SAFE_INTEGER),
+                    )
+                    .map((task) => (
+                    <CheckinItemToggle
+                      key={task.id}
+                      taskId={task.id}
+                      title={task.title}
+                      completed={task.status === "done"}
+                    />
                     ))}
-                  </div>
                 </div>
               ) : (
-                <p className="border-b border-border/60 px-4 py-3 text-xs text-ink-muted">
-                  还没有复盘记录
-                </p>
-              )}
-              <ReviewDraftGenerator
-                defaultDate={today}
-                projectId={projectId}
-                label="生成复盘"
-              />
-            </div>
-          ) : null}
-
-          {shown.length ? (
-            <div className="mt-3 divide-y divide-border rounded-xl border border-border/70 bg-surface">
-              {shown.map((task) => (
-                <TaskRow
-                  key={task.id}
-                  task={task}
-                  projectId={projectId}
-                  projectName={name}
-                  showLabels={showLabels}
+                <EmptyState
+                  icon={CheckCircle2}
+                  title="还没有打卡条目"
+                  hint="去首页补充今日打卡。"
                 />
-              ))}
+              )}
+              {allDone ? (
+                <p className="mt-3 text-center text-xs text-mode-checkin-ink">
+                  今日打卡已完成，尽情探索你的边界吧
+                </p>
+              ) : null}
             </div>
           ) : (
-            <EmptyState
-              icon={ListTodo}
-              title={
-                taskView === "done"
-                  ? "还没有已完成的任务"
-                  : allDone
-                    ? "已全部完成"
-                    : "没有推进中的任务"
-              }
-              hint={
-                taskView === "done"
-                  ? "任务完成后会自动收进这里。"
-                  : allDone
-                    ? undefined
-                    : "写下想法时 AI 会把它拆成这里的任务。"
-              }
-            />
+            <>
+              <div className="mt-4 flex flex-wrap items-center gap-2">
+                <TaskViewSwitch
+                  taskView={taskView}
+                  setTaskView={setTaskView}
+                  openCount={openTasks.length}
+                  doneCount={completedTasks.length}
+                />
+                {REVIEW_ENABLED && mode === "explore" && projectId ? (
+                  <button
+                    type="button"
+                    onClick={() => setReviewOpen((value) => !value)}
+                    aria-expanded={reviewOpen}
+                    className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border bg-surface px-3 text-xs font-medium text-ink-secondary transition-colors hover:border-accent/40 hover:text-accent-strong"
+                  >
+                    <History className="size-3.5" />
+                    复盘
+                  </button>
+                ) : null}
+              </div>
+
+              {REVIEW_ENABLED && reviewOpen && mode === "explore" && projectId ? (
+                <div className="mt-3 overflow-hidden rounded-xl border border-border/70 bg-surface-muted/40">
+                  {reviews?.length ? (
+                    <div className="border-b border-border/60 p-4">
+                      <p className="text-xs font-medium text-ink-secondary">
+                        复盘记录
+                      </p>
+                      <div className="mt-2 space-y-1">
+                        {reviews.map((review) => (
+                          <Link
+                            key={review.id}
+                            href={`/files?project=${projectId}&review=${review.id}`}
+                            className="flex h-8 items-center rounded-md px-2 text-sm text-ink-secondary transition-colors hover:bg-surface hover:text-accent-strong"
+                          >
+                            {formatDate(new Date(review.reviewDate))}
+                          </Link>
+                        ))}
+                      </div>
+                    </div>
+                  ) : (
+                    <p className="border-b border-border/60 px-4 py-3 text-xs text-ink-muted">
+                      还没有复盘记录
+                    </p>
+                  )}
+                  <ReviewDraftGenerator
+                    defaultDate={today}
+                    projectId={projectId}
+                    label="生成复盘"
+                  />
+                </div>
+              ) : null}
+
+              {shown.length ? (
+                <div className="mt-3 divide-y divide-border rounded-xl border border-border/70 bg-surface">
+                  {shown.map((task) => (
+                    <TaskRow
+                      key={task.id}
+                      task={task}
+                      projectId={projectId}
+                      projectName={name}
+                      showLabels={showLabels}
+                    />
+                  ))}
+                </div>
+              ) : (
+                <EmptyState
+                  icon={ListTodo}
+                  title={
+                    taskView === "done"
+                      ? "还没有已完成的任务"
+                      : allDone
+                        ? "已全部完成"
+                        : "没有推进中的任务"
+                  }
+                  hint={
+                    taskView === "done"
+                      ? "任务完成后会自动收进这里。"
+                      : allDone
+                        ? undefined
+                        : "写下想法时 AI 会把它拆成这里的任务。"
+                  }
+                />
+              )}
+            </>
           )}
         </div>
       ) : null}

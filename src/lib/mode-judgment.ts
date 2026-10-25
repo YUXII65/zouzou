@@ -1,5 +1,8 @@
 import { extractJsonObject as extractJson } from "@/lib/json-extract";
-import { isProjectMode, type ProjectMode } from "@/lib/work-mode";
+import {
+  isAiProjectMode,
+  type AiProjectMode,
+} from "@/lib/work-mode";
 
 export type ModeEndStateType = "finite" | "ongoing" | "unclear";
 export type ModeTimeHorizon = "single_session" | "multi_day" | "open";
@@ -14,12 +17,12 @@ export type WorkModeFrame = {
 };
 
 export type WorkModeJudgment = {
-  mode: ProjectMode;
+  mode: AiProjectMode;
   confidence: number;
   realNeed: string;
   frame: WorkModeFrame | null;
   decisiveEvidence: string[];
-  fallbackMode: ProjectMode | null;
+  fallbackMode: AiProjectMode | null;
   reason: string;
   source: "model" | "heuristic";
 };
@@ -36,8 +39,8 @@ function readBoolean(value: unknown) {
   return value === true;
 }
 
-function readMode(value: unknown): ProjectMode | null {
-  return isProjectMode(value) ? value : null;
+function readMode(value: unknown): AiProjectMode | null {
+  return isAiProjectMode(value) ? value : null;
 }
 
 function readFrame(value: unknown): WorkModeFrame | null {
@@ -91,7 +94,7 @@ export function parseModeJudgment(
         : 0.5;
     const confidence = Math.max(0, Math.min(1, confidenceRaw));
     // 探索最容易做成空转。低置信度时降到 normal，但保留原判断供计划和排查使用。
-    const mode: ProjectMode =
+    const mode: AiProjectMode =
       originalMode === "explore" && confidence < LOW_CONFIDENCE
         ? "normal"
         : originalMode;
@@ -121,7 +124,7 @@ export function parseModeJudgment(
 
 /** 模型不可用或输出损坏时的本地兜底。 */
 export function heuristicModeJudgment(input: {
-  mode: ProjectMode;
+  mode: AiProjectMode;
   realNeed: string;
 }): WorkModeJudgment {
   return {
@@ -139,6 +142,6 @@ export function heuristicModeJudgment(input: {
 /** 兼容旧调用：只取 mode。新代码应使用 parseModeJudgment。 */
 export function pickModeFromJudgment(
   text: string | null | undefined,
-): ProjectMode {
+): AiProjectMode {
   return parseModeJudgment(text)?.mode ?? "normal";
 }

@@ -67,6 +67,12 @@ export const TABLES = [
     restorePhase: 6,
   },
   {
+    name: "TaskCheckinCompletion",
+    delegate: "taskCheckinCompletion",
+    dates: ["completedAt"],
+    restorePhase: 6,
+  },
+  {
     name: "AiPlanFeedback",
     delegate: "aiPlanFeedback",
     dates: ["createdAt", "updatedAt"],
@@ -192,6 +198,8 @@ export const REFERENCES = [
   ["Task.inboxItemId", "InboxItem", "id", true],
   ["TaskStickyNote.userId", "User", "id", false],
   ["TaskStickyNote.taskId", "Task", "id", false],
+  ["TaskCheckinCompletion.userId", "User", "id", false],
+  ["TaskCheckinCompletion.taskId", "Task", "id", false],
   ["AiPlanFeedback.userId", "User", "id", false],
   ["AiPlanFeedback.inboxItemId", "InboxItem", "id", true],
   ["UserPreference.userId", "User", "id", false],

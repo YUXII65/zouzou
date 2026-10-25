@@ -31,6 +31,12 @@ import {
 import { generateTodayFocus } from "@/lib/today-focus-generate";
 import { priority, taskContractData } from "@/lib/task-contract-fields";
 import { applyTaskStatus } from "@/lib/task-status";
+import {
+  addCheckinItems as addCheckinItemsData,
+  createCheckinProject as createCheckinProjectData,
+  deleteCheckinProject as deleteCheckinProjectData,
+  toggleCheckinItem as toggleCheckinItemData,
+} from "@/lib/checkin";
 import { buildTaskEditSuggestion } from "@/lib/ai-edit-suggestions";
 import {
   clarifyOnboardingForUser,
@@ -1238,6 +1244,57 @@ export async function setTaskStatus(formData: FormData) {
   revalidatePath("/");
   revalidatePath("/files");
   revalidatePath("/workspace");
+}
+
+function revalidateCheckinViews() {
+  revalidatePath("/");
+  revalidatePath("/files");
+  revalidatePath("/profile");
+}
+
+export async function createCheckinProject(formData: FormData) {
+  const user = await requireUser();
+  const result = await createCheckinProjectData({
+    userId: user.id,
+    items: formData.get("items"),
+  });
+  if (result.ok) revalidateCheckinViews();
+  return result;
+}
+
+export async function addCheckinItems(formData: FormData) {
+  const user = await requireUser();
+  const result = await addCheckinItemsData({
+    userId: user.id,
+    projectId: text(formData, "projectId"),
+    items: formData.get("items"),
+  });
+  if (result.ok) revalidateCheckinViews();
+  return result;
+}
+
+export async function toggleCheckinItem(formData: FormData) {
+  const user = await requireUser();
+  const taskId = text(formData, "taskId");
+  if (!taskId) return { ok: false as const, error: "打卡条目不存在。" };
+  const result = await toggleCheckinItemData({
+    userId: user.id,
+    taskId,
+  });
+  if (result.ok) revalidateCheckinViews();
+  return result;
+}
+
+export async function deleteCheckinProject(formData: FormData) {
+  const user = await requireUser();
+  const projectId = text(formData, "projectId");
+  if (!projectId) return { ok: false as const, error: "打卡文件夹不存在。" };
+  const result = await deleteCheckinProjectData({
+    userId: user.id,
+    projectId,
+  });
+  if (result.ok) revalidateCheckinViews();
+  return result;
 }
 
 

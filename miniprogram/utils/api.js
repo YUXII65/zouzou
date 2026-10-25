@@ -293,6 +293,34 @@ function deleteProject(projectId) {
   });
 }
 
+function createCheckin(items) {
+  return request("/api/miniprogram/checkin", {
+    method: "POST",
+    data: { action: "create", items }
+  });
+}
+
+function addCheckinItems(projectId, items) {
+  return request("/api/miniprogram/checkin", {
+    method: "POST",
+    data: { action: "add", projectId, items }
+  });
+}
+
+function toggleCheckin(taskId) {
+  return request("/api/miniprogram/checkin", {
+    method: "POST",
+    data: { action: "toggle", taskId }
+  });
+}
+
+function deleteCheckin(projectId) {
+  return request("/api/miniprogram/checkin", {
+    method: "POST",
+    data: { action: "delete", projectId }
+  });
+}
+
 function createTask(data) {
   return request("/api/miniprogram/tasks", {
     method: "POST",
@@ -452,6 +480,10 @@ module.exports = {
   createProject,
   updateProject,
   deleteProject,
+  createCheckin,
+  addCheckinItems,
+  toggleCheckin,
+  deleteCheckin,
   createTask,
   getTaskDetail,
   updateTask,

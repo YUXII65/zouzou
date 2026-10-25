@@ -62,6 +62,19 @@
     </view>
 
     <view class="action-grid">
+      <view class="action-button checkin-entry {{checkin ? 'checkin-entry-on' : ''}}" bindtap="onCheckinModeTap">
+        <view class="action-main">
+          <image class="action-icon" src="/assets/icons/list.svg"></image>
+          <text>打卡模式</text>
+        </view>
+        <view class="checkin-entry-state">
+          <block wx:if="{{checkin}}">
+            <image class="action-state-icon" src="/assets/icons/check.svg"></image>
+            <text>第 {{checkin.dayNumber}} 天</text>
+          </block>
+          <text wx:else>开启</text>
+        </view>
+      </view>
       <view class="action-button" bindtap="onThemeTap">
         <view class="action-main">
           <image class="action-icon" src="/assets/icons/moon.svg"></image>
@@ -86,6 +99,40 @@
         <view class="action-main">
           <image class="action-icon" src="/assets/icons/logout.svg"></image>
           <text>退出登录</text>
+        </view>
+      </view>
+    </view>
+    <view class="checkin-mask" wx:if="{{checkinDialog}}" bindtap="onCheckinClose">
+      <view class="checkin-dialog" catchtap="stopPropagation">
+        <view class="checkin-dialog-head">
+          <view>
+            <text class="checkin-dialog-title">开启打卡模式</text>
+            <text class="checkin-dialog-copy">监督待办，培养习惯</text>
+          </view>
+          <view class="checkin-dialog-close" bindtap="onCheckinClose">×</view>
+        </view>
+        <view class="checkin-field-list">
+          <view
+            class="checkin-item-row"
+            wx:for="{{checkinItems}}"
+            wx:key="index"
+            wx:for-index="index"
+          >
+            <input
+              class="checkin-item-input"
+              value="{{item.value}}"
+              maxlength="80"
+              placeholder="{{item.added ? '添加' : '待办 ' + item.label}}"
+              data-index="{{index}}"
+              bindinput="onCheckinInput"
+            />
+            <view class="checkin-item-cancel" wx:if="{{item.value || item.added}}" data-index="{{index}}" bindtap="onRemoveCheckinItem">取消</view>
+          </view>
+          <view class="checkin-plus" wx:if="{{checkinItems.length < 30}}" bindtap="onAddCheckinItem">＋</view>
+        </view>
+        <view class="checkin-dialog-actions">
+          <view class="checkin-cancel" bindtap="onCheckinClose">取消</view>
+          <view class="checkin-confirm {{checkinSaving ? 'checkin-confirm-disabled' : ''}}" bindtap="onCheckinConfirm">{{checkinSaving ? '正在保存…' : '确认开启'}}</view>
         </view>
       </view>
     </view>

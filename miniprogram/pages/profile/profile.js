@@ -4,7 +4,15 @@ const { markDataChanged, shouldRefresh } = require("../../utils/data-refresh");
 const AVATAR_PIXELS = 192;
 const MAX_AVATAR_CHARS = 400000;
 
-const EMPTY_COUNTS = { normal: 0, longterm: 0, explore: 0 };
+const EMPTY_COUNTS = { checkin: 0, normal: 0, longterm: 0, explore: 0 };
+
+function initialCheckinItems() {
+  return [1, 2, 3].map((label) => ({
+    label,
+    value: "",
+    added: false
+  }));
+}
 
 const { getContentTop } = require("../../utils/layout");
 
@@ -17,6 +25,10 @@ Page({
     avatarUrl: "",
     displayInitial: "走",
     counts: EMPTY_COUNTS,
+    checkin: null,
+    checkinDialog: false,
+    checkinItems: initialCheckinItems(),
+    checkinSaving: false,
     serverConnected: false,
     editingName: false,
     saving: false
@@ -57,6 +69,7 @@ Page({
           avatarUrl: user.avatarUrl || "",
           displayInitial: displayName.slice(0, 1),
           counts: result.counts || EMPTY_COUNTS,
+          checkin: result.checkin || null,
           serverConnected: Boolean(result.serverConnected)
         });
         this._lastLoadAt = Date.now();
@@ -221,6 +234,108 @@ Page({
     const theme = toggleTheme();
     this.setData({ theme });
     syncTabBar(this, "profile", theme);
+  },
+
+  onCheckinModeTap() {
+    if (this.data.checkin) {
+      this.onRemoveCheckinMode();
+      return;
+    }
+    this.setData({ checkinDialog: true, checkinItems: initialCheckinItems() });
+  },
+
+  onCheckinInput(event) {
+    const index = Number(event.currentTarget.dataset.index);
+    if (!Number.isInteger(index)) return;
+    this.setData({
+      [`checkinItems[${index}].value`]: event.detail.value
+    });
+  },
+
+  onAddCheckinItem() {
+    if (this.data.checkinItems.length >= 30) return;
+    this.setData({
+      checkinItems: [
+        ...this.data.checkinItems,
+        { label: null, value: "", added: true }
+      ]
+    });
+  },
+
+  onRemoveCheckinItem(event) {
+    const index = Number(event.currentTarget.dataset.index);
+    if (!Number.isInteger(index)) return;
+    this.setData({
+      checkinItems: this.data.checkinItems.filter(
+        (_, itemIndex) => itemIndex !== index
+      )
+    });
+  },
+
+  onCheckinClose() {
+    if (this.data.checkinSaving) return;
+    this.setData({
+      checkinDialog: false,
+      checkinItems: initialCheckinItems()
+    });
+  },
+
+  stopPropagation() {},
+
+  onCheckinConfirm() {
+    const items = (this.data.checkinItems || [])
+      .map((item) => String(item.value || "").trim())
+      .filter(Boolean)
+      .join("\n");
+    if (!items || this.data.checkinSaving) {
+      if (!items) wx.showToast({ title: "先填写每日待办", icon: "none" });
+      return;
+    }
+    const { createCheckin } = require("../../utils/api");
+    this.setData({ checkinSaving: true });
+    createCheckin(items)
+      .then((result) => {
+        if (!result || !result.ok) {
+          throw new Error((result && result.error) || "create_failed");
+        }
+        markDataChanged(["today", "workspace", "profile"]);
+        this.setData({
+          checkinDialog: false,
+          checkinItems: initialCheckinItems()
+        });
+        this.loadProfile();
+        wx.showToast({ title: "打卡已开启", icon: "success" });
+      })
+      .catch(() => {
+        wx.showToast({ title: "没开启成功，再试一次", icon: "none" });
+      })
+      .then(() => this.setData({ checkinSaving: false }));
+  },
+
+  onRemoveCheckinMode() {
+    if (!this.data.checkin || this.data.checkinSaving) return;
+    wx.showModal({
+      title: "取消打卡模式",
+      content: "打卡条目和每日完成记录会一起删除，之后可以重新开启。",
+      confirmColor: "#d95050",
+      success: (result) => {
+        if (!result.confirm) return;
+        const { deleteCheckin } = require("../../utils/api");
+        this.setData({ checkinSaving: true });
+        deleteCheckin(this.data.checkin.projectId)
+          .then((response) => {
+            if (!response || !response.ok) throw new Error("delete_failed");
+            markDataChanged(["today", "workspace", "profile"]);
+            this.setData({ checkin: null });
+            this.loadProfile();
+            wx.showToast({ title: "已取消打卡", icon: "success" });
+          })
+          .catch(() => {
+            wx.showToast({ title: "没取消成功，再试一次", icon: "none" });
+          })
+          .then(() => this.setData({ checkinSaving: false }));
+      }
+    });
   },
 
   onApiSettings() {

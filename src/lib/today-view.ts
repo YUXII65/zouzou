@@ -8,6 +8,11 @@ import {
 } from "@/lib/task-sticky";
 import { endOfDay, isSameDay, startOfDay, toDateInputValue } from "@/lib/date";
 import type { FirstRunState } from "@/lib/first-run";
+import {
+  CHECKIN_MODE,
+  checkinDateKey,
+  type CheckinTodayView,
+} from "@/lib/checkin";
 
 const priorityOrder: Record<string, number> = {
   urgent: 0,
@@ -62,6 +67,8 @@ export type TodayView = {
   stats: TodayViewStats;
   firstRun: FirstRunState;
   focusSuggestions: TodaySuggestion[] | null;
+  /** 每日打卡单独展示在「今日建议」上方，不混进 AI 推荐名额。 */
+  checkin: CheckinTodayView | null;
 };
 
 /**
@@ -124,14 +131,22 @@ export async function buildTodayView(input: {
   const dayStart = startOfDay(now);
   const dayEnd = endOfDay(now);
   const weekStart = new Date(now.getTime() - 6 * 24 * 60 * 60 * 1000);
+  const todayCheckinDate = checkinDateKey(now);
 
   const [support, tasks, reviews, reviewCount] = await Promise.all([
     loadHomeSupport({ userId: input.userId, now }),
     prisma.task.findMany({
       where: { userId: input.userId },
       include: {
-        project: { select: { name: true } },
+        project: {
+          select: { id: true, name: true, mode: true, status: true },
+        },
         stickyNotes: { orderBy: { createdAt: "desc" } },
+        checkinCompletions: {
+          where: { checkinDate: todayCheckinDate },
+          select: { id: true, completedAt: true },
+          take: 1,
+        },
       },
       orderBy: { createdAt: "desc" },
     }),
@@ -145,8 +160,41 @@ export async function buildTodayView(input: {
   ]);
 
   const { firstRun, focusSuggestions, pendingInbox } = support;
+  const checkinTasks = tasks
+    .filter(
+      (task) =>
+        task.project?.mode === CHECKIN_MODE &&
+        task.project.status === "active",
+    )
+    .sort(
+      (a, b) =>
+        (a.planOrder ?? Number.MAX_SAFE_INTEGER) -
+        (b.planOrder ?? Number.MAX_SAFE_INTEGER),
+    );
+  const checkinProject = checkinTasks[0]?.project ?? null;
+  const checkin: CheckinTodayView | null =
+    checkinProject && checkinTasks.length
+      ? {
+          projectId: checkinProject.id,
+          projectName: checkinProject.name,
+          date: todayCheckinDate,
+          completed: checkinTasks.filter(
+            (task) => task.checkinCompletions.length > 0,
+          ).length,
+          total: checkinTasks.length,
+          items: checkinTasks.map((task) => ({
+            id: task.id,
+            title: task.title,
+            completed: task.checkinCompletions.length > 0,
+            completedAt: task.checkinCompletions[0]?.completedAt ?? null,
+          })),
+        }
+      : null;
+  const regularTasks = tasks.filter(
+    (task) => task.project?.mode !== CHECKIN_MODE,
+  );
 
-  const openTasks = tasks.filter(
+  const openTasks = regularTasks.filter(
     (task) => task.status !== "done" && task.status !== "cancelled",
   );
 
@@ -181,7 +229,7 @@ export async function buildTodayView(input: {
     return false;
   });
 
-  const completedTodayTasks = tasks
+  const completedTodayTasks = regularTasks
     .filter(
       (task) =>
         task.status === "done" &&
@@ -242,21 +290,21 @@ export async function buildTodayView(input: {
   }
 
   const activityDates = new Set<string>();
-  for (const task of tasks) {
+  for (const task of regularTasks) {
     if (task.completedAt) activityDates.add(toDateInputValue(task.completedAt));
   }
   for (const review of reviews) {
     activityDates.add(toDateInputValue(review.reviewDate));
   }
 
-  const completedToday = tasks.filter(
+  const completedToday = regularTasks.filter(
     (task) =>
       task.status === "done" &&
       task.completedAt &&
       task.completedAt >= dayStart &&
       task.completedAt <= dayEnd,
   ).length;
-  const weekDone = tasks.filter(
+  const weekDone = regularTasks.filter(
     (task) =>
       task.status === "done" &&
       task.completedAt &&
@@ -278,5 +326,6 @@ export async function buildTodayView(input: {
     },
     firstRun,
     focusSuggestions,
+    checkin,
   };
 }

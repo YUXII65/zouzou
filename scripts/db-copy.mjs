@@ -38,6 +38,7 @@ const TABLES = [
   ["projectTrack", "project_tracks"],
   ["task", "tasks"],
   ["taskStickyNote", "task_sticky_notes"],
+  ["taskCheckinCompletion", "task_checkin_completions"],
   ["aiPlanFeedback", "ai_plan_feedbacks"],
   ["userPreference", "user_preferences"],
   ["aiFeedbackEvent", "ai_feedback_events"],

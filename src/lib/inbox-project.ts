@@ -1,6 +1,7 @@
 import type { InboxPlanTrack } from "@/lib/ai";
 import { prisma } from "@/lib/prisma";
-import { normalizeProjectMode } from "@/lib/work-mode";
+import { normalizeAiProjectMode } from "@/lib/work-mode";
+import { CHECKIN_MODE } from "@/lib/checkin";
 
 type ProjectTransaction = Omit<
   typeof prisma,
@@ -69,7 +70,11 @@ export async function ensureInboxProject(
   // 的想法只要生成的项目名撞上，就悄悄并进同一个项目（用户实测：年度计划 + 打游戏）。
   if (requestedName && input.reuseExistingProject) {
     const sameName = await tx.project.findFirst({
-      where: { userId: input.userId, name: requestedName },
+      where: {
+        userId: input.userId,
+        name: requestedName,
+        mode: { not: CHECKIN_MODE },
+      },
       select: { id: true },
     });
     if (sameName) return sameName.id;
@@ -97,7 +102,7 @@ export async function ensureInboxProject(
       userId: input.userId,
       name: projectName,
       objective,
-      mode: normalizeProjectMode(input.mode),
+      mode: normalizeAiProjectMode(input.mode),
       currentMilestone: milestone,
       createdFromInboxItemId: input.inboxItemId,
       notes: input.content,

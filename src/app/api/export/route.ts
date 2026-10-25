@@ -19,6 +19,7 @@ export async function GET() {
       include: {
         project: true,
         inboxItem: true,
+        checkinCompletions: true,
       },
       orderBy: { createdAt: "desc" },
     }),

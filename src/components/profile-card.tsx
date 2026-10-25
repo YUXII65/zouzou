@@ -4,7 +4,11 @@ import { useEffect, useRef, useState, useTransition } from "react";
 import type { ChangeEvent } from "react";
 import { Camera, Check, Loader2, Pencil, X } from "lucide-react";
 import { updateUserProfile } from "@/app/actions";
-import { PROJECT_MODE_META, type ProjectMode } from "@/lib/work-mode";
+import {
+  AI_PROJECT_MODES,
+  PROJECT_MODE_META,
+  type ProjectMode,
+} from "@/lib/work-mode";
 import { cx } from "@/lib/utils";
 
 const AVATAR_PIXELS = 192;
@@ -46,7 +50,7 @@ async function fileToAvatarDataUrl(file: File) {
 /**
  * 个人页的名片。
  * v3.4 起左侧栏的账号入口收进这里：头像点一下就能换，昵称点铅笔就能改。
- * 只放身份信息和三个模式的推进数量；夜间模式、退出登录属于「功能」，放在名片外面的功能区。
+ * 只放身份信息和三种 AI 模式的推进数量；打卡、夜间模式、退出登录属于「功能」。
  */
 export function ProfileNameCard({
   user,
@@ -207,7 +211,7 @@ export function ProfileNameCard({
       ) : null}
 
       <div className="grid grid-cols-3 border-t border-border/60">
-        {(["normal", "longterm", "explore"] as ProjectMode[]).map(
+        {AI_PROJECT_MODES.map(
           (mode, index) => {
             const meta = PROJECT_MODE_META[mode];
             return (

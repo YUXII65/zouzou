@@ -6,9 +6,9 @@ import {
 } from "@/lib/mode-judgment";
 import {
   heuristicProjectMode,
-  isProjectMode,
-  normalizeProjectMode,
-  type ProjectMode,
+  isAiProjectMode,
+  normalizeAiProjectMode,
+  type AiProjectMode,
 } from "@/lib/work-mode";
 import { after } from "next/server";
 import { buildTaskContract } from "@/lib/task-contract";
@@ -123,7 +123,7 @@ export type InboxPlan = {
   /** explore 模式的线路图；其他模式为空。线路可以不只一条，也可以只有一条。 */
   tracks?: InboxPlanTrack[] | null;
   /** 项目最终归属的模式（v3.3 文件页用它分类） */
-  mode?: ProjectMode;
+  mode?: AiProjectMode;
   reason: string;
   session?: DecisionSession | null;
   source?: InboxPlanSource;
@@ -221,7 +221,7 @@ export type InboxClarification = {
   supplementPlaceholder: string;
   mode?: "socratic";
   /** 澄清收口后定下的推进模式；第 2 段方案 Agent 只承接，不再自己判。 */
-  workMode?: ProjectMode | null;
+  workMode?: AiProjectMode | null;
   /** 模式判断的完整结果，供方案 Agent 使用目标框和置信度。 */
   modeJudgment?: WorkModeJudgment | null;
   status?: "asking" | "done";
@@ -653,8 +653,8 @@ export async function callModel(
 }
 
 /** 用户显式选了模式就用它；smart / 缺省才回落到推断值。 */
-function resolvePlanMode(workMode: unknown, hint: ProjectMode): ProjectMode {
-  return isProjectMode(workMode) ? workMode : hint;
+function resolvePlanMode(workMode: unknown, hint: AiProjectMode): AiProjectMode {
+  return isAiProjectMode(workMode) ? workMode : hint;
 }
 
 function heuristicPlan(
@@ -1626,9 +1626,9 @@ export async function planInbox(
       action,
       taskDisposition,
       // 用户显式选了就听用户的；智能模式才采用模型判断，模型没给就用本地启发式兜底。
-      mode: isProjectMode(workMode)
+      mode: isAiProjectMode(workMode)
         ? workMode
-        : normalizeProjectMode(
+        : normalizeAiProjectMode(
             raw.mode ??
               heuristicProjectMode(clarifiedContent, action !== "single_task"),
           ),

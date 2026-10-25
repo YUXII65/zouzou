@@ -135,9 +135,11 @@ Page({
     tasks: [],
     plannedTasks: [],
     completedTodayTasks: [],
+    checkin: null,
     submittingPlanId: "",
     submittingClarifyId: "",
     submittingTaskId: "",
+    submittingCheckinId: "",
     expandedTaskId: "",
     tourVisible: false,
     tourStep: "1",
@@ -400,6 +402,15 @@ Page({
           plannedTasks,
           completedTodayTasks,
           tasks: [...plannedTasks, ...completedTodayTasks],
+          checkin: normalized.checkin
+            ? {
+                ...normalized.checkin,
+                items: (normalized.checkin.items || []).map((item) => ({
+                  ...item,
+                  completed: Boolean(item.completed)
+                }))
+              }
+            : null,
         };
       })()
     });
@@ -795,6 +806,27 @@ Page({
           return;
         }
         wx.showToast({ title: "状态没更新成功", icon: "none" });
+      });
+  },
+
+  onCheckinToggle(event) {
+    const taskId = event.currentTarget.dataset.id;
+    if (!taskId || this.data.submittingCheckinId) return;
+    const { toggleCheckin } = require("../../utils/api");
+    this.setData({ submittingCheckinId: taskId });
+    toggleCheckin(taskId)
+      .then(() => {
+        markDataChanged(["today", "workspace", "profile"]);
+        this.setData({ submittingCheckinId: "" });
+        this.loadToday();
+      })
+      .catch((error) => {
+        this.setData({ submittingCheckinId: "" });
+        if (error && error.statusCode === 401) {
+          wx.reLaunch({ url: "/pages/login/login" });
+          return;
+        }
+        wx.showToast({ title: "打卡状态没更新成功", icon: "none" });
       });
   },
 

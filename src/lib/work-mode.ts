@@ -5,13 +5,28 @@
  * - normal：普通模式。一件事、一个结果，做完就收。
  * - longterm：长期模式。持续多轮推进，有阶段和里程碑。
  * - explore：探索模式。方向还没定，先做小验证再决定要不要继续。
+ * - checkin：打卡模式。只从个人页手动开启，不进入 AI 模式判断。
  */
-export type WorkMode = "smart" | "normal" | "longterm" | "explore";
+export type WorkMode = "smart" | "normal" | "longterm" | "explore" | "checkin";
 
 /** 真正落到项目上的模式：smart 只是入口，不会成为项目的最终归属。 */
 export type ProjectMode = Exclude<WorkMode, "smart">;
 
-export const PROJECT_MODES: ProjectMode[] = ["normal", "longterm", "explore"];
+/** 文件页按这个顺序分组；打卡固定置顶。 */
+export const PROJECT_MODES: ProjectMode[] = [
+  "checkin",
+  "normal",
+  "longterm",
+  "explore",
+];
+
+/** AI 判定和计划链路只认识这三种，不包含手动开启的打卡。 */
+export type AiProjectMode = Exclude<ProjectMode, "checkin">;
+export const AI_PROJECT_MODES: AiProjectMode[] = [
+  "normal",
+  "longterm",
+  "explore",
+];
 
 export const PROJECT_MODE_META: Record<
   ProjectMode,
@@ -32,6 +47,16 @@ export const PROJECT_MODE_META: Record<
     hint: string;
   }
 > = {
+  checkin: {
+    label: "打卡",
+    swatchClass: "bg-mode-checkin",
+    fillClass: "fill-mode-checkin",
+    softClass: "bg-mode-checkin-soft",
+    textClass: "text-mode-checkin-ink",
+    borderClass: "border-mode-checkin/30",
+    dotClass: "bg-mode-checkin",
+    hint: "每天 0 点重新开始",
+  },
   normal: {
     label: "普通",
     swatchClass: "bg-mode-normal",
@@ -65,12 +90,26 @@ export const PROJECT_MODE_META: Record<
 };
 
 export function isProjectMode(value: unknown): value is ProjectMode {
+  return (
+    value === "checkin" ||
+    value === "normal" ||
+    value === "longterm" ||
+    value === "explore"
+  );
+}
+
+export function isAiProjectMode(value: unknown): value is AiProjectMode {
   return value === "normal" || value === "longterm" || value === "explore";
 }
 
 /** 把任意来源的值收敛成能落库的项目模式；smart / 脏值一律回落到普通。 */
 export function normalizeProjectMode(value: unknown): ProjectMode {
   return isProjectMode(value) ? value : "normal";
+}
+
+/** AI 入口只允许收敛到三种自动模式，checkin 不会被模型或计划落库。 */
+export function normalizeAiProjectMode(value: unknown): AiProjectMode {
+  return isAiProjectMode(value) ? value : "normal";
 }
 
 
@@ -88,7 +127,7 @@ export function normalizeProjectMode(value: unknown): ProjectMode {
 export function heuristicProjectMode(
   content: string,
   isProject: boolean,
-): ProjectMode {
+): AiProjectMode {
   if (/[\d一二三四五六七八九十两]\s*个?\s*(?:天|周|月|年)|截止|交付|上线|发布|里程碑|阶段|期限内/.test(content)) {
     return "longterm";
   }

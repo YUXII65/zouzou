@@ -33,7 +33,7 @@ import { runContentAgent } from "@/lib/agent-plan/content";
 import { buildDecisionSession } from "@/lib/decision";
 import { readPlanTracks } from "@/lib/project-track";
 import { toDateInputValue } from "@/lib/date";
-import { type ProjectMode } from "@/lib/work-mode";
+import { type AiProjectMode } from "@/lib/work-mode";
 import {
   attachWebEvidenceSources,
   collectPlanWebEvidence,
@@ -113,7 +113,7 @@ function readComposedPlan(
   const projectMilestone =
     readText(value.projectMilestone, 240) || rawTaskList[0]?.doneWhen || projectObjective;
   // 模式已在澄清收口时定好；第 3 段只承接，不再自己判。
-  const mode: ProjectMode =
+  const mode: AiProjectMode =
     input.workMode ??
     (value.mode === "longterm" || value.mode === "explore"
       ? value.mode

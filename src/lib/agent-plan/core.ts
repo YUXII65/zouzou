@@ -17,7 +17,7 @@ import {
 import { MAX_AI_TASKS_PER_PLAN } from "@/lib/task-flow";
 import { extractJsonObject as extractJson } from "@/lib/json-extract";
 import type { WorkModeJudgment } from "@/lib/mode-judgment";
-import type { ProjectMode } from "@/lib/work-mode";
+import type { AiProjectMode } from "@/lib/work-mode";
 import type { PlanWebEvidence } from "@/lib/web-search";
 
 export type NormalAgentBrief = {
@@ -64,7 +64,7 @@ export type NormalAgentInput = {
   webEvidence?: PlanWebEvidence | null;
   maxTasks?: number | null;
   /** 澄清收口后定下的模式；有它时第 2 段方案 Agent 只承接，不再自己判。 */
-  workMode?: ProjectMode | null;
+  workMode?: AiProjectMode | null;
   modeJudgment?: WorkModeJudgment | null;
   apiKey?: string;
   model?: string;

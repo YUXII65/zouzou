@@ -161,6 +161,29 @@
     </view>
     </view>
 
+    <view class="panel checkin-panel" wx:if="{{checkin}}">
+      <view class="panel-header checkin-panel-header">
+        <view class="panel-heading">
+          <image class="panel-title-icon" src="/assets/icons/list.svg"></image>
+          <text class="panel-title">今日打卡</text>
+        </view>
+        <text class="checkin-panel-count">{{checkin.completed}}/{{checkin.total}}</text>
+      </view>
+      <view class="checkin-today-list">
+        <view
+          class="checkin-today-item {{item.completed ? 'checkin-today-item-done' : ''}}"
+          wx:for="{{checkin.items}}"
+          wx:key="id"
+          wx:for-item="item"
+          data-id="{{item.id}}"
+          bindtap="onCheckinToggle"
+        >
+          <text class="checkin-today-check">{{submittingCheckinId === item.id ? '◌' : item.completed ? '✓' : '○'}}</text>
+          <text class="checkin-today-title">{{item.title}}</text>
+        </view>
+      </view>
+    </view>
+
     <view class="panel tasks-panel">
       <view class="panel-header">
         <view class="panel-heading">

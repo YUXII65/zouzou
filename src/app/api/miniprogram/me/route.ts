@@ -18,6 +18,7 @@ export async function GET(request: Request) {
   return NextResponse.json({
     user: view.user,
     counts: view.counts,
+    checkin: view.checkin,
     serverConnected: view.serverConnected,
   });
 }

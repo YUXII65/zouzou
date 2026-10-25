@@ -189,6 +189,54 @@
   overflow: hidden;
 }
 
+.checkin-panel {
+  margin-top: 40rpx;
+  overflow: hidden;
+  border-color: rgba(22, 163, 163, 0.25);
+}
+
+.checkin-panel-header {
+  background: rgba(223, 248, 245, 0.58);
+}
+
+.checkin-panel-count {
+  color: #087b7b;
+  font-size: 23rpx;
+  font-weight: 600;
+}
+
+.checkin-today-list {
+  padding: 16rpx 20rpx 22rpx;
+}
+
+.checkin-today-item {
+  display: flex;
+  min-height: 72rpx;
+  align-items: center;
+  gap: 14rpx;
+  padding: 10rpx 16rpx;
+  box-sizing: border-box;
+  border-radius: 14rpx;
+  color: #182238;
+  font-size: 26rpx;
+}
+
+.checkin-today-item-done {
+  background: rgba(223, 248, 245, 0.75);
+  color: #087b7b;
+}
+
+.checkin-today-check {
+  flex-shrink: 0;
+  color: #16a3a3;
+  font-size: 26rpx;
+}
+
+.checkin-today-item-done .checkin-today-title {
+  text-decoration: line-through;
+  opacity: 0.72;
+}
+
 .panel-header {
   display: flex;
   align-items: center;

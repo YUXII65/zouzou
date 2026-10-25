@@ -10,7 +10,7 @@ export async function GET(request: Request) {
 
   const [projects, tasks, inboxItems, reviews] = await Promise.all([
     prisma.project.findMany({ where: { userId: user.id }, include: { tasks: true }, orderBy: { updatedAt: "desc" } }),
-    prisma.task.findMany({ where: { userId: user.id }, include: { project: true, inboxItem: true }, orderBy: { createdAt: "desc" } }),
+    prisma.task.findMany({ where: { userId: user.id }, include: { project: true, inboxItem: true, checkinCompletions: true }, orderBy: { createdAt: "desc" } }),
     prisma.inboxItem.findMany({ where: { userId: user.id }, orderBy: { createdAt: "desc" } }),
     prisma.review.findMany({ where: { userId: user.id }, include: { tasks: true, nextActionTasks: true }, orderBy: { reviewDate: "desc" } }),
   ]);

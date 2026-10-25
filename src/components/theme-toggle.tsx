@@ -47,7 +47,7 @@ export function ThemeToggle({
         onClick={() => setTheme(!dark)}
         aria-label={dark ? "关闭夜间模式" : "开启夜间模式"}
         aria-pressed={dark}
-        className={`flex h-10 min-w-0 items-center justify-between gap-2 rounded-lg border border-border bg-surface/70 px-2 text-xs font-medium text-ink-secondary transition-colors hover:bg-surface-hover hover:text-ink sm:gap-3 sm:px-4 sm:text-sm ${className}`}
+        className={`flex h-10 min-w-0 items-center justify-between gap-2 rounded-lg border border-border bg-surface/70 px-2 text-xs font-medium text-ink-secondary transition-colors hover:bg-surface-hover hover:text-ink sm:px-3 sm:text-sm ${className}`}
       >
         <span className="flex min-w-0 items-center gap-1.5">
           <Moon className="size-3.5 shrink-0" />
@@ -63,12 +63,12 @@ export function ThemeToggle({
           {dark ? (
             <>
               <CheckCircle2 className="size-3.5 shrink-0" />
-              <span className="hidden truncate sm:inline">已开启</span>
+              <span className="truncate sm:hidden">已开启</span>
             </>
           ) : (
             <>
               <Circle className="size-3.5 shrink-0" />
-              <span className="hidden truncate sm:inline">已关闭</span>
+              <span className="truncate sm:hidden">已关闭</span>
             </>
           )}
         </span>

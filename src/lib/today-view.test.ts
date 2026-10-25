@@ -56,6 +56,7 @@ const view: TodayView = {
   },
   firstRun: { tourStep: "done", isFirstRun: false },
   focusSuggestions: null,
+  checkin: null,
 };
 
 test("过渡兼容层：旧包字段齐全，新字段保留", () => {

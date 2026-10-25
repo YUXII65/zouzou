@@ -14,6 +14,7 @@ import { TodayTaskActions } from "@/components/today-task-actions";
 import { TaskRowDisclosure } from "@/components/task-row-disclosure";
 import { AiTaskPlanner } from "@/components/ai-task-planner";
 import { TodayFocusControls } from "@/components/today-focus-controls";
+import { CheckinTodayPanel } from "@/components/checkin-today-panel";
 import { after } from "next/server";
 import { buildAiContext } from "@/lib/ai-context";
 import { getCurrentUser, readSessionUserId } from "@/lib/auth";
@@ -45,6 +46,7 @@ export default async function TodayPage() {
     pendingInbox,
     plannedTasks,
     completedTodayTasks,
+    checkin,
   } = view;
   const dateKey = toDateInputValue(now);
   const todayTasks = [...plannedTasks, ...completedTodayTasks];
@@ -69,6 +71,8 @@ export default async function TodayPage() {
       <Panel>
         <AiTaskPlanner pending={pendingInbox} />
       </Panel>
+
+      {checkin ? <CheckinTodayPanel checkin={checkin} /> : null}
 
       <Panel className="mt-6">
         <PanelHeader

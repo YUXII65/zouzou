@@ -42,7 +42,7 @@
       <image class="folder-icon" src="/assets/icons/folder-{{project.modeKey}}{{openId === project.id ? '-open' : ''}}.svg"></image>
       <view class="folder-copy">
         <text class="folder-name">{{project.name}}</text>
-        <text class="folder-meta">{{project.modeLabel ? project.modeLabel + ' · ' : ''}}{{project.openCount ? project.openCount + ' 件推进中' : '暂无推进中的任务'}}</text>
+        <text class="folder-meta">{{project.modeLabel ? project.modeLabel + ' · ' : ''}}{{project.modeKey === 'checkin' ? project.checkinProgressText : project.openCount ? project.openCount + ' 件推进中' : '暂无推进中的任务'}}</text>
       </view>
       <view class="folder-chevron {{openId === project.id ? 'folder-chevron-open' : ''}}"></view>
     </view>
@@ -82,44 +82,66 @@
         </view>
       </view>
 
-      <view class="folder-toolbar">
-        <view class="task-switch">
+      <block wx:if="{{project.modeKey === 'checkin'}}">
+        <view class="checkin-list" wx:if="{{project.allTasks.length}}">
           <view
-            class="task-switch-item {{taskView === 'open' ? 'task-switch-item-active' : ''}}"
-            data-view="open"
-            bindtap="onTaskViewTap"
-          >推进中 {{project.openCount}}</view>
-          <view
-            class="task-switch-item {{taskView === 'done' ? 'task-switch-item-done' : ''}}"
-            data-view="done"
-            bindtap="onTaskViewTap"
-          >已完成 {{project.doneCount}}</view>
+            class="checkin-item {{task.status === 'done' ? 'checkin-item-done' : ''}}"
+            wx:for="{{project.allTasks}}"
+            wx:key="id"
+            wx:for-item="task"
+            data-id="{{task.id}}"
+            bindtap="onCheckinToggle"
+          >
+            <text class="checkin-check">{{submittingCheckinId === task.id ? '◌' : task.status === 'done' ? '✓' : '○'}}</text>
+            <text class="checkin-item-title">{{task.displayTitle}}</text>
+          </view>
         </view>
-        <view class="review-toggle" wx:if="{{project.modeKey === 'explore'}}" data-id="{{project.id}}" bindtap="onToggleReview">复盘</view>
-      </view>
+        <view class="checkin-complete-copy" wx:if="{{project.allDone}}">今日打卡已完成，尽情探索你的边界吧</view>
+        <view class="checkin-foot">
+          <text>每天 0 点刷新</text>
+        </view>
+      </block>
 
-      <view class="review-block" wx:if="{{project.modeKey === 'explore' && reviewOpenId === project.id}}">
-        <view class="review-head">复盘记录</view>
-        <view class="review-empty" wx:if="{{!project.reviews.length}}">还没有复盘记录</view>
-        <view class="review-item" wx:for="{{project.reviews}}" wx:key="id" wx:for-item="review" data-date="{{review.dateValue}}" bindtap="onOpenReview">{{review.dateText}}</view>
-        <view class="review-generate" data-date="{{reviewDate}}" bindtap="onGenerateReview">生成复盘</view>
-      </view>
+      <block wx:else>
+        <view class="folder-toolbar">
+          <view class="task-switch">
+            <view
+              class="task-switch-item {{taskView === 'open' ? 'task-switch-item-active' : ''}}"
+              data-view="open"
+              bindtap="onTaskViewTap"
+            >推进中 {{project.openCount}}</view>
+            <view
+              class="task-switch-item {{taskView === 'done' ? 'task-switch-item-done' : ''}}"
+              data-view="done"
+              bindtap="onTaskViewTap"
+            >已完成 {{project.doneCount}}</view>
+          </view>
+          <view class="review-toggle" wx:if="{{project.modeKey === 'explore'}}" data-id="{{project.id}}" bindtap="onToggleReview">复盘</view>
+        </view>
 
-      <view class="file-task-list" wx:if="{{taskView === 'open' && project.openTasks.length}}">
-        <template is="file-task" wx:for="{{project.openTasks}}" wx:key="id" data="{{task: item, expandedTaskId: expandedTaskId, submittingTaskId: submittingTaskId, submittingStageId: submittingStageId}}"></template>
-      </view>
-      <view class="file-task-list" wx:if="{{taskView === 'done' && project.doneTasks.length}}">
-        <template is="file-task" wx:for="{{project.doneTasks}}" wx:key="id" data="{{task: item, expandedTaskId: expandedTaskId, submittingTaskId: submittingTaskId}}"></template>
-      </view>
+        <view class="review-block" wx:if="{{project.modeKey === 'explore' && reviewOpenId === project.id}}">
+          <view class="review-head">复盘记录</view>
+          <view class="review-empty" wx:if="{{!project.reviews.length}}">还没有复盘记录</view>
+          <view class="review-item" wx:for="{{project.reviews}}" wx:key="id" wx:for-item="review" data-date="{{review.dateValue}}" bindtap="onOpenReview">{{review.dateText}}</view>
+          <view class="review-generate" data-date="{{reviewDate}}" bindtap="onGenerateReview">生成复盘</view>
+        </view>
 
-      <view class="empty-state compact" wx:if="{{taskView === 'open' && !project.openTasks.length}}">
-        <view class="empty-title">{{project.allDone ? '已全部完成' : '没有推进中的任务'}}</view>
-        <view class="empty-hint" wx:if="{{!project.allDone}}">写下想法时 AI 会把它拆成这里的任务。</view>
-      </view>
-      <view class="empty-state compact" wx:if="{{taskView === 'done' && !project.doneTasks.length}}">
-        <view class="empty-title">还没有已完成的任务</view>
-        <view class="empty-hint">任务完成后会自动收进这里。</view>
-      </view>
+        <view class="file-task-list" wx:if="{{taskView === 'open' && project.openTasks.length}}">
+          <template is="file-task" wx:for="{{project.openTasks}}" wx:key="id" data="{{task: item, expandedTaskId: expandedTaskId, submittingTaskId: submittingTaskId, submittingStageId: submittingStageId}}"></template>
+        </view>
+        <view class="file-task-list" wx:if="{{taskView === 'done' && project.doneTasks.length}}">
+          <template is="file-task" wx:for="{{project.doneTasks}}" wx:key="id" data="{{task: item, expandedTaskId: expandedTaskId, submittingTaskId: submittingTaskId}}"></template>
+        </view>
+
+        <view class="empty-state compact" wx:if="{{taskView === 'open' && !project.openTasks.length}}">
+          <view class="empty-title">{{project.allDone ? '已全部完成' : '没有推进中的任务'}}</view>
+          <view class="empty-hint" wx:if="{{!project.allDone}}">写下想法时 AI 会把它拆成这里的任务。</view>
+        </view>
+        <view class="empty-state compact" wx:if="{{taskView === 'done' && !project.doneTasks.length}}">
+          <view class="empty-title">还没有已完成的任务</view>
+          <view class="empty-hint">任务完成后会自动收进这里。</view>
+        </view>
+      </block>
     </view>
   </view>
 </template>
@@ -150,15 +172,15 @@
             <text class="mode-label">{{group.label}}</text>
             <text class="mode-count">{{group.projects.length}}</text>
           </view>
-          <template is="folder" wx:for="{{group.projects}}" wx:key="id" wx:for-item="project" data="{{project: project, openId: openId, taskView: taskView, expandedTaskId: expandedTaskId, submittingTaskId: submittingTaskId, submittingStageId: submittingStageId, reviewOpenId: reviewOpenId, reviewDate: reviewDate}}"></template>
+          <template is="folder" wx:for="{{group.projects}}" wx:key="id" wx:for-item="project" data="{{project: project, openId: openId, taskView: taskView, expandedTaskId: expandedTaskId, submittingTaskId: submittingTaskId, submittingStageId: submittingStageId, submittingCheckinId: submittingCheckinId, checkinDraft: checkinDraft, checkinDraftId: checkinDraftId, reviewOpenId: reviewOpenId, reviewDate: reviewDate}}"></template>
         </view>
       </block>
 
       <block wx:else>
-        <template is="folder" wx:for="{{projectsByTime}}" wx:key="id" wx:for-item="project" data="{{project: project, openId: openId, taskView: taskView, expandedTaskId: expandedTaskId, submittingTaskId: submittingTaskId, submittingStageId: submittingStageId, reviewOpenId: reviewOpenId, reviewDate: reviewDate}}"></template>
+        <template is="folder" wx:for="{{projectsByTime}}" wx:key="id" wx:for-item="project" data="{{project: project, openId: openId, taskView: taskView, expandedTaskId: expandedTaskId, submittingTaskId: submittingTaskId, submittingStageId: submittingStageId, submittingCheckinId: submittingCheckinId, checkinDraft: checkinDraft, checkinDraftId: checkinDraftId, reviewOpenId: reviewOpenId, reviewDate: reviewDate}}"></template>
       </block>
 
-      <template wx:if="{{unassociated}}" is="folder" data="{{project: unassociated, openId: openId, taskView: taskView, expandedTaskId: expandedTaskId, submittingTaskId: submittingTaskId, submittingStageId: submittingStageId, reviewOpenId: reviewOpenId, reviewDate: reviewDate}}"></template>
+      <template wx:if="{{unassociated}}" is="folder" data="{{project: unassociated, openId: openId, taskView: taskView, expandedTaskId: expandedTaskId, submittingTaskId: submittingTaskId, submittingStageId: submittingStageId, submittingCheckinId: submittingCheckinId, checkinDraft: checkinDraft, checkinDraftId: checkinDraftId, reviewOpenId: reviewOpenId, reviewDate: reviewDate}}"></template>
     </view>
 
     <view class="empty-state empty-page" wx:else>

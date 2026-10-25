@@ -24,6 +24,11 @@ test("模式判断的返回：脏输入一律回落到 normal", () => {
   assert.equal(pickModeFromJudgment(""), "normal");
   assert.equal(pickModeFromJudgment("这不是 JSON"), "normal");
   assert.equal(pickModeFromJudgment('[{"mode":"乱值"}]'), "normal");
+  assert.equal(
+    pickModeFromJudgment('{"mode":"checkin"}'),
+    "normal",
+    "手动打卡不能由 AI 模式判断产生",
+  );
 });
 
 test("本地兜底不会把持续目标压成一次性任务", () => {
