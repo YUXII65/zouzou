@@ -102,6 +102,22 @@ function checkinTaskData(title: string, planOrder: number) {
   };
 }
 
+function prismaErrorCode(error: unknown) {
+  if (!error || typeof error !== "object" || !("code" in error)) return "";
+  return String((error as { code?: unknown }).code ?? "");
+}
+
+function checkinSaveErrorMessage(error: unknown) {
+  const code = prismaErrorCode(error);
+  if (["P2021", "P2022"].includes(code)) {
+    return "打卡数据还没准备好，请稍后刷新再试。";
+  }
+  if (["P1001", "P1017", "P2024", "P2028", "P2034"].includes(code)) {
+    return "数据库连接不稳定，请稍后再试。";
+  }
+  return "没保存上，请稍后再试。";
+}
+
 export async function findCheckinProject(userId: string) {
   return prisma.project.findFirst({
     where: { userId, mode: CHECKIN_MODE },
@@ -128,32 +144,31 @@ export async function createCheckinProject(input: {
   }
 
   try {
-    const project = await withTransactionRetry(async (tx) => {
-      const created = await tx.project.create({
-        data: {
-          userId: input.userId,
-          name: CHECKIN_PROJECT_NAME,
-          objective: "每天完成这份打卡清单",
-          mode: CHECKIN_MODE,
-          checkinOwnerId: input.userId,
+    // 项目和任务用一次嵌套写入提交。Prisma 会保证整段原子性，
+    // 同时避免线上连接池抖动时跨多次事务查询更容易失效。
+    const project = await prisma.project.create({
+      data: {
+        userId: input.userId,
+        name: CHECKIN_PROJECT_NAME,
+        objective: "每天完成这份打卡清单",
+        mode: CHECKIN_MODE,
+        checkinOwnerId: input.userId,
+        tasks: {
+          create: items.map((title, index) => ({
+            userId: input.userId,
+            ...checkinTaskData(title, index),
+          })),
         },
-        select: { id: true },
-      });
-      await tx.task.createMany({
-        data: items.map((title, index) => ({
-          userId: input.userId,
-          projectId: created.id,
-          ...checkinTaskData(title, index),
-        })),
-      });
-      return created;
+      },
+      select: { id: true },
     });
     return { ok: true, projectId: project.id, added: items.length };
   } catch (error) {
     // 双端同时点开启时，第二个请求直接回到已经创建好的同一个打卡文件夹。
-    const raced = await findCheckinProject(input.userId);
+    const raced = await findCheckinProject(input.userId).catch(() => null);
     if (raced) return { ok: true, projectId: raced.id, added: 0 };
-    throw error;
+    console.error("[checkin:create]", error);
+    return { ok: false, error: checkinSaveErrorMessage(error) };
   }
 }
 
