@@ -175,6 +175,45 @@ function decorateUnassociated(tasks) {
   };
 }
 
+function patchCheckinProject(project, taskId, completed) {
+  if (project.modeKey !== "checkin") return project;
+  const allTasks = (project.allTasks || []).map((task) => {
+    if (task.id !== taskId) return task;
+    const status = completed ? "done" : "todo";
+    return {
+      ...task,
+      status,
+      completedAt: completed ? new Date().toISOString() : null,
+      statusClass: status,
+      statusIcon: completed ? "✓" : "○",
+      statusIconSrc: completed ? "/assets/icons/task-done.svg" : "/assets/icons/task-todo.svg",
+      actionLabel: completed ? "完成" : "待办",
+      canChangeStatus: !completed
+    };
+  });
+  const openTasks = allTasks.filter((task) => task.status === "todo" || task.status === "in_progress");
+  const doneTasks = allTasks.filter((task) => task.status === "done");
+  return {
+    ...project,
+    allTasks,
+    openTasks,
+    doneTasks,
+    openCount: openTasks.length,
+    doneCount: doneTasks.length,
+    checkinProgressText: "今日 " + doneTasks.length + "/" + allTasks.length,
+    allDone: openTasks.length === 0 && doneTasks.length > 0
+  };
+}
+
+function patchWorkspaceCheckin(groups, taskId, completed) {
+  return (groups || []).map((group) => ({
+    ...group,
+    projects: (group.projects || []).map((project) =>
+      patchCheckinProject(project, taskId, completed)
+    )
+  }));
+}
+
 const { getContentTop } = require("../../utils/layout");
 
 Page({
@@ -448,16 +487,34 @@ Page({
   onCheckinToggle(event) {
     const taskId = event.currentTarget.dataset.id;
     if (!taskId || this.data.submittingCheckinId) return;
+    const project = (this.data.groups || [])
+      .flatMap((group) => group.projects || [])
+      .find((item) => item.modeKey === "checkin");
+    const task = project && (project.allTasks || []).find((item) => item.id === taskId);
+    if (!task) return;
+    const previous = task.status === "done";
+    const next = !previous;
     const { toggleCheckin } = require("../../utils/api");
-    this.setData({ submittingCheckinId: taskId });
+    this.setData({
+      submittingCheckinId: taskId,
+      groups: patchWorkspaceCheckin(this.data.groups, taskId, next)
+    });
     toggleCheckin(taskId)
-      .then(() => {
+      .then((result) => {
         markDataChanged(["today", "workspace", "profile"]);
-        this.setData({ submittingCheckinId: "" });
-        this.loadWorkspace();
+        const completed = result && typeof result.completed === "boolean"
+          ? result.completed
+          : next;
+        this.setData({
+          submittingCheckinId: "",
+          groups: patchWorkspaceCheckin(this.data.groups, taskId, completed)
+        });
       })
       .catch((error) => {
-        this.setData({ submittingCheckinId: "" });
+        this.setData({
+          submittingCheckinId: "",
+          groups: patchWorkspaceCheckin(this.data.groups, taskId, previous)
+        });
         if (error && error.statusCode === 401) {
           wx.reLaunch({ url: "/pages/login/login" });
           return;

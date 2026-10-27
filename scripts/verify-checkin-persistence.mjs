@@ -9,6 +9,7 @@ import { prisma } from "@/lib/prisma";
 import {
   CHECKIN_MODE,
   createCheckinProject,
+  toggleCheckinItem,
   updateCheckinItems,
 } from "@/lib/checkin";
 
@@ -74,6 +75,19 @@ try {
 
   const renamedId = project.tasks[0].id;
   const keptId = project.tasks[2].id;
+  const toggledOn = await toggleCheckinItem({
+    userId: user.id,
+    taskId: renamedId,
+  });
+  assert.equal(toggledOn.ok, true);
+  assert.equal(toggledOn.completed, true);
+  const toggledOff = await toggleCheckinItem({
+    userId: user.id,
+    taskId: renamedId,
+  });
+  assert.equal(toggledOff.ok, true);
+  assert.equal(toggledOff.completed, false);
+
   await prisma.taskCheckinCompletion.create({
     data: {
       userId: user.id,

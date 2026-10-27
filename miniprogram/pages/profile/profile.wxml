@@ -69,8 +69,8 @@
         </view>
         <view class="checkin-entry-state">
           <block wx:if="{{checkin}}">
-            <image class="action-state-icon" src="/assets/icons/check.svg"></image>
             <text>第 {{checkin.dayNumber}} 天</text>
+            <image class="action-state-icon" src="/assets/icons/check.svg"></image>
           </block>
           <text wx:else>开启</text>
         </view>

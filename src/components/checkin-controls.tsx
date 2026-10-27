@@ -176,8 +176,8 @@ export function CheckinModeButton({
         <span className="inline-flex shrink-0 items-center gap-1 text-[11px] sm:text-xs">
           {checkin ? (
             <>
-              <CheckCircle2 className="size-3.5 shrink-0" />
               <span>第 {checkin.dayNumber} 天</span>
+              <CheckCircle2 className="size-3.5 shrink-0" />
             </>
           ) : (
             "开启"
@@ -433,9 +433,7 @@ export function CheckinItemToggle({
           : "border-mode-checkin/25 bg-surface text-ink hover:bg-mode-checkin-soft/35",
       )}
     >
-      {saving ? (
-        <Loader2 className="size-4 shrink-0 animate-spin" />
-      ) : checked ? (
+      {checked ? (
         <CheckCircle2 className="size-4 shrink-0" />
       ) : (
         <Circle className="size-4 shrink-0 text-mode-checkin/70" />
@@ -443,6 +441,9 @@ export function CheckinItemToggle({
       <span className={cx("min-w-0", checked && "line-through opacity-75")}>
         {title}
       </span>
+      {saving ? (
+        <Loader2 className="ml-auto size-3.5 shrink-0 animate-spin opacity-60" />
+      ) : null}
     </button>
   );
 }

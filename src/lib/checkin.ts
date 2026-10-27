@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { prisma, withTransactionRetry } from "@/lib/prisma";
 import { taskContractData } from "@/lib/task-contract-fields";
 
@@ -367,47 +368,55 @@ export async function toggleCheckinItem(input: {
   taskId: string;
   now?: Date;
 }) {
-  const task = await prisma.task.findFirst({
-    where: { id: input.taskId, userId: input.userId },
-    select: {
-      id: true,
-      projectId: true,
-      project: { select: { id: true, mode: true } },
-    },
-  });
-  if (!task?.projectId || task.project?.mode !== CHECKIN_MODE) {
+  const checkinDate = checkinDateKey(input.now);
+  const completionId = randomUUID();
+  const rows = await prisma.$queryRaw<
+    Array<{ found: boolean; removed: boolean }>
+  >`
+    WITH target AS (
+      SELECT task.id AS "taskId", task."projectId"
+      FROM "tasks" task
+      JOIN "projects" project ON project.id = task."projectId"
+      WHERE task.id = ${input.taskId}
+        AND task."userId" = ${input.userId}
+        AND project."userId" = ${input.userId}
+        AND project.mode = ${CHECKIN_MODE}
+    ),
+    deleted AS (
+      DELETE FROM "task_checkin_completions" completion
+      USING target
+      WHERE completion."taskId" = target."taskId"
+        AND completion."userId" = ${input.userId}
+        AND completion."checkinDate" = ${checkinDate}
+      RETURNING completion.id
+    ),
+    inserted AS (
+      INSERT INTO "task_checkin_completions"
+        (id, "userId", "taskId", "checkinDate")
+      SELECT ${completionId}, ${input.userId}, target."taskId", ${checkinDate}
+      FROM target
+      WHERE NOT EXISTS (SELECT 1 FROM deleted)
+      ON CONFLICT ("taskId", "checkinDate") DO NOTHING
+      RETURNING id
+    ),
+    touched AS (
+      UPDATE "projects"
+      SET "updatedAt" = CURRENT_TIMESTAMP
+      WHERE id IN (SELECT "projectId" FROM target)
+      RETURNING id
+    )
+    SELECT
+      EXISTS (SELECT 1 FROM target) AS found,
+      EXISTS (SELECT 1 FROM deleted) AS removed
+  `;
+  const state = rows[0];
+  if (!state?.found) {
     return { ok: false as const, error: "打卡条目不存在。" };
   }
 
-  const checkinDate = checkinDateKey(input.now);
-  const existing = await prisma.taskCheckinCompletion.findUnique({
-    where: {
-      taskId_checkinDate: { taskId: task.id, checkinDate },
-    },
-    select: { id: true },
-  });
-
-  if (existing) {
-    await prisma.taskCheckinCompletion.delete({
-      where: { id: existing.id },
-    });
-  } else {
-    await prisma.taskCheckinCompletion.create({
-      data: {
-        userId: input.userId,
-        taskId: task.id,
-        checkinDate,
-      },
-    });
-  }
-  await prisma.project.update({
-    where: { id: task.projectId, userId: input.userId },
-    data: { updatedAt: new Date() },
-  });
-
   return {
     ok: true as const,
-    completed: !existing,
+    completed: !state.removed,
     checkinDate,
   };
 }

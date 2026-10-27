@@ -92,7 +92,7 @@
             data-id="{{task.id}}"
             bindtap="onCheckinToggle"
           >
-            <text class="checkin-check">{{submittingCheckinId === task.id ? '◌' : task.status === 'done' ? '✓' : '○'}}</text>
+            <text class="checkin-check">{{task.status === 'done' ? '✓' : '○'}}</text>
             <text class="checkin-item-title">{{task.displayTitle}}</text>
           </view>
         </view>

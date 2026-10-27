@@ -119,6 +119,18 @@ const INLINE_WAITING_MESSAGES = {
   finalizing: ["正在确认情况", "正在整理信息"]
 };
 
+function patchCheckinCompletion(checkin, taskId, completed) {
+  if (!checkin) return checkin;
+  const items = (checkin.items || []).map((item) =>
+    item.id === taskId ? { ...item, completed } : item
+  );
+  return {
+    ...checkin,
+    items,
+    completed: items.filter((item) => item.completed).length
+  };
+}
+
 Page({
   data: {
     theme: "light",
@@ -811,17 +823,32 @@ Page({
 
   onCheckinToggle(event) {
     const taskId = event.currentTarget.dataset.id;
-    if (!taskId || this.data.submittingCheckinId) return;
+    const checkin = this.data.checkin;
+    const item = checkin && (checkin.items || []).find((entry) => entry.id === taskId);
+    if (!taskId || !item || this.data.submittingCheckinId) return;
+    const previous = Boolean(item.completed);
+    const next = !previous;
     const { toggleCheckin } = require("../../utils/api");
-    this.setData({ submittingCheckinId: taskId });
+    this.setData({
+      submittingCheckinId: taskId,
+      checkin: patchCheckinCompletion(checkin, taskId, next)
+    });
     toggleCheckin(taskId)
-      .then(() => {
+      .then((result) => {
         markDataChanged(["today", "workspace", "profile"]);
-        this.setData({ submittingCheckinId: "" });
-        this.loadToday();
+        const completed = result && typeof result.completed === "boolean"
+          ? result.completed
+          : next;
+        this.setData({
+          submittingCheckinId: "",
+          checkin: patchCheckinCompletion(this.data.checkin, taskId, completed)
+        });
       })
       .catch((error) => {
-        this.setData({ submittingCheckinId: "" });
+        this.setData({
+          submittingCheckinId: "",
+          checkin: patchCheckinCompletion(this.data.checkin, taskId, previous)
+        });
         if (error && error.statusCode === 401) {
           wx.reLaunch({ url: "/pages/login/login" });
           return;
