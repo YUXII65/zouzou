@@ -177,7 +177,7 @@ export function CheckinModeButton({
           {checkin ? (
             <>
               <CheckCircle2 className="size-3.5 shrink-0" />
-              <span>第 {checkin.dayNumber} 天 · 编辑</span>
+              <span>第 {checkin.dayNumber} 天</span>
             </>
           ) : (
             "开启"
