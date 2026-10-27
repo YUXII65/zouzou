@@ -45,7 +45,10 @@ export async function buildProfileView(input: {
         status: true,
         createdAt: true,
         tasks: {
+          orderBy: { planOrder: "asc" },
           select: {
+            id: true,
+            title: true,
             status: true,
             checkinCompletions: {
               where: { checkinDate: today },
@@ -78,6 +81,10 @@ export async function buildProfileView(input: {
           ).length,
           totalItems: project.tasks.length,
           dayNumber: checkinDayNumber(project.createdAt),
+          items: project.tasks.map((task) => ({
+            id: task.id,
+            title: task.title,
+          })),
         };
       }
       continue;

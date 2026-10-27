@@ -5,6 +5,7 @@ import {
   createCheckinProject,
   deleteCheckinProject,
   toggleCheckinItem,
+  updateCheckinItems,
 } from "@/lib/checkin";
 
 export const dynamic = "force-dynamic";
@@ -17,7 +18,7 @@ export async function POST(request: Request) {
 
   let body: {
     action?: string;
-    items?: string | string[];
+    items?: string | string[] | Array<{ id?: string; title?: string }>;
     projectId?: string;
     taskId?: string;
   };
@@ -38,6 +39,15 @@ export async function POST(request: Request) {
 
   if (body.action === "add") {
     const result = await addCheckinItems({
+      userId: user.id,
+      projectId: body.projectId,
+      items: body.items,
+    });
+    return NextResponse.json(result, { status: result.ok ? 200 : 400 });
+  }
+
+  if (body.action === "edit") {
+    const result = await updateCheckinItems({
       userId: user.id,
       projectId: body.projectId,
       items: body.items,

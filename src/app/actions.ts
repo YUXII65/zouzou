@@ -36,6 +36,7 @@ import {
   createCheckinProject as createCheckinProjectData,
   deleteCheckinProject as deleteCheckinProjectData,
   toggleCheckinItem as toggleCheckinItemData,
+  updateCheckinItems as updateCheckinItemsData,
 } from "@/lib/checkin";
 import { buildTaskEditSuggestion } from "@/lib/ai-edit-suggestions";
 import {
@@ -1267,6 +1268,21 @@ export async function addCheckinItems(formData: FormData) {
   const result = await addCheckinItemsData({
     userId: user.id,
     projectId: text(formData, "projectId"),
+    items: formData.get("items"),
+  });
+  if (result.ok) revalidateCheckinViews();
+  return result;
+}
+
+export async function updateCheckinItems(formData: FormData) {
+  const user = await requireUser();
+  const projectId = text(formData, "projectId");
+  if (!projectId) {
+    return { ok: false as const, error: "打卡文件夹不存在。" };
+  }
+  const result = await updateCheckinItemsData({
+    userId: user.id,
+    projectId,
     items: formData.get("items"),
   });
   if (result.ok) revalidateCheckinViews();

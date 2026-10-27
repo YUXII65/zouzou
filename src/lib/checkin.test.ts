@@ -4,6 +4,7 @@ import {
   checkinDateKey,
   checkinDayNumber,
   MAX_CHECKIN_ITEMS_PER_WRITE,
+  parseCheckinEdits,
   parseCheckinItems,
 } from "@/lib/checkin";
 import { PROJECT_MODES } from "@/lib/work-mode";
@@ -38,6 +39,27 @@ test("单次补充最多保留三十项", () => {
     Array.from({ length: 40 }, (_, index) => `第 ${index + 1} 项`).join("\n"),
   );
   assert.equal(items.length, MAX_CHECKIN_ITEMS_PER_WRITE);
+});
+
+test("编辑打卡保留原 ID，清理重复标题和重复 ID", () => {
+  const items = parseCheckinEdits(
+    JSON.stringify([
+      { id: "t1", title: " 阅读 " },
+      { id: "t1", title: "练字" },
+      { title: "阅读" },
+      { title: "拉伸" },
+      { id: "", title: "" },
+    ]),
+  );
+  assert.deepEqual(items, [
+    { id: "t1", title: "阅读" },
+    { id: null, title: "拉伸" },
+  ]);
+});
+
+test("损坏的编辑数据不会误删打卡内容", () => {
+  assert.deepEqual(parseCheckinEdits("{broken"), []);
+  assert.deepEqual(parseCheckinEdits({ title: "阅读" }), []);
 });
 
 test("按模式排序时打卡固定置顶", () => {

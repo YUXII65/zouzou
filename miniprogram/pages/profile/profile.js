@@ -8,6 +8,7 @@ const EMPTY_COUNTS = { checkin: 0, normal: 0, longterm: 0, explore: 0 };
 
 function initialCheckinItems() {
   return [1, 2, 3].map((label) => ({
+    taskId: null,
     label,
     value: "",
     added: false
@@ -27,6 +28,7 @@ Page({
     counts: EMPTY_COUNTS,
     checkin: null,
     checkinDialog: false,
+    checkinDialogMode: "create",
     checkinItems: initialCheckinItems(),
     checkinSaving: false,
     serverConnected: false,
@@ -238,10 +240,23 @@ Page({
 
   onCheckinModeTap() {
     if (this.data.checkin) {
-      this.onRemoveCheckinMode();
+      this.setData({
+        checkinDialog: true,
+        checkinDialogMode: "edit",
+        checkinItems: (this.data.checkin.items || []).map((item, index) => ({
+          taskId: item.id,
+          label: index + 1,
+          value: item.title,
+          added: false
+        }))
+      });
       return;
     }
-    this.setData({ checkinDialog: true, checkinItems: initialCheckinItems() });
+    this.setData({
+      checkinDialog: true,
+      checkinDialogMode: "create",
+      checkinItems: initialCheckinItems()
+    });
   },
 
   onCheckinInput(event) {
@@ -257,7 +272,7 @@ Page({
     this.setData({
       checkinItems: [
         ...this.data.checkinItems,
-        { label: null, value: "", added: true }
+        { taskId: null, label: null, value: "", added: true }
       ]
     });
   },
@@ -276,6 +291,7 @@ Page({
     if (this.data.checkinSaving) return;
     this.setData({
       checkinDialog: false,
+      checkinDialogMode: "create",
       checkinItems: initialCheckinItems()
     });
   },
@@ -283,17 +299,23 @@ Page({
   stopPropagation() {},
 
   onCheckinConfirm() {
-    const items = (this.data.checkinItems || [])
-      .map((item) => String(item.value || "").trim())
-      .filter(Boolean)
-      .join("\n");
-    if (!items || this.data.checkinSaving) {
-      if (!items) wx.showToast({ title: "先填写每日待办", icon: "none" });
+    const draftItems = (this.data.checkinItems || [])
+      .map((item) => ({
+        id: item.taskId || null,
+        title: String(item.value || "").trim()
+      }))
+      .filter((item) => item.title);
+    if (!draftItems.length || this.data.checkinSaving) {
+      if (!draftItems.length) wx.showToast({ title: "先填写每日待办", icon: "none" });
       return;
     }
-    const { createCheckin } = require("../../utils/api");
+    const editing = this.data.checkinDialogMode === "edit";
+    const { createCheckin, updateCheckinItems } = require("../../utils/api");
     this.setData({ checkinSaving: true });
-    createCheckin(items)
+    const action = editing
+      ? updateCheckinItems(this.data.checkin.projectId, draftItems)
+      : createCheckin(draftItems.map((item) => item.title).join("\n"));
+    action
       .then((result) => {
         if (!result || !result.ok) {
           throw new Error((result && result.error) || "create_failed");
@@ -301,15 +323,32 @@ Page({
         markDataChanged(["today", "workspace", "profile"]);
         this.setData({
           checkinDialog: false,
+          checkinDialogMode: "create",
           checkinItems: initialCheckinItems()
         });
         this.loadProfile();
-        wx.showToast({ title: "打卡已开启", icon: "success" });
+        wx.showToast({
+          title: editing ? "打卡内容已更新" : "打卡已开启",
+          icon: "success"
+        });
       })
-      .catch(() => {
-        wx.showToast({ title: "没开启成功，再试一次", icon: "none" });
+      .catch((error) => {
+        wx.showToast({
+          title: (error && error.message) || "没保存成功，再试一次",
+          icon: "none"
+        });
       })
       .then(() => this.setData({ checkinSaving: false }));
+  },
+
+  onCheckinRemoveFromEdit() {
+    if (this.data.checkinSaving) return;
+    this.setData({
+      checkinDialog: false,
+      checkinDialogMode: "create",
+      checkinItems: initialCheckinItems()
+    });
+    this.onRemoveCheckinMode();
   },
 
   onRemoveCheckinMode() {

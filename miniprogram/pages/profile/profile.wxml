@@ -70,7 +70,7 @@
         <view class="checkin-entry-state">
           <block wx:if="{{checkin}}">
             <image class="action-state-icon" src="/assets/icons/check.svg"></image>
-            <text>第 {{checkin.dayNumber}} 天</text>
+            <text>第 {{checkin.dayNumber}} 天 · 编辑</text>
           </block>
           <text wx:else>开启</text>
         </view>
@@ -106,8 +106,8 @@
       <view class="checkin-dialog" catchtap="stopPropagation">
         <view class="checkin-dialog-head">
           <view>
-            <text class="checkin-dialog-title">开启打卡模式</text>
-            <text class="checkin-dialog-copy">监督待办，培养习惯</text>
+            <text class="checkin-dialog-title">{{checkinDialogMode === 'edit' ? '编辑打卡内容' : '开启打卡模式'}}</text>
+            <text class="checkin-dialog-copy">{{checkinDialogMode === 'edit' ? '改完后会更新每天显示的清单' : '监督待办，培养习惯'}}</text>
           </view>
           <view class="checkin-dialog-close" bindtap="onCheckinClose">×</view>
         </view>
@@ -131,8 +131,9 @@
           <view class="checkin-plus" wx:if="{{checkinItems.length < 30}}" bindtap="onAddCheckinItem">＋</view>
         </view>
         <view class="checkin-dialog-actions">
+          <view wx:if="{{checkinDialogMode === 'edit'}}" class="checkin-remove" bindtap="onCheckinRemoveFromEdit">取消打卡</view>
           <view class="checkin-cancel" bindtap="onCheckinClose">取消</view>
-          <view class="checkin-confirm {{checkinSaving ? 'checkin-confirm-disabled' : ''}}" bindtap="onCheckinConfirm">{{checkinSaving ? '正在保存…' : '确认开启'}}</view>
+          <view class="checkin-confirm {{checkinSaving ? 'checkin-confirm-disabled' : ''}}" bindtap="onCheckinConfirm">{{checkinSaving ? '正在保存…' : checkinDialogMode === 'edit' ? '保存' : '确认开启'}}</view>
         </view>
       </view>
     </view>

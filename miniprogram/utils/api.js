@@ -307,6 +307,13 @@ function addCheckinItems(projectId, items) {
   });
 }
 
+function updateCheckinItems(projectId, items) {
+  return request("/api/miniprogram/checkin", {
+    method: "POST",
+    data: { action: "edit", projectId, items }
+  });
+}
+
 function toggleCheckin(taskId) {
   return request("/api/miniprogram/checkin", {
     method: "POST",
@@ -482,6 +489,7 @@ module.exports = {
   deleteProject,
   createCheckin,
   addCheckinItems,
+  updateCheckinItems,
   toggleCheckin,
   deleteCheckin,
   createTask,

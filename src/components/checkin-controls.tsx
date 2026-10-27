@@ -17,16 +17,28 @@ import {
   createCheckinProject,
   deleteCheckinProject,
   toggleCheckinItem,
+  updateCheckinItems,
 } from "@/app/actions";
 import type { CheckinProjectSummary } from "@/lib/checkin";
 import { cx } from "@/lib/utils";
 
 type CheckinDraftItem = {
   id: string;
+  taskId: string | null;
   label: number | null;
   value: string;
   added: boolean;
 };
+
+function emptyCheckinDraft(): CheckinDraftItem[] {
+  return [1, 2, 3].map((label) => ({
+    id: `default-${label}`,
+    taskId: null,
+    label,
+    value: "",
+    added: false,
+  }));
+}
 
 function useEscape(enabled: boolean, onClose: () => void) {
   useEffect(() => {
@@ -46,16 +58,11 @@ export function CheckinModeButton({
 }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
+  const [editing, setEditing] = useState(false);
   const [cancelOpen, setCancelOpen] = useState(false);
   const [cancelSaving, setCancelSaving] = useState(false);
-  const [draftItems, setDraftItems] = useState<CheckinDraftItem[]>(() =>
-    [1, 2, 3].map((label) => ({
-      id: `default-${label}`,
-      label,
-      value: "",
-      added: false,
-    })),
-  );
+  const [draftItems, setDraftItems] =
+    useState<CheckinDraftItem[]>(emptyCheckinDraft);
   const nextDraftId = useRef(4);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
@@ -69,25 +76,38 @@ export function CheckinModeButton({
     setError("");
     try {
       const formData = new FormData();
-      formData.set(
-        "items",
-        draftItems.map((item) => item.value).join("\n"),
-      );
-      const result = await createCheckinProject(formData);
+      if (editing && checkin) {
+        formData.set("projectId", checkin.projectId);
+        formData.set(
+          "items",
+          JSON.stringify(
+            draftItems.map((item) => ({
+              id: item.taskId,
+              title: item.value,
+            })),
+          ),
+        );
+      } else {
+        formData.set(
+          "items",
+          draftItems.map((item) => item.value).join("\n"),
+        );
+      }
+      const result =
+        editing && checkin
+          ? await updateCheckinItems(formData)
+          : await createCheckinProject(formData);
       if (!result.ok) {
         setError(result.error);
         return;
       }
       setOpen(false);
-      setDraftItems(
-        [1, 2, 3].map((label) => ({
-          id: `default-${label}`,
-          label,
-          value: "",
-          added: false,
-        })),
-      );
-      router.push(`/files?project=${result.projectId}`);
+      setDraftItems(emptyCheckinDraft());
+      if (editing) {
+        setEditing(false);
+      } else {
+        router.push(`/files?project=${result.projectId}`);
+      }
       router.refresh();
     } catch {
       setError("没保存上，再试一次。");
@@ -118,14 +138,27 @@ export function CheckinModeButton({
         type="button"
         aria-label={
           checkin
-            ? `打卡模式，第 ${checkin.dayNumber} 天，点击取消打卡`
+            ? `编辑打卡模式，第 ${checkin.dayNumber} 天`
             : "开启打卡模式"
         }
         onClick={() => {
           if (checkin) {
-            setCancelOpen(true);
+            setEditing(true);
+            setDraftItems(
+              checkin.items.map((item, index) => ({
+                id: `edit-${item.id}`,
+                taskId: item.id,
+                label: index + 1,
+                value: item.title,
+                added: false,
+              })),
+            );
+            setError("");
+            setOpen(true);
             return;
           }
+          setEditing(false);
+          setDraftItems(emptyCheckinDraft());
           setError("");
           setOpen(true);
         }}
@@ -144,7 +177,7 @@ export function CheckinModeButton({
           {checkin ? (
             <>
               <CheckCircle2 className="size-3.5 shrink-0" />
-              <span>第 {checkin.dayNumber} 天</span>
+              <span>第 {checkin.dayNumber} 天 · 编辑</span>
             </>
           ) : (
             "开启"
@@ -171,10 +204,10 @@ export function CheckinModeButton({
                   id="checkin-setup-title"
                   className="text-lg font-semibold text-ink"
                 >
-                  开启打卡模式
+                  {editing ? "编辑打卡内容" : "开启打卡模式"}
                 </h2>
                 <p className="mt-1 text-xs leading-5 text-ink-muted">
-                  监督待办，培养习惯
+                  {editing ? "改完后会更新每天显示的清单" : "监督待办，培养习惯"}
                 </p>
               </div>
               <button
@@ -236,6 +269,7 @@ export function CheckinModeButton({
                         ...current,
                         {
                           id: `added-${id}`,
+                          taskId: null,
                           label: null,
                           value: "",
                           added: true,
@@ -253,6 +287,19 @@ export function CheckinModeButton({
                 <p className="mt-2 text-xs text-danger">{error}</p>
               ) : null}
               <div className="mt-4 flex items-center justify-end gap-2">
+                {editing ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setOpen(false);
+                      setCancelOpen(true);
+                    }}
+                    disabled={saving}
+                    className="mr-auto h-9 rounded-lg px-3 text-xs font-medium text-danger hover:bg-danger/10 disabled:opacity-55"
+                  >
+                    取消打卡
+                  </button>
+                ) : null}
                 <button
                   type="button"
                   onClick={() => setOpen(false)}
@@ -274,7 +321,7 @@ export function CheckinModeButton({
                   ) : (
                     <Check className="size-3.5" />
                   )}
-                  确认开启
+                  {editing ? "保存" : "确认开启"}
                 </button>
               </div>
             </form>

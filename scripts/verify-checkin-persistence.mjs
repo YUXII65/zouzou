@@ -9,6 +9,7 @@ import { prisma } from "@/lib/prisma";
 import {
   CHECKIN_MODE,
   createCheckinProject,
+  updateCheckinItems,
 } from "@/lib/checkin";
 
 const databaseUrl = new URL(process.env.DATABASE_URL || "");
@@ -46,6 +47,7 @@ try {
       tasks: {
         orderBy: { planOrder: "asc" },
         select: {
+          id: true,
           title: true,
           planOrder: true,
           executionMode: true,
@@ -69,6 +71,53 @@ try {
   assert.ok(project.tasks.every((task) => task.executionMode === "quick"));
   assert.ok(project.tasks.every((task) => Boolean(task.doneWhen)));
   assert.ok(project.tasks.every((task) => Boolean(task.methodHint)));
+
+  const renamedId = project.tasks[0].id;
+  const keptId = project.tasks[2].id;
+  await prisma.taskCheckinCompletion.create({
+    data: {
+      userId: user.id,
+      taskId: renamedId,
+      checkinDate: "2026-10-27",
+    },
+  });
+
+  const edit = await updateCheckinItems({
+    userId: user.id,
+    projectId: first.projectId,
+    items: [
+      { id: renamedId, title: "读Drift文章并记一句" },
+      { id: keptId, title: "练字" },
+      { title: "拉伸" },
+    ],
+  });
+  assert.deepEqual(edit, {
+    ok: true,
+    projectId: first.projectId,
+    added: 1,
+  });
+
+  const editedProject = await prisma.project.findUniqueOrThrow({
+    where: { id: first.projectId },
+    select: {
+      tasks: {
+        orderBy: { planOrder: "asc" },
+        select: {
+          id: true,
+          title: true,
+          checkinCompletions: { select: { checkinDate: true } },
+        },
+      },
+    },
+  });
+  assert.deepEqual(
+    editedProject.tasks.map((task) => task.title),
+    ["读Drift文章并记一句", "练字", "拉伸"],
+  );
+  assert.deepEqual(
+    editedProject.tasks[0].checkinCompletions.map((item) => item.checkinDate),
+    ["2026-10-27"],
+  );
 
   console.log("PASS checkin-persistence");
 } finally {

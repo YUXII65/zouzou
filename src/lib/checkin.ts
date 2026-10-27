@@ -29,6 +29,7 @@ export type CheckinProjectSummary = {
   completedToday: number;
   totalItems: number;
   dayNumber: number;
+  items: Array<{ id: string; title: string }>;
 };
 
 type CheckinResult =
@@ -81,6 +82,45 @@ export function parseCheckinItems(value: unknown) {
     if (seen.has(key)) continue;
     seen.add(key);
     items.push(title);
+    if (items.length >= MAX_CHECKIN_ITEMS_PER_WRITE) break;
+  }
+
+  return items;
+}
+
+export function parseCheckinEdits(value: unknown) {
+  let source = value;
+  if (typeof value === "string") {
+    try {
+      source = JSON.parse(value);
+    } catch {
+      source = [];
+    }
+  }
+  if (!Array.isArray(source)) return [];
+
+  const seenTitles = new Set<string>();
+  const seenIds = new Set<string>();
+  const items: Array<{ id: string | null; title: string }> = [];
+
+  for (const entry of source) {
+    if (!entry || typeof entry !== "object") continue;
+    const rawTitle = "title" in entry ? entry.title : "";
+    const title = String(rawTitle ?? "")
+      .replace(/\s+/g, " ")
+      .trim()
+      .slice(0, MAX_CHECKIN_ITEM_LENGTH);
+    if (!title) continue;
+
+    const rawId = "id" in entry ? entry.id : null;
+    const id =
+      typeof rawId === "string" && rawId.trim() ? rawId.trim() : null;
+    const titleKey = title.normalize("NFKC").toLocaleLowerCase("zh-CN");
+    if (seenTitles.has(titleKey) || (id && seenIds.has(id))) continue;
+
+    seenTitles.add(titleKey);
+    if (id) seenIds.add(id);
+    items.push({ id, title });
     if (items.length >= MAX_CHECKIN_ITEMS_PER_WRITE) break;
   }
 
@@ -233,6 +273,91 @@ export async function addCheckinItems(input: {
     });
 
     return { ok: true, projectId: project.id, added: additions.length };
+  });
+}
+
+/** 编辑已有打卡只保留原任务 ID，改名或重排不会丢失当天的完成记录。 */
+export async function updateCheckinItems(input: {
+  userId: string;
+  projectId?: string | null;
+  items: unknown;
+}): Promise<CheckinResult> {
+  const edits = parseCheckinEdits(input.items);
+  if (!edits.length) {
+    return { ok: false, error: "至少保留一个每日待办。" };
+  }
+  if (!input.projectId) {
+    return { ok: false, error: "打卡文件夹不存在。" };
+  }
+
+  return withTransactionRetry(async (tx) => {
+    const project = await tx.project.findFirst({
+      where: {
+        id: input.projectId!,
+        userId: input.userId,
+        mode: CHECKIN_MODE,
+      },
+      select: {
+        id: true,
+        tasks: { select: { id: true } },
+      },
+    });
+    if (!project) return { ok: false, error: "打卡文件夹不存在。" };
+
+    const existingIds = new Set(project.tasks.map((task) => task.id));
+    if (edits.some((item) => item.id && !existingIds.has(item.id))) {
+      return { ok: false, error: "打卡内容已变化，请刷新后再编辑。" };
+    }
+
+    const keptIds = new Set(
+      edits.flatMap((item) => (item.id ? [item.id] : [])),
+    );
+    const removedIds = project.tasks
+      .map((task) => task.id)
+      .filter((id) => !keptIds.has(id));
+    if (removedIds.length) {
+      await tx.task.deleteMany({
+        where: {
+          userId: input.userId,
+          projectId: project.id,
+          id: { in: removedIds },
+        },
+      });
+    }
+
+    let added = 0;
+    for (const [index, item] of edits.entries()) {
+      if (item.id) {
+        await tx.task.updateMany({
+          where: {
+            id: item.id,
+            userId: input.userId,
+            projectId: project.id,
+          },
+          data: {
+            title: item.title,
+            shortTitle: item.title.slice(0, 40),
+            planOrder: index,
+          },
+        });
+      } else {
+        const created = await tx.task.create({
+          data: {
+            userId: input.userId,
+            projectId: project.id,
+            ...checkinTaskData(item.title, index),
+          },
+          select: { id: true },
+        });
+        added += created.id ? 1 : 0;
+      }
+    }
+
+    await tx.project.update({
+      where: { id: project.id, userId: input.userId },
+      data: { updatedAt: new Date() },
+    });
+    return { ok: true, projectId: project.id, added };
   });
 }
 
