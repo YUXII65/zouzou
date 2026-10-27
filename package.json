@@ -26,6 +26,7 @@
     "eval:first-run": "node --experimental-strip-types --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/evaluate-first-run.mjs",
     "verify:clarify-flow": "node --experimental-strip-types --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --import ./scripts/ts-alias-loader.mjs scripts/verify-clarification-flow.mjs",
     "verify:clarify-retry": "node --experimental-strip-types --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --import ./scripts/ts-alias-loader.mjs scripts/verify-clarify-retry-idempotent.mjs",
+    "verify:file-interactions": "node --experimental-strip-types --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --import ./scripts/ts-alias-loader.mjs scripts/verify-file-interactions.mjs",
     "metrics:ai": "node scripts/ai-metrics.mjs",
     "audit:plan-quality": "node --experimental-strip-types --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/audit-plan-quality.mjs",
     "typecheck": "tsc --noEmit",

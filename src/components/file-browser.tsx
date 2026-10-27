@@ -23,7 +23,10 @@ import {
 } from "@/lib/work-mode";
 import type { TaskStickyNoteData } from "@/lib/task-sticky";
 import { isOpenTaskStatus } from "@/lib/task-flow";
-import { isInsideFloatingLayer } from "@/lib/use-click-outside";
+import {
+  isInsideFloatingLayer,
+  isInteractiveTarget,
+} from "@/lib/use-click-outside";
 import { REVIEW_ENABLED } from "@/lib/review-feature";
 import { StagePreviewPanel } from "@/components/stage-preview-panel";
 import { CheckinItemToggle } from "@/components/checkin-controls";
@@ -120,6 +123,7 @@ export function FileBrowser({
   reviewPanel?: React.ReactNode;
 }) {
   const [openId, setOpenId] = useState<string | null>(initialProjectId);
+  const openIdRef = useRef<string | null>(initialProjectId);
   const [taskView, setTaskView] = useState<"open" | "done">("open");
   const [listMode, setListMode] = useState<"type" | "time">("type");
 
@@ -134,14 +138,32 @@ export function FileBrowser({
     ),
   })).filter((group) => group.projects.length > 0);
 
-  function toggleFolder(id: string) {
-    setOpenId((current) => (current === id ? null : id));
+  function openFolder(id: string) {
+    openIdRef.current = id;
+    setOpenId(id);
     setTaskView("open");
     window.history.replaceState(
       null,
       "",
       id === UNASSIGNED_ID ? "/files?view=unassigned" : "/files?project=" + id,
     );
+  }
+
+  function closeFolder(id: string) {
+    // 点击另一个文件夹时，先打开新文件夹，再由旧文件夹的延迟收起回写；
+    // 这里必须确认当前打开的仍是旧文件夹，否则会把刚打开的又关掉。
+    if (openIdRef.current !== id) return;
+    openIdRef.current = null;
+    setOpenId(null);
+    window.history.replaceState(null, "", "/files");
+  }
+
+  function toggleFolder(id: string) {
+    if (openIdRef.current === id) {
+      closeFolder(id);
+      return;
+    }
+    openFolder(id);
   }
 
   const hasAnything = projects.length > 0 || unassociatedTasks.length > 0;
@@ -204,6 +226,7 @@ export function FileBrowser({
                       meta={PROJECT_MODE_META[group.mode]}
                       open={openId === project.id}
                       onToggle={() => toggleFolder(project.id)}
+                      onClose={() => closeFolder(project.id)}
                       milestone={project.currentMilestone}
                       tasks={project.tasks}
                       taskView={taskView}
@@ -230,6 +253,7 @@ export function FileBrowser({
                     meta={meta}
                     open={openId === project.id}
                     onToggle={() => toggleFolder(project.id)}
+                    onClose={() => closeFolder(project.id)}
                     milestone={project.currentMilestone}
                     tasks={project.tasks}
                     taskView={taskView}
@@ -248,6 +272,7 @@ export function FileBrowser({
               meta={null}
               open={openId === UNASSIGNED_ID}
               onToggle={() => toggleFolder(UNASSIGNED_ID)}
+              onClose={() => closeFolder(UNASSIGNED_ID)}
               milestone={null}
               tasks={unassociatedTasks}
               taskView={taskView}
@@ -280,6 +305,7 @@ function FolderBlock({
   meta,
   open,
   onToggle,
+  onClose,
   tasks,
   taskView,
   setTaskView,
@@ -303,6 +329,7 @@ function FolderBlock({
   meta: (typeof PROJECT_MODE_META)[ProjectMode] | null;
   open: boolean;
   onToggle: () => void;
+  onClose: () => void;
   milestone: string | null;
   tasks: FileTaskData[];
   taskView: "open" | "done";
@@ -318,29 +345,47 @@ function FolderBlock({
   const blockRef = useRef<HTMLDivElement>(null);
   const [reviewOpen, setReviewOpen] = useState(false);
 
-  // 展开后点任意空白处（或按 Esc）就收回
+  // 展开后点任意空白处（或按 Esc）就收回。空白处在按下时就能收起；
+  // 交互控件则先让它完成自己的点击，再收起，避免抢占第一下操作。
   useEffect(() => {
     if (!open) return;
+
+    let closeTimer: number | null = null;
+
     function handlePointerDown(event: MouseEvent | TouchEvent) {
+      const target = event.target as Node;
+      if (!blockRef.current || blockRef.current.contains(target)) return;
+      if (isInsideFloatingLayer(target)) return;
+      if (isInteractiveTarget(target)) return;
+      onClose();
+    }
+
+    function handleClick(event: MouseEvent) {
       const target = event.target as Node;
       if (!blockRef.current || blockRef.current.contains(target)) return;
       // 挂到 body 上的浮动层（新手引导气泡）不算"点在外面"，
       // 否则点它的关闭按钮会先把文件夹收掉，引导步骤永远推进不了。
       if (isInsideFloatingLayer(target)) return;
-      onToggle();
+
+      if (closeTimer !== null) window.clearTimeout(closeTimer);
+      closeTimer = window.setTimeout(onClose, 0);
     }
     function handleKeyDown(event: KeyboardEvent) {
-      if (event.key === "Escape") onToggle();
+      if (event.key === "Escape") onClose();
     }
-    document.addEventListener("mousedown", handlePointerDown);
-    document.addEventListener("touchstart", handlePointerDown);
+    document.addEventListener("pointerdown", handlePointerDown, true);
+    document.addEventListener("mousedown", handlePointerDown, true);
+    document.addEventListener("touchstart", handlePointerDown, true);
+    document.addEventListener("click", handleClick, true);
     document.addEventListener("keydown", handleKeyDown);
     return () => {
-      document.removeEventListener("mousedown", handlePointerDown);
-      document.removeEventListener("touchstart", handlePointerDown);
+      document.removeEventListener("pointerdown", handlePointerDown, true);
+      document.removeEventListener("mousedown", handlePointerDown, true);
+      document.removeEventListener("touchstart", handlePointerDown, true);
+      document.removeEventListener("click", handleClick, true);
       document.removeEventListener("keydown", handleKeyDown);
     };
-  }, [open, onToggle]);
+  }, [onClose, open]);
 
   const daysLeft = nextDue
     ? Math.max(
@@ -361,6 +406,7 @@ function FolderBlock({
   return (
     <div
       ref={blockRef}
+      data-file-folder-block={projectId ?? UNASSIGNED_ID}
       className={cx(
         "overflow-hidden rounded-xl border transition-colors",
         open
@@ -371,6 +417,7 @@ function FolderBlock({
       {/* 文件夹本身：点一下就地弹开 */}
       <button
         type="button"
+        data-file-folder={projectId ?? UNASSIGNED_ID}
         onClick={onToggle}
         aria-expanded={open}
         className="group relative block w-full pt-2 text-left"

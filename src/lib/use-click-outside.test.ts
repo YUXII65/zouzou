@@ -1,6 +1,9 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { isInsideFloatingLayer } from "@/lib/use-click-outside";
+import {
+  isInsideFloatingLayer,
+  isInteractiveTarget,
+} from "@/lib/use-click-outside";
 
 /**
  * 回归：新手引导气泡挂在 body 上（createPortal），点它的关闭按钮时
@@ -17,4 +20,14 @@ test("普通区域、空值、非元素都不算浮动层", () => {
   assert.equal(isInsideFloatingLayer(undefined), false);
   assert.equal(isInsideFloatingLayer("text"), false);
   assert.equal(isInsideFloatingLayer({}), false);
+});
+
+test("按钮等交互控件先执行自己的点击，不按空白处处理", () => {
+  const interactive = {
+    closest: (selector: string) => (selector.includes("button") ? {} : null),
+  };
+  assert.equal(isInteractiveTarget(interactive), true);
+  assert.equal(isInteractiveTarget({ closest: () => null }), false);
+  assert.equal(isInteractiveTarget(null), false);
+  assert.equal(isInteractiveTarget("text"), false);
 });
